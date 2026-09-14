@@ -8,6 +8,7 @@ import { Avatar } from '../../../components/Avatar';
 import { useAuth } from '../../../features/auth/AuthContext';
 import { useTheme, type ThemePreference } from '../../../features/theme/ThemeContext';
 import { getUser } from '../../../features/users/api';
+import { maskIdentifier } from '../../../lib/mask';
 import { darkPalette, fonts, lightPalette, TAB_BAR_CLEARANCE, type Palette } from '../../../theme';
 
 function Chevron({ colors }: { colors: Palette }) {
@@ -110,7 +111,7 @@ export default function SettingsScreen() {
         <Avatar objectKey={avatarObjectKey} label={displayName || '?'} size={68} />
         <View style={{ flex: 1 }}>
           <Text style={styles.profileName}>{displayName || 'Add your name'}</Text>
-          {!!identifier && <Text style={styles.profileSubtitle}>{identifier}</Text>}
+          {!!identifier && <Text style={styles.profileSubtitle}>{maskIdentifier(identifier)}</Text>}
         </View>
         <Chevron colors={colors} />
       </TouchableOpacity>

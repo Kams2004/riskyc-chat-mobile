@@ -7,6 +7,7 @@ import Svg, { Path } from 'react-native-svg';
 import { useAuth } from '../../../features/auth/AuthContext';
 import { useTheme } from '../../../features/theme/ThemeContext';
 import { deleteMyAccount, getUser } from '../../../features/users/api';
+import { maskIdentifier } from '../../../lib/mask';
 import { fonts, type Palette } from '../../../theme';
 
 export default function AccountScreen() {
@@ -15,6 +16,7 @@ export default function AccountScreen() {
   const styles = makeStyles(colors);
   const { userId, signOut } = useAuth();
   const [identifier, setIdentifier] = useState<string | null>(null);
+  const [isRevealed, setIsRevealed] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
@@ -61,10 +63,11 @@ export default function AccountScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      <View style={styles.card}>
+      <TouchableOpacity style={styles.card} onPress={() => setIsRevealed((prev) => !prev)} activeOpacity={0.7}>
         <Text style={styles.label}>Registered with</Text>
-        <Text style={styles.value}>{identifier ?? '—'}</Text>
-      </View>
+        <Text style={styles.value}>{identifier ? (isRevealed ? identifier : maskIdentifier(identifier)) : '—'}</Text>
+        {!!identifier && <Text style={styles.revealHint}>{isRevealed ? 'Tap to hide' : 'Tap to reveal'}</Text>}
+      </TouchableOpacity>
 
       <View style={{ flex: 1 }} />
 
@@ -84,6 +87,7 @@ function makeStyles(colors: Palette) {
     card: { backgroundColor: colors.tint1, borderRadius: 16, padding: 18, gap: 4 },
     label: { fontFamily: fonts.sansSemiBold, fontSize: 11, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1 },
     value: { fontFamily: fonts.sansMedium, fontSize: 15, color: colors.textPrimary },
+    revealHint: { fontFamily: fonts.sans, fontSize: 11.5, color: colors.textMuted, marginTop: 2 },
     deleteButton: { paddingVertical: 14, alignItems: 'center' },
     deleteLabel: { fontFamily: fonts.sansSemiBold, fontSize: 15, color: colors.brand700 },
   });
