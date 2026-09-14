@@ -13,10 +13,14 @@
  * Plain HTTP/WS, not HTTPS/WSS: the VPS docker-compose exposes the Spring
  * Boot services directly with no TLS-terminating reverse proxy in front yet.
  * Traffic (including JWTs) is unencrypted on the wire until that's added.
+ *
+ * Ports are 8091/8092 (not the "usual" 8081/8082) because the VPS already
+ * runs other stacks (riskyc-backend, nguon-app, jitsi) on those — see
+ * backend/docker-compose.yml's port defaults, which these must match.
  */
 export const config = {
-  authServiceUrl: process.env.EXPO_PUBLIC_AUTH_SERVICE_URL ?? 'http://167.86.120.214:8081',
-  messagingServiceUrl: process.env.EXPO_PUBLIC_MESSAGING_SERVICE_URL ?? 'http://167.86.120.214:8082',
+  authServiceUrl: process.env.EXPO_PUBLIC_AUTH_SERVICE_URL ?? 'http://167.86.120.214:8091',
+  messagingServiceUrl: process.env.EXPO_PUBLIC_MESSAGING_SERVICE_URL ?? 'http://167.86.120.214:8092',
   mediaServiceUrl: process.env.EXPO_PUBLIC_MEDIA_SERVICE_URL ?? 'http://167.86.120.214:8083',
   presenceServiceUrl: process.env.EXPO_PUBLIC_PRESENCE_SERVICE_URL ?? 'http://167.86.120.214:8084',
 } as const;

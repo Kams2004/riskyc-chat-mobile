@@ -51,7 +51,8 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.riskyc.chat"
+      "bundleIdentifier": "com.riskyc.chat",
+      "bitcode": false
     },
     "android": {
       "adaptiveIcon": {
@@ -60,11 +61,32 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.riskyc.chat"
+      "package": "com.riskyc.chat",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.INTERNET",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.WAKE_LOCK",
+        "android.permission.BLUETOOTH"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png",
       "bundler": "metro"
-    }
+    },
+    "extra": {
+      "router": {
+        "root": "./src/app"
+      },
+      "eas": {
+        "projectId": "e0f80034-a6ce-48b3-972d-87085f08a5c4"
+      }
+    },
+    "owner": "ulrich2004"
   }
 }
