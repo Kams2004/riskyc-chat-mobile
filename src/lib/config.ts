@@ -13,6 +13,10 @@
  * Plain HTTP/WS, not HTTPS/WSS: the VPS docker-compose exposes the Spring
  * Boot services directly with no TLS-terminating reverse proxy in front yet.
  * Traffic (including JWTs) is unencrypted on the wire until that's added.
+ * Android additionally blocks cleartext HTTP by default (API 28+) — app.json
+ * sets usesCleartextTraffic via expo-build-properties to allow it, which is
+ * a stopgap for this pre-TLS deploy stage, not something to keep once a
+ * reverse proxy with a real cert is in front of these services.
  *
  * Ports are 8091/8092 (not the "usual" 8081/8082) because the VPS already
  * runs other stacks (riskyc-backend, nguon-app, jitsi) on those — see
