@@ -23,9 +23,19 @@ export function createDownloadUrl(objectKey: string): Promise<DownloadUrlRespons
  * of the image. File#upload() reads the local file directly and is the
  * platform-native upload path.
  */
+const UPLOAD_TIMEOUT_MS = 30000;
+
 export async function uploadToPresignedUrl(uploadUrl: string, fileUri: string, contentType: string) {
   const file = new File(fileUri);
-  const response = await file.upload(uploadUrl, { httpMethod: 'PUT', mimeType: contentType });
+  // File#upload() has no built-in timeout/cancellation, and a dropped
+  // (vs. refused) port on the MinIO host produces no response at all — the
+  // native upload would otherwise hang forever with no way for the caller's
+  // spinner to ever resolve. Racing it against a timeout at least turns
+  // that into a visible, retryable error instead of an infinite spin.
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error(`Upload to ${uploadUrl} timed out after ${UPLOAD_TIMEOUT_MS / 1000}s`)), UPLOAD_TIMEOUT_MS)
+  );
+  const response = await Promise.race([file.upload(uploadUrl, { httpMethod: 'PUT', mimeType: contentType }), timeout]);
   if (response.status < 200 || response.status >= 300) {
     throw new Error(`Upload failed: ${response.status}`);
   }

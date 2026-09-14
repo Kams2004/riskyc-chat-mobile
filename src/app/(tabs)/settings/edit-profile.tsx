@@ -113,7 +113,7 @@ export default function EditProfileScreen() {
 
       <View style={styles.spacer} />
 
-      <Button onPress={handleSave} loading={isSaving} disabled={!name.trim()}>
+      <Button onPress={handleSave} loading={isSaving} disabled={!name.trim()} style={styles.saveButton}>
         Save
       </Button>
     </KeyboardScreen>
@@ -148,6 +148,11 @@ function makeStyles(colors: Palette) {
       borderColor: colors.surface,
     },
     field: { width: '100%', gap: 8 },
+    // The screen container uses alignItems: 'center' (for the avatar), which
+    // otherwise shrinks the button to hug its content instead of spanning
+    // the width like a normal full-size button — this is what "squished"
+    // looked like.
+    saveButton: { width: '100%' },
     label: { fontFamily: fonts.sansSemiBold, fontSize: 11.5, color: colors.brand900, textTransform: 'uppercase', letterSpacing: 1 },
     input: {
       borderBottomWidth: 1.5,
