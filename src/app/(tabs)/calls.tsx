@@ -1,6 +1,6 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 
@@ -75,6 +75,11 @@ export default function CallsScreen() {
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <Text style={styles.title}>Calls</Text>
       </View>
+      {loading && (
+        <View style={styles.empty}>
+          <ActivityIndicator color={colors.brand500} />
+        </View>
+      )}
       {!loading && calls.length === 0 && (
         <View style={styles.empty}>
           <Text style={styles.emptyText}>No calls yet</Text>

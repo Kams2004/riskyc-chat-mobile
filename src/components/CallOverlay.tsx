@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RTCView } from 'react-native-webrtc';
 import Svg, { Path } from 'react-native-svg';
 
@@ -33,6 +34,7 @@ function IconButton({
 
 export function CallOverlay() {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const {
     callState,
     incomingCall,
@@ -111,7 +113,7 @@ export function CallOverlay() {
           <Text style={styles.overlayTimer}>{formatDuration(elapsed)}</Text>
         )}
 
-        <View style={[styles.controls, { paddingBottom: 48 }]}>
+        <View style={[styles.controls, { paddingBottom: insets.bottom + 24 }]}>
           {callState === 'incoming-ringing' && (
             <>
               <IconButton onPress={declineIncoming} color="#e53935">
@@ -170,7 +172,7 @@ export function CallOverlay() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, alignItems: 'center', justifyContent: 'space-between' },
+  container: { flex: 1, alignItems: 'center' },
   centerInfo: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 },
   name: { fontFamily: fonts.sansSemiBold, fontSize: 22, color: '#ffffff', marginTop: 8 },
   status: { fontFamily: fonts.sans, fontSize: 15, color: 'rgba(255,255,255,0.7)' },
@@ -196,6 +198,22 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: '#000',
   },
-  controls: { flexDirection: 'row', gap: 24, paddingTop: 16, justifyContent: 'center', width: '100%' },
+  // Anchored absolutely, not via flex flow — during an active video call
+  // centerInfo isn't rendered at all (the video fills the screen instead),
+  // which would otherwise leave this as the container's only flex child and
+  // collapse it to the top instead of the bottom. Always-bottom regardless
+  // of what else is on screen, and insets.bottom keeps it clear of the
+  // system nav bar.
+  controls: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    gap: 24,
+    paddingTop: 16,
+    justifyContent: 'center',
+    width: '100%',
+  },
   controlButton: { width: 60, height: 60, borderRadius: 30, alignItems: 'center', justifyContent: 'center' },
 });
