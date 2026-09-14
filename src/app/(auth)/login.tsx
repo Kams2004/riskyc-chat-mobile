@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import LottieView from 'lottie-react-native';
-import { useState } from 'react';
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Keyboard, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '../../components/Button';
@@ -22,6 +22,21 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+
+  // The animation has a fixed pixel size that can't shrink to fit whatever
+  // room the keyboard leaves behind — with it open there usually isn't
+  // enough space left for both the animation AND the input/button below it,
+  // so it visibly overlapped them. Simplest fix: it's decorative, so it
+  // just hides itself while the keyboard (and therefore typing) is active.
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', () => setIsKeyboardVisible(true));
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => setIsKeyboardVisible(false));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const value = mode === 'phone' ? phoneNumber : email;
 
@@ -78,14 +93,19 @@ export default function LoginScreen() {
 
       {error && <Text style={styles.error}>{error}</Text>}
 
-      <View style={styles.animationWrap}>
-        <LottieView
-          source={require('../../../assets/lottie/two-factor-auth.json')}
-          autoPlay
-          loop
-          style={styles.animation}
-        />
-      </View>
+      {isKeyboardVisible ? (
+        <View style={styles.spacer} />
+      ) : (
+        <View style={styles.animationWrap}>
+          <LottieView
+            source={require('../../../assets/lottie/two-factor-auth.json')}
+            autoPlay
+            loop
+            resizeMode="contain"
+            style={styles.animation}
+          />
+        </View>
+      )}
 
       <Button onPress={handleSendCode} disabled={!value} loading={isSubmitting}>
         Send code
@@ -146,7 +166,13 @@ function makeStyles(colors: Palette) {
       color: colors.textPrimary,
     },
     error: { fontFamily: fonts.sans, color: colors.brand800, marginTop: 12 },
-    animationWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-    animation: { width: 220, height: 227 },
+    spacer: { flex: 1 },
+    // overflow: 'hidden' is defense-in-depth, not the actual fix (that's
+    // hiding the animation while the keyboard's up, see isKeyboardVisible) —
+    // View's default overflow is 'visible', so without this any native
+    // rendering quirk that draws outside the declared bounds could still
+    // bleed into the button below like it did before.
+    animationWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+    animation: { width: 200, height: 206 },
   });
 }
