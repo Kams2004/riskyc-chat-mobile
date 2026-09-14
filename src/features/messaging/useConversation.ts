@@ -104,6 +104,20 @@ export function useConversation({
   const avatarRef = useRef<string | null | undefined>(recipientAvatarObjectKey);
   avatarRef.current = recipientAvatarObjectKey;
 
+  const [typingUserIds, setTypingUserIds] = useState<string[]>([]);
+  // Safety net for the receiving side: if a "stopped typing" update is ever
+  // lost (sender's app killed mid-keystroke, connection drop, ...), a stray
+  // "is typing" would otherwise stick forever — each user's typing state
+  // auto-clears if no follow-up arrives within this window.
+  const typingExpiryRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const TYPING_EXPIRY_MS = 6000;
+  // Sending side: tracks whether an "isTyping: true" is currently
+  // outstanding (so repeated keystrokes don't re-send it every time) and the
+  // idle timer that sends "isTyping: false" after a pause.
+  const isTypingSentRef = useRef(false);
+  const typingIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const TYPING_IDLE_MS = 2500;
+
   const reload = useCallback(async () => {
     setMessages(await listMessages(db, conversationId));
   }, [db, conversationId]);
@@ -180,14 +194,65 @@ export function useConversation({
           if (!cancelled) await reload();
         });
       }
+
+      // The topic is a plain broadcast, so this also hears the sender's own
+      // outgoing typing pings back — filtered out below rather than never
+      // subscribing, since that's the same topic the other party's updates
+      // arrive on.
+      socket.subscribeToTyping(conversationId, (update) => {
+        if (cancelled || update.userId === userId) return;
+        const timers = typingExpiryRef.current;
+        const existing = timers.get(update.userId);
+        if (existing) clearTimeout(existing);
+
+        if (update.isTyping) {
+          timers.set(
+            update.userId,
+            setTimeout(() => {
+              timers.delete(update.userId);
+              setTypingUserIds((prev) => prev.filter((id) => id !== update.userId));
+            }, TYPING_EXPIRY_MS)
+          );
+          setTypingUserIds((prev) => (prev.includes(update.userId) ? prev : [...prev, update.userId]));
+        } else {
+          timers.delete(update.userId);
+          setTypingUserIds((prev) => prev.filter((id) => id !== update.userId));
+        }
+      });
     });
 
     return () => {
       cancelled = true;
       socket.disconnect();
+      for (const timer of typingExpiryRef.current.values()) clearTimeout(timer);
+      typingExpiryRef.current.clear();
+      if (typingIdleTimerRef.current) clearTimeout(typingIdleTimerRef.current);
+      isTypingSentRef.current = false;
+      setTypingUserIds([]);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken, ackIfNotMine, conversationId, db, groupId, isGroup, reload, userId]);
+
+  /** Call on every draft keystroke — internally debounced, safe to call as often as you like. */
+  const notifyTyping = useCallback(() => {
+    if (typingIdleTimerRef.current) clearTimeout(typingIdleTimerRef.current);
+    if (!isTypingSentRef.current) {
+      isTypingSentRef.current = true;
+      socketRef.current?.sendTyping({ conversationId, isTyping: true });
+    }
+    typingIdleTimerRef.current = setTimeout(() => {
+      isTypingSentRef.current = false;
+      socketRef.current?.sendTyping({ conversationId, isTyping: false });
+    }, TYPING_IDLE_MS);
+  }, [conversationId]);
+
+  const stopTyping = useCallback(() => {
+    if (typingIdleTimerRef.current) clearTimeout(typingIdleTimerRef.current);
+    if (isTypingSentRef.current) {
+      isTypingSentRef.current = false;
+      socketRef.current?.sendTyping({ conversationId, isTyping: false });
+    }
+  }, [conversationId]);
 
   const sendMessage = useCallback(
     async (plaintext: string, media?: OutgoingMedia) => {
@@ -224,9 +289,10 @@ export function useConversation({
       });
       await upsertConversation(db, conversationId, titleRef.current, envelope.sentAt, avatarRef.current, isGroup);
       await reload();
+      stopTyping();
       socketRef.current?.send(envelope);
     },
-    [conversationId, db, groupId, isGroup, recipientId, reload, userId]
+    [conversationId, db, groupId, isGroup, recipientId, reload, stopTyping, userId]
   );
 
   const editMessage = useCallback(
@@ -247,5 +313,5 @@ export function useConversation({
     [conversationId, db, reload]
   );
 
-  return { messages, sendMessage, editMessage, deleteMessage };
+  return { messages, sendMessage, editMessage, deleteMessage, typingUserIds, notifyTyping };
 }

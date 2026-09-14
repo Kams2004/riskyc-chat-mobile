@@ -48,3 +48,6 @@ export type MessageDeleteRequest = { conversationId: string; messageId: string }
 
 export type GroupAckRequest = { conversationId: string; messageIds: string[]; status: MessageStatus };
 export type GroupReceiptUpdate = { conversationId: string; messageId: string; userId: string; status: MessageStatus };
+
+export type TypingIndicator = { conversationId: string; isTyping: boolean };
+export type TypingUpdate = { conversationId: string; userId: string; isTyping: boolean };

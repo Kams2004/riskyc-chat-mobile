@@ -9,6 +9,8 @@ import type {
   MessageEnvelope,
   MessageMutation,
   MessageStatusUpdate,
+  TypingIndicator,
+  TypingUpdate,
 } from './api';
 
 /**
@@ -96,6 +98,13 @@ export class ChatSocket {
     });
   }
 
+  /** Ephemeral "someone is typing" state for whoever has this thread open (see ChatController#typing). */
+  subscribeToTyping(conversationId: string, onTyping: (update: TypingUpdate) => void) {
+    return this.client.subscribe(`/topic/conversation.${conversationId}.typing`, (frame: IMessage) => {
+      onTyping(JSON.parse(frame.body) as TypingUpdate);
+    });
+  }
+
   /**
    * Every message addressed to this user, across every conversation,
    * regardless of whether its thread is currently open — routed by the
@@ -134,6 +143,19 @@ export class ChatSocket {
   /** Group counterpart to sendAck — see ChatController#ackGroup for why it's a separate endpoint. */
   sendGroupAck(request: GroupAckRequest) {
     this.enqueue({ destination: '/app/chat.ack.group', body: JSON.stringify(request) });
+  }
+
+  /**
+   * Deliberately NOT queued via enqueue()/pending like everything else here:
+   * a stale "isTyping: true" sitting in the pending queue across a
+   * reconnect could get flushed and sent well after the person actually
+   * stopped typing. Typing state is best-effort and self-correcting (the
+   * receiver also has its own timeout, see useConversation.ts) — silently
+   * dropping one while disconnected is the right failure mode, not queuing it.
+   */
+  sendTyping(indicator: TypingIndicator) {
+    if (!this.client.connected) return;
+    this.publish({ destination: '/app/chat.typing', body: JSON.stringify(indicator) });
   }
 
   private enqueue(frame: QueuedFrame) {

@@ -229,7 +229,7 @@ export default function ChatThreadScreen() {
   }, [db, groupId, isGroup, recipientId]);
 
   const { startCall } = useCall();
-  const { messages, sendMessage, editMessage, deleteMessage } = useConversation({
+  const { messages, sendMessage, editMessage, deleteMessage, typingUserIds, notifyTyping } = useConversation({
     conversationId,
     recipientId,
     groupId,
@@ -264,6 +264,15 @@ export default function ChatThreadScreen() {
     setMessageInfoRows(rows);
   }
   const displayName = resolvedName || recipientId || conversationId;
+
+  const typingLabel = (() => {
+    if (typingUserIds.length === 0) return null;
+    if (!isGroup) return 'typing...';
+    const names = typingUserIds.map(memberName);
+    if (names.length === 1) return `${names[0]} is typing...`;
+    if (names.length === 2) return `${names[0]} and ${names[1]} are typing...`;
+    return `${names.length} people are typing...`;
+  })();
 
   // Messages render oldest-first; without this a FlatList never moves on its
   // own, so a new message (or the initial history load) would sit below the
@@ -402,7 +411,9 @@ export default function ChatThreadScreen() {
           <Avatar objectKey={resolvedAvatarKey} label={displayName} size={40} />
           <View style={{ flex: 1 }}>
             <Text style={styles.headerName} numberOfLines={1}>{displayName}</Text>
-            {isGroup ? (
+            {typingLabel ? (
+              <Text style={[styles.statusLabel, styles.typingLabel]} numberOfLines={1}>{typingLabel}</Text>
+            ) : isGroup ? (
               <Text style={styles.statusLabel}>{groupMembers.length} members</Text>
             ) : (
               <View style={styles.statusRow}>
@@ -570,7 +581,10 @@ export default function ChatThreadScreen() {
             <TextInput
               style={styles.input}
               value={draft}
-              onChangeText={setDraft}
+              onChangeText={(text) => {
+                setDraft(text);
+                if (text.trim()) notifyTyping();
+              }}
               placeholder="Message"
               placeholderTextColor={colors.textMuted}
               multiline
@@ -637,6 +651,7 @@ function makeStyles(colors: Palette) {
     statusRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
     statusDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.gold500 },
     statusLabel: { fontFamily: fonts.sans, fontSize: 11.5, color: colors.textMuted },
+    typingLabel: { fontFamily: fonts.sansMedium, color: colors.brand600 },
     selectionBar: {
       flexDirection: 'row',
       alignItems: 'center',
