@@ -8,6 +8,7 @@ import Svg, { Path } from 'react-native-svg';
 import { Avatar } from '../../../components/Avatar';
 import { deleteConversation, listConversations, setFavorite, upsertConversation, useSQLiteContext, type LocalConversation } from '../../../data/db';
 import { useAuth } from '../../../features/auth/AuthContext';
+import { getGroup } from '../../../features/groups/api';
 import { looksLikeUnresolvedName, otherPartyFrom } from '../../../features/messaging/conversationId';
 import { CONVERSATIONS_CHANGED_EVENT } from '../../../features/messaging/inboxSocket';
 import { useTheme } from '../../../features/theme/ThemeContext';
@@ -45,18 +46,33 @@ export default function ChatListScreen() {
       if (!userId) return;
       listConversations(db, userId).then(async (rows) => {
         setConversations(rows);
-        // Self-heal rows whose title is still a raw id (created before name
-        // resolution existed) or whose avatar was never resolved (e.g. the
-        // other person added a profile photo after this conversation
-        // started). row.id is the CANONICAL conversation id ("a_b"), not a
-        // user id — otherPartyFrom recovers the actual other-user id from it.
-        // Groups resolve their own name/avatar in the thread screen and
-        // inboxSocket instead (row.id there is a plain group id, not an
-        // "a_b" pair, so otherPartyFrom doesn't apply).
-        const unresolved = rows.filter((r) => !r.is_group && (looksLikeUnresolvedName(r.title) || !r.avatar_object_key));
+        // Self-heal rows whose title is still a raw id/placeholder (created
+        // before name resolution ran — either the normal first-message case,
+        // or a stub backfilled by inboxSocket's syncMissedConversations,
+        // which deliberately skips resolution to keep that sync call cheap)
+        // or whose avatar was never resolved (e.g. the other person added a
+        // profile photo after this conversation started). row.id is the
+        // CANONICAL conversation id ("a_b") for a 1:1 — otherPartyFrom
+        // recovers the actual other-user id from it; for a group, row.id is
+        // just the group id directly.
+        const unresolved = rows.filter((r) => looksLikeUnresolvedName(r.title) || !r.avatar_object_key);
         if (unresolved.length === 0) return;
         await Promise.all(
           unresolved.map(async (row) => {
+            if (row.is_group) {
+              const group = await getGroup(row.id).catch(() => null);
+              if (group?.name || group?.avatarObjectKey) {
+                await upsertConversation(
+                  db,
+                  row.id,
+                  group.name || row.title,
+                  row.last_message_at ?? new Date().toISOString(),
+                  group.avatarObjectKey,
+                  true
+                );
+              }
+              return;
+            }
             const user = await getUser(otherPartyFrom(row.id, userId)).catch(() => null);
             if (user?.displayName || user?.avatarObjectKey) {
               await upsertConversation(

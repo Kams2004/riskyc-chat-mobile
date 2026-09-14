@@ -51,3 +51,20 @@ export type GroupReceiptUpdate = { conversationId: string; messageId: string; us
 
 export type TypingIndicator = { conversationId: string; isTyping: boolean };
 export type TypingUpdate = { conversationId: string; userId: string; isTyping: boolean };
+
+export type ConversationSummary = {
+  conversationId: string;
+  otherUserId: string | null;
+  groupId: string | null;
+  lastMessageAt: string;
+};
+
+/**
+ * Reconciliation for a conversation this device never saw live over STOMP —
+ * see ConversationController on the backend for why that can happen (the
+ * app-wide inbox socket only knows about a conversation once something
+ * arrives while it's actually connected).
+ */
+export function listConversationSummaries(): Promise<ConversationSummary[]> {
+  return apiFetch(`${config.messagingServiceUrl}/api/conversations`);
+}

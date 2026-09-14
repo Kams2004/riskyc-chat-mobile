@@ -15,6 +15,7 @@ import {
 } from '../../data/db';
 import { useAuth } from '../auth/AuthContext';
 import { preferences } from '../../lib/preferences';
+import { UNRESOLVED_TITLE_PLACEHOLDER } from './conversationId';
 import * as messagingApi from './api';
 import { ChatSocket } from './ws';
 
@@ -99,8 +100,8 @@ export function useConversation({
   const [messages, setMessages] = useState<LocalMessage[]>([]);
   const socketRef = useRef<ChatSocket | null>(null);
   const isGroup = !!groupId;
-  const titleRef = useRef(recipientName || recipientId || conversationId);
-  titleRef.current = recipientName || recipientId || conversationId;
+  const titleRef = useRef(recipientName || UNRESOLVED_TITLE_PLACEHOLDER);
+  titleRef.current = recipientName || UNRESOLVED_TITLE_PLACEHOLDER;
   const avatarRef = useRef<string | null | undefined>(recipientAvatarObjectKey);
   avatarRef.current = recipientAvatarObjectKey;
 

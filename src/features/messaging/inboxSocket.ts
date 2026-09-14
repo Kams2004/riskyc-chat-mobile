@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { DeviceEventEmitter } from 'react-native';
+import type { SQLiteDatabase } from 'expo-sqlite';
 
 import {
   applyMessageMutation,
@@ -13,11 +14,42 @@ import { useAuth } from '../auth/AuthContext';
 import { getGroup } from '../groups/api';
 import { getUser } from '../users/api';
 import { playNotificationSound } from '../../lib/sounds';
-import type { MessageEnvelope } from './api';
-import { looksLikeUnresolvedName } from './conversationId';
+import { listConversationSummaries, type MessageEnvelope } from './api';
+import { looksLikeUnresolvedName, UNRESOLVED_TITLE_PLACEHOLDER } from './conversationId';
 import { ChatSocket } from './ws';
 
 export const CONVERSATIONS_CHANGED_EVENT = 'riskyc:conversationsChanged';
+
+/**
+ * Backfills any conversation this device never saw live over STOMP — a
+ * message that arrived while this socket was disconnected (backgrounded
+ * past the OS grace period, killed, a fresh install) otherwise just
+ * vanishes from the local view: nothing here ever creates the local
+ * conversation row for it, so it never shows up in the chat list, and the
+ * only way to see it was to manually re-find the sender and start a new
+ * thread with them. Written as a stub with a placeholder title (self-heals
+ * via the exact same looksLikeUnresolvedName mechanism chats/index.tsx
+ * already runs for any row with an unresolved name) — the point here is
+ * only to make the conversation EXIST locally at all; name/avatar
+ * resolution and full message history both already happen elsewhere
+ * (chats/index.tsx's resolve pass, and useConversation's fetchHistory once
+ * the thread is actually opened).
+ */
+async function syncMissedConversations(db: SQLiteDatabase) {
+  try {
+    const summaries = await listConversationSummaries();
+    let backfilled = false;
+    for (const summary of summaries) {
+      const existingTitle = await getConversationTitle(db, summary.conversationId);
+      if (existingTitle) continue;
+      await upsertConversation(db, summary.conversationId, UNRESOLVED_TITLE_PLACEHOLDER, summary.lastMessageAt, null, !!summary.groupId);
+      backfilled = true;
+    }
+    if (backfilled) DeviceEventEmitter.emit(CONVERSATIONS_CHANGED_EVENT);
+  } catch (e) {
+    console.warn('[inboxSocket] conversation sync failed', e);
+  }
+}
 
 /**
  * One persistent, app-wide connection — mounted once at the app root for as
@@ -42,6 +74,8 @@ export function useInboxSocket() {
     let cancelled = false;
 
     socket.connect(() => {
+      syncMissedConversations(db);
+
       socket.subscribeToUserQueue(async (envelope: MessageEnvelope) => {
         // For a 1:1 message this queue only ever receives ones addressed to
         // me anyway, so recipientId === userId is redundant-but-safe to check.
@@ -73,7 +107,7 @@ export function useInboxSocket() {
         if (!title || looksLikeUnresolvedName(title)) {
           if (envelope.groupId) {
             const group = await getGroup(envelope.groupId).catch(() => null);
-            title = group?.name ?? envelope.groupId;
+            title = group?.name || UNRESOLVED_TITLE_PLACEHOLDER;
             avatarObjectKey = group?.avatarObjectKey;
             if (group) {
               const withNames = await Promise.all(
@@ -86,7 +120,7 @@ export function useInboxSocket() {
             }
           } else {
             const sender = await getUser(envelope.senderId).catch(() => null);
-            title = sender?.displayName || envelope.senderId;
+            title = sender?.displayName || UNRESOLVED_TITLE_PLACEHOLDER;
             avatarObjectKey = sender?.avatarObjectKey;
           }
         }

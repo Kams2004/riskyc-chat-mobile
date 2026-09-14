@@ -32,7 +32,11 @@ import { useCall } from '../../../features/calls/CallContext';
 import { getGroup } from '../../../features/groups/api';
 import { uploadMedia } from '../../../features/media/api';
 import { useMediaUrl } from '../../../features/media/useMediaUrl';
-import { looksLikeUnresolvedName } from '../../../features/messaging/conversationId';
+import {
+  looksLikeUnresolvedName,
+  UNRESOLVED_PERSON_PLACEHOLDER,
+  UNRESOLVED_TITLE_PLACEHOLDER,
+} from '../../../features/messaging/conversationId';
 import { useConversation } from '../../../features/messaging/useConversation';
 import { usePresence } from '../../../features/presence/usePresence';
 import { useTheme } from '../../../features/theme/ThemeContext';
@@ -126,6 +130,69 @@ const fileRowStyles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, minWidth: 180 },
   iconCircle: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
   name: { fontFamily: fonts.sansMedium, fontSize: 13.5, flexShrink: 1 },
+});
+
+function formatCallDuration(ms: number): string {
+  const totalSeconds = Math.round(ms / 1000);
+  const m = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+  const s = (totalSeconds % 60).toString().padStart(2, '0');
+  return `${m}:${s}`;
+}
+
+/**
+ * A call's outcome, logged inline in the thread like a real message (see
+ * CallController#logCallAsMessage on the backend) — ciphertext carries the
+ * outcome (ENDED/MISSED/DECLINED) and mediaFileName the call type
+ * (AUDIO/VIDEO), repurposed since neither has a dedicated column.
+ */
+function CallLogRow({
+  callType,
+  outcome,
+  durationMs,
+  isMine,
+  colors,
+}: {
+  callType: string | null;
+  outcome: string;
+  durationMs: number | null;
+  isMine: boolean;
+  colors: Palette;
+}) {
+  const isVideo = callType === 'VIDEO';
+  const missed = outcome === 'MISSED';
+  const declined = outcome === 'DECLINED';
+  const iconColor = missed || declined ? '#e53935' : colors.brand600;
+
+  let label = isVideo ? 'Video call' : 'Voice call';
+  if (missed) label = isMine ? `${label} · No answer` : `Missed ${label.toLowerCase()}`;
+  else if (declined) label = isMine ? `${label} · Declined` : `${label} · You declined`;
+
+  return (
+    <View style={[callLogStyles.pill, { backgroundColor: colors.tint1 }]}>
+      <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+        {isMine ? <Path d="M7 17L17 7M17 7H9M17 7v8" /> : <Path d="M17 7L7 17M7 17h8M7 17V9" />}
+      </Svg>
+      <Text style={[callLogStyles.label, { color: colors.textPrimary }]}>{label}</Text>
+      {!!durationMs && durationMs > 0 && (
+        <Text style={[callLogStyles.duration, { color: colors.textMuted }]}>{formatCallDuration(durationMs)}</Text>
+      )}
+    </View>
+  );
+}
+
+const callLogStyles = StyleSheet.create({
+  pill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    alignSelf: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 18,
+    marginVertical: 2,
+  },
+  label: { fontFamily: fonts.sansMedium, fontSize: 13 },
+  duration: { fontFamily: fonts.sans, fontSize: 12 },
 });
 
 type ReceiptRow = { userId: string; displayName: string; status: string };
@@ -247,7 +314,7 @@ export default function ChatThreadScreen() {
   const [pendingMediaMimeType, setPendingMediaMimeType] = useState<string | undefined>(undefined);
 
   function memberName(userId2: string): string {
-    return groupMembers.find((m) => m.user_id === userId2)?.display_name || userId2;
+    return groupMembers.find((m) => m.user_id === userId2)?.display_name || UNRESOLVED_PERSON_PLACEHOLDER;
   }
 
   async function showMessageInfo(message: LocalMessage) {
@@ -257,13 +324,13 @@ export default function ChatThreadScreen() {
       .filter((m) => m.user_id !== message.sender_id)
       .map((m) => ({
         userId: m.user_id,
-        displayName: m.display_name || m.user_id,
+        displayName: m.display_name || UNRESOLVED_PERSON_PLACEHOLDER,
         status: receiptByUser.get(m.user_id) ?? 'sent',
       }));
     setSelectedMessageId(null);
     setMessageInfoRows(rows);
   }
-  const displayName = resolvedName || recipientId || conversationId;
+  const displayName = resolvedName || UNRESOLVED_TITLE_PLACEHOLDER;
 
   const typingLabel = (() => {
     if (typingUserIds.length === 0) return null;
@@ -430,7 +497,7 @@ export default function ChatThreadScreen() {
               Alert.alert('Group calls not supported', 'Voice calling is only available in 1:1 chats for now.');
               return;
             }
-            if (recipientId) startCall(recipientId, displayName, 'AUDIO');
+            if (recipientId && resolvedName) startCall(recipientId, resolvedName, 'AUDIO');
           }}
         >
           <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={colors.textPrimary} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
@@ -444,7 +511,7 @@ export default function ChatThreadScreen() {
               Alert.alert('Group calls not supported', 'Video calling is only available in 1:1 chats for now.');
               return;
             }
-            if (recipientId) startCall(recipientId, displayName, 'VIDEO');
+            if (recipientId && resolvedName) startCall(recipientId, resolvedName, 'VIDEO');
           }}
         >
           <Svg width={21} height={21} viewBox="0 0 24 24" fill="none" stroke={colors.textPrimary} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
@@ -499,6 +566,18 @@ export default function ChatThreadScreen() {
               <View style={[styles.bubble, isMine ? styles.outgoing : styles.incoming, styles.deletedBubble]}>
                 <Text style={styles.deletedText}>This message was deleted</Text>
               </View>
+            );
+          }
+
+          if (item.media_type === 'CALL') {
+            return (
+              <CallLogRow
+                callType={item.media_file_name}
+                outcome={item.ciphertext}
+                durationMs={item.media_duration_ms}
+                isMine={isMine}
+                colors={colors}
+              />
             );
           }
 

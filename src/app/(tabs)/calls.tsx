@@ -8,6 +8,7 @@ import { Avatar } from '../../components/Avatar';
 import { listCallHistory, type CallResult } from '../../features/calls/api';
 import { useCall } from '../../features/calls/CallContext';
 import { useAuth } from '../../features/auth/AuthContext';
+import { UNRESOLVED_PERSON_PLACEHOLDER } from '../../features/messaging/conversationId';
 import { useTheme } from '../../features/theme/ThemeContext';
 import { getUser } from '../../features/users/api';
 import { fonts, TAB_BAR_CLEARANCE, type Palette } from '../../theme';
@@ -51,7 +52,7 @@ export default function CallsScreen() {
               return {
                 ...call,
                 isOutgoing,
-                otherName: user?.displayName || otherId,
+                otherName: user?.displayName || UNRESOLVED_PERSON_PLACEHOLDER,
                 otherAvatarKey: user?.avatarObjectKey ?? null,
               };
             })

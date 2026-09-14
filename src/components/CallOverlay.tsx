@@ -5,6 +5,7 @@ import { RTCView } from 'react-native-webrtc';
 import Svg, { Path } from 'react-native-svg';
 
 import { useCall } from '../features/calls/CallContext';
+import { UNRESOLVED_PERSON_PLACEHOLDER } from '../features/messaging/conversationId';
 import { getUser } from '../features/users/api';
 import { useTheme } from '../features/theme/ThemeContext';
 import { fonts } from '../theme';
@@ -64,10 +65,10 @@ export function CallOverlay() {
     }
     getUser(incomingCall.fromUserId)
       .then((user) => {
-        setCallerName(user.displayName || incomingCall.fromUserId);
+        setCallerName(user.displayName || UNRESOLVED_PERSON_PLACEHOLDER);
         setCallerAvatar(user.avatarObjectKey);
       })
-      .catch(() => setCallerName(incomingCall.fromUserId));
+      .catch(() => setCallerName(UNRESOLVED_PERSON_PLACEHOLDER));
   }, [incomingCall]);
 
   useEffect(() => {
@@ -81,7 +82,7 @@ export function CallOverlay() {
 
   if (callState === 'idle') return null;
 
-  const otherName = incomingCall ? callerName ?? incomingCall.fromUserId : outgoingCall?.toUserName ?? '';
+  const otherName = incomingCall ? callerName : outgoingCall?.toUserName ?? '';
   const isVideo = callType === 'VIDEO';
 
   return (
