@@ -8,6 +8,7 @@ import {
 } from 'react-native-webrtc';
 
 import { useAuth } from '../auth/AuthContext';
+import { playRingtone, stopRingtone } from '../../lib/sounds';
 import { CallSignalingSocket, type CallIceCandidate, type CallInvite, type CallType } from './signaling';
 
 // Public STUN only (see plan) — no self-hosted TURN relay yet, so calls
@@ -72,6 +73,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   const [connectedAt, setConnectedAt] = useState<number | null>(null);
 
   const resetCallState = useCallback(() => {
+    stopRingtone();
     pcRef.current?.close();
     pcRef.current = null;
     localStreamRef.current?.getTracks().forEach((track) => track.stop());
@@ -173,6 +175,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   const acceptIncoming = useCallback(async () => {
     const invite = pendingInviteRef.current;
     if (!invite || !socketRef.current) return;
+    stopRingtone();
 
     const stream = await mediaDevices.getUserMedia({ audio: true, video: invite.type === 'VIDEO' });
     localStreamRef.current = stream;
@@ -244,6 +247,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         setCallType(invite.type);
         setIncomingCall({ callId: invite.callId, fromUserId: invite.fromUserId, type: invite.type });
         setCallState('incoming-ringing');
+        playRingtone();
       },
       onAnswer: async (answer) => {
         const pc = pcRef.current;

@@ -12,6 +12,7 @@ import {
 import { useAuth } from '../auth/AuthContext';
 import { getGroup } from '../groups/api';
 import { getUser } from '../users/api';
+import { playNotificationSound } from '../../lib/sounds';
 import type { MessageEnvelope } from './api';
 import { looksLikeUnresolvedName } from './conversationId';
 import { ChatSocket } from './ws';
@@ -65,6 +66,7 @@ export function useInboxSocket() {
           edited: envelope.edited ? 1 : 0,
           deleted: envelope.deleted ? 1 : 0,
         });
+        playNotificationSound();
 
         let title = await getConversationTitle(db, envelope.conversationId);
         let avatarObjectKey: string | null | undefined;

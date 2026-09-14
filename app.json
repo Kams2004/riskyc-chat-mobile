@@ -52,6 +52,15 @@
             "usesCleartextTraffic": true
           }
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#ff1a5e",
+          "defaultChannel": "messages",
+          "sounds": ["./assets/sounds/notification.wav", "./assets/sounds/ringtone.wav"]
+        }
       ]
     ],
     "experiments": {

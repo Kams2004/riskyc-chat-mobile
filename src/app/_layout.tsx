@@ -17,6 +17,7 @@ import { migrateDbIfNeeded } from '../data/schema';
 import { AuthProvider, useAuth } from '../features/auth/AuthContext';
 import { CallProvider } from '../features/calls/CallContext';
 import { useInboxSocket } from '../features/messaging/inboxSocket';
+import { usePushNotifications } from '../features/notifications/usePushNotifications';
 import { usePresenceHeartbeat } from '../features/presence/usePresenceHeartbeat';
 import { ThemeProvider, useTheme } from '../features/theme/ThemeContext';
 import { loadPreferences } from '../lib/preferences';
@@ -68,6 +69,7 @@ function Root() {
   const { colors, scheme } = useTheme();
   useInboxSocket();
   usePresenceHeartbeat();
+  usePushNotifications();
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
