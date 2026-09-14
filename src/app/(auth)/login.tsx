@@ -1,4 +1,5 @@
 import { router } from 'expo-router';
+import LottieView from 'lottie-react-native';
 import { useState } from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -77,7 +78,14 @@ export default function LoginScreen() {
 
       {error && <Text style={styles.error}>{error}</Text>}
 
-      <View style={styles.spacer} />
+      <View style={styles.animationWrap}>
+        <LottieView
+          source={require('../../../assets/lottie/two-factor-auth.json')}
+          autoPlay
+          loop
+          style={styles.animation}
+        />
+      </View>
 
       <Button onPress={handleSendCode} disabled={!value} loading={isSubmitting}>
         Send code
@@ -138,6 +146,7 @@ function makeStyles(colors: Palette) {
       color: colors.textPrimary,
     },
     error: { fontFamily: fonts.sans, color: colors.brand800, marginTop: 12 },
-    spacer: { flex: 1 },
+    animationWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+    animation: { width: 220, height: 227 },
   });
 }
