@@ -1,0 +1,70 @@
+{
+  "expo": {
+    "name": "RiskyC Chat",
+    "slug": "riskyc-chat",
+    "version": "1.0.0",
+    "scheme": "riskycchat",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "plugins": [
+      [
+        "expo-router",
+        {
+          "root": "./src/app"
+        }
+      ],
+      "expo-secure-store",
+      "expo-sqlite",
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 180,
+          "resizeMode": "contain",
+          "backgroundColor": "#ff1a5e"
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "RiskyC Chat needs camera access to scan a contact's QR code and start a chat with them."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "RiskyC Chat needs access to your photos so you can set a profile picture."
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "RiskyC Chat needs microphone access to record voice messages."
+        }
+      ],
+      "@config-plugins/react-native-webrtc"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.riskyc.chat"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#c2003d",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "com.riskyc.chat"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    }
+  }
+}
