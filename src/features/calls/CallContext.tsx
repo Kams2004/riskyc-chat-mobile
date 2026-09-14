@@ -8,13 +8,17 @@ import {
 } from 'react-native-webrtc';
 
 import { useAuth } from '../auth/AuthContext';
-import { playRingtone, stopRingtone } from '../../lib/sounds';
+import { config } from '../../lib/config';
+import { playRingtone, setSpeakerphoneEnabled, stopRingtone } from '../../lib/sounds';
 import { CallSignalingSocket, type CallIceCandidate, type CallInvite, type CallType } from './signaling';
 
-// Public STUN only (see plan) — no self-hosted TURN relay yet, so calls
-// across genuinely different networks may not connect reliably. Purely
-// additive infrastructure to fix later; no call-logic changes needed.
-const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
+// STUN first (free, no relay bandwidth) with the self-hosted TURN server as
+// fallback for when caller/callee are on genuinely different networks and a
+// direct P2P path can't be found — see config.ts's turnServerUrl comment.
+const ICE_SERVERS = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: config.turnServerUrl, username: config.turnUsername, credential: config.turnCredential },
+];
 
 export type CallState = 'idle' | 'outgoing-ringing' | 'incoming-ringing' | 'connected';
 
@@ -30,6 +34,7 @@ type CallContextValue = {
   remoteStream: MediaStream | null;
   isMuted: boolean;
   isCameraOff: boolean;
+  isSpeakerOn: boolean;
   connectedAt: number | null;
   startCall: (recipientId: string, recipientName: string, type: CallType) => Promise<void>;
   acceptIncoming: () => Promise<void>;
@@ -37,6 +42,7 @@ type CallContextValue = {
   endCall: () => void;
   toggleMute: () => void;
   toggleCamera: () => void;
+  toggleSpeaker: () => void;
 };
 
 const CallContext = createContext<CallContextValue | null>(null);
@@ -66,14 +72,20 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   const [incomingCall, setIncomingCall] = useState<IncomingCallInfo | null>(null);
   const [outgoingCall, setOutgoingCall] = useState<OutgoingCallInfo | null>(null);
   const [callType, setCallType] = useState<CallType | null>(null);
+  const callTypeRef = useRef<CallType | null>(null);
+  useEffect(() => {
+    callTypeRef.current = callType;
+  }, [callType]);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [isMuted, setIsMuted] = useState(false);
   const [isCameraOff, setIsCameraOff] = useState(false);
+  const [isSpeakerOn, setIsSpeakerOn] = useState(false);
   const [connectedAt, setConnectedAt] = useState<number | null>(null);
 
   const resetCallState = useCallback(() => {
     stopRingtone();
+    setSpeakerphoneEnabled(false);
     pcRef.current?.close();
     pcRef.current = null;
     localStreamRef.current?.getTracks().forEach((track) => track.stop());
@@ -91,6 +103,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     setRemoteStream(null);
     setIsMuted(false);
     setIsCameraOff(false);
+    setIsSpeakerOn(false);
     setConnectedAt(null);
   }, []);
 
@@ -195,6 +208,11 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     setIncomingCall(null);
     setCallState('connected');
     setConnectedAt(Date.now());
+    // Video defaults to speaker (you're looking at the screen, not holding
+    // it to your ear); voice defaults to earpiece, same as a normal call.
+    const speakerDefault = invite.type === 'VIDEO';
+    setSpeakerphoneEnabled(speakerDefault);
+    setIsSpeakerOn(speakerDefault);
   }, [createPeerConnection, flushPendingIce]);
 
   const declineIncoming = useCallback(() => {
@@ -228,6 +246,12 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     setIsCameraOff(next);
   }, [isCameraOff]);
 
+  const toggleSpeaker = useCallback(() => {
+    const next = !isSpeakerOn;
+    setSpeakerphoneEnabled(next);
+    setIsSpeakerOn(next);
+  }, [isSpeakerOn]);
+
   useEffect(() => {
     if (!userId || !accessToken) return;
 
@@ -258,6 +282,9 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         setOutgoingCall(null);
         setCallState('connected');
         setConnectedAt(Date.now());
+        const speakerDefault = callTypeRef.current === 'VIDEO';
+        setSpeakerphoneEnabled(speakerDefault);
+        setIsSpeakerOn(speakerDefault);
       },
       onIce: async (ice) => {
         if (ice.callId !== activeCallIdRef.current) return;
@@ -295,6 +322,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     remoteStream,
     isMuted,
     isCameraOff,
+    isSpeakerOn,
     connectedAt,
     startCall,
     acceptIncoming,
@@ -302,6 +330,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     endCall,
     toggleMute,
     toggleCamera,
+    toggleSpeaker,
   };
 
   return <CallContext.Provider value={value}>{children}</CallContext.Provider>;

@@ -27,6 +27,18 @@ export const config = {
   messagingServiceUrl: process.env.EXPO_PUBLIC_MESSAGING_SERVICE_URL ?? 'http://167.86.120.214:8092',
   mediaServiceUrl: process.env.EXPO_PUBLIC_MEDIA_SERVICE_URL ?? 'http://167.86.120.214:8083',
   presenceServiceUrl: process.env.EXPO_PUBLIC_PRESENCE_SERVICE_URL ?? 'http://167.86.120.214:8084',
+  /**
+   * Self-hosted TURN relay (see backend/docker-compose.yml's coturn
+   * service) — public STUN alone frequently can't find a working P2P media
+   * path once caller/callee are on genuinely different networks (mobile
+   * data behind carrier-grade NAT is the classic failure: the call
+   * "connects" at the signaling layer, but no audio/video ever arrives).
+   * Static credential, matching coturn's config — see that file's comment
+   * for why a long-lived one is an acceptable tradeoff for now.
+   */
+  turnServerUrl: process.env.EXPO_PUBLIC_TURN_SERVER_URL ?? 'turn:167.86.120.214:3478',
+  turnUsername: process.env.EXPO_PUBLIC_TURN_USERNAME ?? 'riskyc',
+  turnCredential: process.env.EXPO_PUBLIC_TURN_CREDENTIAL ?? 'riskyc-turn-secret',
 } as const;
 
 /**

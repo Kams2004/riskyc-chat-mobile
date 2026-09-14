@@ -44,3 +44,22 @@ export async function playRingtone() {
 export function stopRingtone() {
   ringtonePlayer?.pause();
 }
+
+/**
+ * Speakerphone toggle for an active call. There's no separate "call audio"
+ * API in react-native-webrtc — its native audio rendering goes through the
+ * same platform audio session expo-audio's setAudioModeAsync configures, so
+ * reusing it here is the standard workaround for the missing dedicated
+ * audio-routing library. allowsRecording: true switches iOS into the
+ * playAndRecord session category, which is what makes
+ * shouldRouteThroughEarpiece take effect there at all (accurate for a live
+ * call anyway — the microphone really is active).
+ */
+export async function setSpeakerphoneEnabled(enabled: boolean) {
+  await setAudioModeAsync({
+    allowsRecording: true,
+    playsInSilentMode: true,
+    interruptionMode: 'mixWithOthers',
+    shouldRouteThroughEarpiece: !enabled,
+  }).catch(() => {});
+}

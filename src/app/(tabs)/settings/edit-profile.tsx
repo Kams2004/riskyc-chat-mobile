@@ -51,10 +51,14 @@ export default function EditProfileScreen() {
       const newAvatarObjectKey = freshLocalUri ? await uploadImage(freshLocalUri) : undefined;
       await updateMyProfile({ displayName: name, ...(newAvatarObjectKey ? { avatarObjectKey: newAvatarObjectKey } : {}) });
       await updateProfile({ displayName: name, ...(newAvatarObjectKey ? { avatarObjectKey: newAvatarObjectKey } : {}) });
-      // A brand-new account is routed straight here (see app/_layout.tsx's
-      // onboarding redirect) before ever seeing the chat list, so there's no
-      // previous screen for router.back() to return to.
-      if (displayName) {
+      // router.back() silently does nothing if there's no history to go
+      // back to — which is exactly what a brand-new account routed straight
+      // here (see app/_layout.tsx's onboarding redirect) has, since it never
+      // saw the chat list first. Checking canGoBack() directly is more
+      // robust than inferring "new account" from displayName (captured at
+      // mount — stale the moment updateProfile above changes it), and can't
+      // ever leave Save looking like it silently did nothing.
+      if (router.canGoBack()) {
         router.back();
       } else {
         router.replace('/(tabs)/chats');

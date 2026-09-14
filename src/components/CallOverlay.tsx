@@ -45,12 +45,14 @@ export function CallOverlay() {
     remoteStream,
     isMuted,
     isCameraOff,
+    isSpeakerOn,
     connectedAt,
     acceptIncoming,
     declineIncoming,
     endCall,
     toggleMute,
     toggleCamera,
+    toggleSpeaker,
   } = useCall();
 
   const [callerName, setCallerName] = useState<string | null>(null);
@@ -147,6 +149,12 @@ export function CallOverlay() {
                   <Path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
                   <Path d="M19 10v2a7 7 0 0 1-14 0v-2" />
                   {isMuted && <Path d="M2 2l20 20" />}
+                </Svg>
+              </IconButton>
+              <IconButton onPress={toggleSpeaker} color={isSpeakerOn ? '#ffffff' : 'rgba(255,255,255,0.2)'}>
+                <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={isSpeakerOn ? '#1a0d10' : '#fff'} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <Path d="M11 5L6 9H2v6h4l5 4V5z" />
+                  <Path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" />
                 </Svg>
               </IconButton>
               {isVideo && (
