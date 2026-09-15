@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import LottieView from 'lottie-react-native';
 import { useEffect, useState } from 'react';
 import { Keyboard, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -17,7 +17,11 @@ export default function LoginScreen() {
   const insets = useSafeAreaInsets();
   const styles = makeStyles(colors);
 
-  const [mode, setMode] = useState<Mode>('phone');
+  // Set when the verify screen sends someone back here after hitting the
+  // SMS trial cap — lands them straight on the Email tab instead of phone,
+  // since going "back" alone would leave them right where the problem was.
+  const { presetMode } = useLocalSearchParams<{ presetMode?: Mode }>();
+  const [mode, setMode] = useState<Mode>(presetMode === 'email' ? 'email' : 'phone');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [email, setEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);

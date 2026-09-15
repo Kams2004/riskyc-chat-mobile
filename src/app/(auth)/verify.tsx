@@ -1,13 +1,16 @@
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '../../features/auth/AuthContext';
+import * as authApi from '../../features/auth/api';
+import { ApiError } from '../../lib/httpClient';
 import { useTheme } from '../../features/theme/ThemeContext';
 import { fonts, type Palette } from '../../theme';
 
 const CODE_LENGTH = 6;
+const RESEND_COOLDOWN_SECONDS = 45;
 
 export default function VerifyScreen() {
   const { colors } = useTheme();
@@ -22,7 +25,16 @@ export default function VerifyScreen() {
   const [code, setCode] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [smsTrialLimitReached, setSmsTrialLimitReached] = useState(false);
+  const [isResending, setIsResending] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
   const inputRef = useRef<TextInput>(null);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setTimeout(() => setResendCooldown((s) => s - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [resendCooldown]);
 
   useEffect(() => {
     if (code.length !== CODE_LENGTH) return;
@@ -47,6 +59,34 @@ export default function VerifyScreen() {
       cancelled = true;
     };
   }, [code, identifierType, identifierValue, signInWithOtp]);
+
+  async function handleResend() {
+    if (isResending || resendCooldown > 0 || smsTrialLimitReached) return;
+    setError(null);
+    setIsResending(true);
+    try {
+      await authApi.requestOtp({ type: identifierType, value: identifierValue });
+      setResendCooldown(RESEND_COOLDOWN_SECONDS);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 429) {
+        const reason = (e.body as { reason?: string } | undefined)?.reason;
+        if (reason === 'SMS_TRIAL_LIMIT_REACHED') {
+          setSmsTrialLimitReached(true);
+          setError(null);
+        } else {
+          setError("You're sending codes too quickly — please wait a bit before trying again.");
+        }
+      } else {
+        setError(e instanceof Error ? e.message : 'Could not resend the code. Please try again.');
+      }
+    } finally {
+      setIsResending(false);
+    }
+  }
+
+  function useEmailInstead() {
+    router.replace({ pathname: '/(auth)/login', params: { presetMode: 'email' } });
+  }
 
   const digits = Array.from({ length: CODE_LENGTH }, (_, i) => code[i] ?? '');
 
@@ -79,9 +119,25 @@ export default function VerifyScreen() {
       {isVerifying && <ActivityIndicator color={colors.brand500} style={{ marginTop: 24 }} />}
       {error && <Text style={styles.error}>{error}</Text>}
 
-      <Text style={styles.resend}>
-        Didn't receive a code? <Text style={styles.link}>Resend</Text>
-      </Text>
+      {smsTrialLimitReached ? (
+        <View style={styles.trialLimitBox}>
+          <Text style={styles.trialLimitText}>
+            You've reached the SMS code limit for this number. Please use email instead to sign in.
+          </Text>
+          <TouchableOpacity onPress={useEmailInstead}>
+            <Text style={[styles.resend, styles.link]}>Use email instead</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <TouchableOpacity onPress={handleResend} disabled={isResending || resendCooldown > 0}>
+          <Text style={styles.resend}>
+            Didn't receive a code?{' '}
+            <Text style={[styles.link, (isResending || resendCooldown > 0) && styles.linkDisabled]}>
+              {resendCooldown > 0 ? `Resend (${resendCooldown}s)` : isResending ? 'Sending…' : 'Resend'}
+            </Text>
+          </Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -113,7 +169,10 @@ function makeStyles(colors: Palette) {
     boxDigit: { fontFamily: fonts.sansBold, fontSize: 20, color: colors.textPrimary },
     hiddenInput: { position: 'absolute', opacity: 0, height: 1, width: 1 },
     error: { fontFamily: fonts.sans, fontSize: 13, color: colors.brand800, marginTop: 16, textAlign: 'center' },
-    resend: { fontFamily: fonts.sans, fontSize: 13, color: colors.textMuted, marginTop: 40 },
+    resend: { fontFamily: fonts.sans, fontSize: 13, color: colors.textMuted, marginTop: 40, textAlign: 'center' },
     link: { fontFamily: fonts.sansSemiBold, color: colors.brand600 },
+    linkDisabled: { color: colors.textMuted },
+    trialLimitBox: { marginTop: 40, alignItems: 'center', gap: 10, paddingHorizontal: 12 },
+    trialLimitText: { fontFamily: fonts.sans, fontSize: 13, lineHeight: 19, color: colors.brand800, textAlign: 'center' },
   });
 }

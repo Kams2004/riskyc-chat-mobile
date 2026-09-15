@@ -2,6 +2,17 @@ import { session } from './secureStore';
 
 const REQUEST_TIMEOUT_MS = 20000;
 
+/** Carries the status and (if the body was JSON) parsed body of a non-2xx response, so callers can branch on specifics instead of just a message string. */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+    public body?: unknown
+  ) {
+    super(message);
+  }
+}
+
 /**
  * A dropped/firewalled port produces no response at all — no error, no
  * refused connection, nothing — so plain fetch() just hangs forever with no
@@ -35,7 +46,13 @@ export async function apiFetch<T>(url: string, init: RequestInit = {}): Promise<
   const text = await response.text();
 
   if (!response.ok) {
-    throw new Error(`Request to ${url} failed: ${response.status} ${text}`);
+    let body: unknown;
+    try {
+      body = text ? JSON.parse(text) : undefined;
+    } catch {
+      body = undefined;
+    }
+    throw new ApiError(`Request to ${url} failed: ${response.status} ${text}`, response.status, body);
   }
   // Empty-body success responses (202 Accepted, 204 No Content, ...) have
   // nothing for JSON.parse to read — response.json() throws on those.
