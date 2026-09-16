@@ -98,12 +98,24 @@ function RootNavigator() {
   // whose name is somehow still blank is deliberately NOT redirected here:
   // only the live transition below fires this, so they're never trapped
   // going back out of Edit profile with the name left empty.
+  //
+  // Two-step navigation (replace into Settings' own index, THEN push
+  // edit-profile) rather than replacing straight into edit-profile: a
+  // direct replace leaves the Settings tab's nested stack rooted on
+  // edit-profile with no index underneath it (imperative router.replace
+  // doesn't rehydrate intermediate route history the way a cold-start deep
+  // link does), and since tab navigators preserve their state across
+  // focus changes, every later visit to Settings re-lands on edit-profile
+  // instead of its own list. Pushing on top of index gives edit-profile's
+  // own save handler a real router.back() target and leaves the stack
+  // correctly rooted for all future Settings visits.
   const previousUserId = useRef<string | null>(null);
   useEffect(() => {
     const justSignedIn = !previousUserId.current && !!userId;
     previousUserId.current = userId;
     if (justSignedIn && !displayName) {
-      router.replace('/(tabs)/settings/edit-profile' as never);
+      router.replace('/(tabs)/settings' as never);
+      router.push('/(tabs)/settings/edit-profile' as never);
     }
   }, [userId, displayName]);
 
