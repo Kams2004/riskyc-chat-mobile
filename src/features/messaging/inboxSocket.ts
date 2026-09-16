@@ -132,7 +132,7 @@ export function useInboxSocket() {
             }
           } else {
             const sender = await getUser(envelope.senderId).catch(() => null);
-            title = sender?.displayName || UNRESOLVED_TITLE_PLACEHOLDER;
+            title = sender?.displayName || sender?.phoneNumber || UNRESOLVED_TITLE_PLACEHOLDER;
             avatarObjectKey = sender?.avatarObjectKey;
           }
         }

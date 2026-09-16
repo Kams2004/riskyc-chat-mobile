@@ -74,11 +74,11 @@ export default function ChatListScreen() {
               return;
             }
             const user = await getUser(otherPartyFrom(row.id, userId)).catch(() => null);
-            if (user?.displayName || user?.avatarObjectKey) {
+            if (user?.displayName || user?.phoneNumber || user?.avatarObjectKey) {
               await upsertConversation(
                 db,
                 row.id,
-                user.displayName || row.title,
+                user.displayName || user.phoneNumber || row.title,
                 row.last_message_at ?? new Date().toISOString(),
                 user.avatarObjectKey
               );
