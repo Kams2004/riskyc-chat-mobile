@@ -15,6 +15,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { DATABASE_NAME } from '../data/db';
 import { migrateDbIfNeeded } from '../data/schema';
 import { AuthProvider, useAuth } from '../features/auth/AuthContext';
+import { initI18n } from '../i18n';
 import { CallProvider } from '../features/calls/CallContext';
 import { GroupCallProvider } from '../features/calls/GroupCallContext';
 import { useInboxSocket } from '../features/messaging/inboxSocket';
@@ -41,7 +42,10 @@ export default function RootLayout() {
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
 
   useEffect(() => {
-    loadPreferences().then(() => setPreferencesLoaded(true));
+    // i18n must be ready before ANY screen renders, including the very
+    // first splash — loaded alongside the other startup preferences so
+    // there's no extra gate/flash-of-wrong-language to manage separately.
+    Promise.all([loadPreferences(), initI18n()]).then(() => setPreferencesLoaded(true));
   }, []);
 
   useEffect(() => {

@@ -71,7 +71,8 @@
         {
           "contactsPermission": "RiskyC Chat uses your contacts to show you which of your friends are already using the app — only phone numbers/emails are checked against accounts, nothing is uploaded or shared."
         }
-      ]
+      ],
+      "expo-localization"
     ],
     "experiments": {
       "typedRoutes": true

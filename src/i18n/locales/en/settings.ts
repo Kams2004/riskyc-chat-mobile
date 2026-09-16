@@ -1,0 +1,31 @@
+export default {
+  index: {
+    title: 'Settings',
+    addYourName: 'Add your name',
+    myQrCode: 'My QR code',
+    appearance: 'Appearance',
+    themeSystem: 'System',
+    themeLight: 'Light',
+    themeDark: 'Dark',
+    account: 'Account',
+    loggedInDevices: 'Logged-in devices',
+    privacy: 'Privacy',
+    notifications: 'Notifications',
+    notificationsComingSoonTitle: 'Notifications coming soon',
+    notificationsComingSoonBody: 'This needs a push-notification service, which is not built yet.',
+    language: 'Language',
+    signOut: 'Sign out',
+  },
+  language: {
+    title: 'Language',
+    english: 'English',
+    french: 'French',
+  },
+  editProfile: {
+    titleEdit: 'Edit profile',
+    titleSetup: 'Set up your profile',
+    nameLabel: 'Name',
+    namePlaceholder: 'Your name',
+    saveError: 'Could not save',
+  },
+};

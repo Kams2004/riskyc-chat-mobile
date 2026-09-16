@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Alert, DeviceEventEmitter, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
+import { useTranslation } from 'react-i18next';
 
 import { Avatar } from '../../../components/Avatar';
 import { deleteConversation, listConversations, setFavorite, upsertConversation, useSQLiteContext, type LocalConversation } from '../../../data/db';
@@ -21,6 +22,7 @@ export default function ChatListScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = makeStyles(colors);
+  const { t } = useTranslation('chats');
 
   const db = useSQLiteContext();
   const { userId } = useAuth();
@@ -195,13 +197,13 @@ export default function ChatListScreen() {
         </View>
       ) : (
         <>
-          <Text style={styles.header}>Chats</Text>
+          <Text style={styles.header}>{t('list.title')}</Text>
           <View style={styles.searchBar}>
             <Svg width={17} height={17} viewBox="0 0 24 24" fill="none" stroke={colors.brand300} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
               <Path d="M11 3a8 8 0 1 0 0 16 8 8 0 0 0 0-16z" />
               <Path d="M21 21l-4.3-4.3" />
             </Svg>
-            <Text style={styles.searchPlaceholder}>Search chats</Text>
+            <Text style={styles.searchPlaceholder}>{t('list.searchPlaceholder')}</Text>
           </View>
           <View style={styles.filterRow}>
             {(['all', 'unread', 'favorites', 'groups'] as Filter[]).map((f) => (
@@ -211,7 +213,7 @@ export default function ChatListScreen() {
                 onPress={() => setFilter(f)}
               >
                 <Text style={[styles.filterChipLabel, filter === f && { color: '#ffffff' }]}>
-                  {f === 'all' ? 'All' : f === 'unread' ? 'Unread' : f === 'favorites' ? 'Favorites' : 'Groups'}
+                  {f === 'all' ? t('list.filterAll') : f === 'unread' ? t('list.filterUnread') : f === 'favorites' ? t('list.filterFavorites') : t('list.filterGroups')}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -221,9 +223,9 @@ export default function ChatListScreen() {
 
       {visibleConversations.length === 0 && (
         <View style={styles.emptyState}>
-          <Text style={styles.emptyTitle}>{filter === 'all' ? 'No conversations yet' : 'Nothing here'}</Text>
+          <Text style={styles.emptyTitle}>{filter === 'all' ? t('list.emptyTitle') : t('list.nothingHere')}</Text>
           <Text style={styles.emptyBody}>
-            {filter === 'all' ? 'Tap + to search for someone or scan their QR code.' : 'Try a different filter.'}
+            {filter === 'all' ? t('list.emptyBody') : t('list.tryDifferentFilter')}
           </Text>
         </View>
       )}
@@ -290,7 +292,7 @@ export default function ChatListScreen() {
                 one exists this collapses down to just the icon, permanently
                 (re-expanding on every empty search/filter view would be
                 noisy, not helpful). */}
-            {conversations.length === 0 && <Text style={styles.fabLabel}>New conversation</Text>}
+            {conversations.length === 0 && <Text style={styles.fabLabel}>{t('list.newConversation')}</Text>}
           </TouchableOpacity>
         </LinearGradient>
       )}

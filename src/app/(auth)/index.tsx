@@ -2,47 +2,43 @@ import { router } from 'expo-router';
 import { Linking, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
+import { useTranslation } from 'react-i18next';
 
 import { Button } from '../../components/Button';
 import { Logo } from '../../components/Logo';
 import { useTheme } from '../../features/theme/ThemeContext';
 import { fonts, type Palette } from '../../theme';
 
-const FEATURES: Array<{ title: string; description: string; icon: (color: string) => React.ReactNode }> = [
-  {
-    title: 'Real-time messaging',
-    description: 'Texts, photos, voice notes and files, delivered instantly.',
-    icon: (color) => (
-      <Path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" fill="none" />
-    ),
-  },
-  {
-    title: 'Group chats',
-    description: 'Bring everyone into one conversation with full read receipts.',
-    icon: (color) => (
-      <>
-        <Path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" fill="none" />
-        <Path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" fill="none" />
-        <Path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" fill="none" />
-      </>
-    ),
-  },
-  {
-    title: 'Voice & video calls',
-    description: 'Crystal-clear 1:1 calls, right from any conversation.',
-    icon: (color) => (
-      <>
-        <Path d="M23 7l-7 5 7 5V7z" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" fill="none" />
-        <Path d="M16 5H3a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2z" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" fill="none" />
-      </>
-    ),
-  },
+const FEATURE_ICONS: Array<(color: string) => React.ReactNode> = [
+  (color) => (
+    <Path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+  ),
+  (color) => (
+    <>
+      <Path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+      <Path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+      <Path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+    </>
+  ),
+  (color) => (
+    <>
+      <Path d="M23 7l-7 5 7 5V7z" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+      <Path d="M16 5H3a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2z" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+    </>
+  ),
 ];
 
 export default function WelcomeScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = makeStyles(colors);
+  const { t } = useTranslation('auth');
+
+  const features = [1, 2, 3].map((n) => ({
+    title: t(`welcome.feature${n}Title`),
+    description: t(`welcome.feature${n}Description`),
+    icon: FEATURE_ICONS[n - 1],
+  }));
 
   return (
     <View style={styles.container}>
@@ -51,11 +47,11 @@ export default function WelcomeScreen() {
         <Text style={styles.wordmark}>
           RiskyC <Text style={styles.wordmarkLight}>Chat</Text>
         </Text>
-        <Text style={styles.tagline}>Simple. Elegant. Yours.</Text>
+        <Text style={styles.tagline}>{t('welcome.tagline')}</Text>
       </View>
 
       <View style={styles.features}>
-        {FEATURES.map((feature) => (
+        {features.map((feature) => (
           <View key={feature.title} style={styles.featureRow}>
             <View style={styles.featureIcon}>
               <Svg width={22} height={22} viewBox="0 0 24 24">
@@ -72,17 +68,17 @@ export default function WelcomeScreen() {
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + 20 }]}>
         <Text style={styles.consent}>
-          Read our{' '}
+          {t('welcome.consentPrefix')}
           <Text style={styles.link} onPress={() => Linking.openURL('https://example.com/privacy')}>
-            Privacy Policy
+            {t('welcome.privacyPolicy')}
           </Text>
-          . Tap "Agree and continue" to accept the{' '}
+          {t('welcome.consentMiddle')}
           <Text style={styles.link} onPress={() => Linking.openURL('https://example.com/terms')}>
-            Terms of Service
+            {t('welcome.termsOfService')}
           </Text>
-          .
+          {t('welcome.consentSuffix')}
         </Text>
-        <Button onPress={() => router.push('/(auth)/login')}>Agree and continue</Button>
+        <Button onPress={() => router.push('/(auth)/language-select' as never)}>{t('welcome.agreeAndContinue')}</Button>
       </View>
     </View>
   );

@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
+import { useTranslation } from 'react-i18next';
 
 import { Avatar } from '../../../components/Avatar';
 import { useAuth } from '../../../features/auth/AuthContext';
@@ -53,11 +54,7 @@ function Row({
   );
 }
 
-const PREFERENCE_OPTIONS: { value: ThemePreference; label: string }[] = [
-  { value: 'system', label: 'System' },
-  { value: 'light', label: 'Light' },
-  { value: 'dark', label: 'Dark' },
-];
+const PREFERENCE_VALUES: ThemePreference[] = ['system', 'light', 'dark'];
 
 function ThemePreviewSwatch({ mode, active, colors, styles }: { mode: ThemePreference; active: boolean; colors: Palette; styles: ReturnType<typeof makeStyles> }) {
   if (mode === 'system') {
@@ -88,6 +85,13 @@ export default function SettingsScreen() {
   const { colors, preference, setPreference } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = makeStyles(colors);
+  const { t } = useTranslation('settings');
+
+  const themeLabels: Record<ThemePreference, string> = {
+    system: t('index.themeSystem'),
+    light: t('index.themeLight'),
+    dark: t('index.themeDark'),
+  };
 
   // Registered email/phone shown instead of the raw account id — fetched
   // fresh rather than cached, since AuthContext only carries it right after
@@ -105,12 +109,12 @@ export default function SettingsScreen() {
       style={styles.container}
       contentContainerStyle={[styles.content, { paddingTop: insets.top + 8, paddingBottom: TAB_BAR_CLEARANCE(insets.bottom) }]}
     >
-      <Text style={styles.header}>Settings</Text>
+      <Text style={styles.header}>{t('index.title')}</Text>
 
       <TouchableOpacity style={styles.profileCard} onPress={() => router.push('/(tabs)/settings/edit-profile' as never)}>
         <Avatar objectKey={avatarObjectKey} label={displayName || '?'} size={68} />
         <View style={{ flex: 1 }}>
-          <Text style={styles.profileName}>{displayName || 'Add your name'}</Text>
+          <Text style={styles.profileName}>{displayName || t('index.addYourName')}</Text>
           {!!identifier && <Text style={styles.profileSubtitle}>{maskIdentifier(identifier)}</Text>}
         </View>
         <Chevron colors={colors} />
@@ -129,27 +133,27 @@ export default function SettingsScreen() {
               <Path d="M14 14h3v3h-3zM14 21h3M21 14v3M17.5 21H21v-3.5" />
             </Svg>
           }
-          label="My QR code"
+          label={t('index.myQrCode')}
           onPress={() => router.push({ pathname: '/(tabs)/chats/qr', params: { initialTab: 'mine' } })}
         />
       </View>
 
-      <Text style={styles.sectionLabel}>Appearance</Text>
+      <Text style={styles.sectionLabel}>{t('index.appearance')}</Text>
       <View style={styles.card}>
         <View style={styles.themeRow}>
-          {PREFERENCE_OPTIONS.map((option) => {
-            const active = preference === option.value;
+          {PREFERENCE_VALUES.map((value) => {
+            const active = preference === value;
             return (
-              <TouchableOpacity key={option.value} onPress={() => setPreference(option.value)} style={styles.themeOption}>
+              <TouchableOpacity key={value} onPress={() => setPreference(value)} style={styles.themeOption}>
                 <View>
-                  <ThemePreviewSwatch mode={option.value} active={active} colors={colors} styles={styles} />
+                  <ThemePreviewSwatch mode={value} active={active} colors={colors} styles={styles} />
                   {active && (
                     <View style={styles.checkBadge}>
                       <Check colors={colors} />
                     </View>
                   )}
                 </View>
-                <Text style={[styles.themeTabLabel, active && styles.themeTabLabelActive]}>{option.label}</Text>
+                <Text style={[styles.themeTabLabel, active && styles.themeTabLabelActive]}>{themeLabels[value]}</Text>
               </TouchableOpacity>
             );
           })}
@@ -166,7 +170,7 @@ export default function SettingsScreen() {
               <Circle cx={12} cy={7} r={4} />
             </Svg>
           }
-          label="Account"
+          label={t('index.account')}
           onPress={() => router.push('/(tabs)/settings/account' as never)}
         />
         <Row
@@ -178,7 +182,7 @@ export default function SettingsScreen() {
               <Path d="M8 21h8M12 17v4" />
             </Svg>
           }
-          label="Logged-in devices"
+          label={t('index.loggedInDevices')}
           onPress={() => router.push('/(tabs)/settings/devices' as never)}
         />
         <Row
@@ -189,8 +193,20 @@ export default function SettingsScreen() {
               <Path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
             </Svg>
           }
-          label="Privacy"
+          label={t('index.privacy')}
           onPress={() => router.push('/(tabs)/settings/privacy' as never)}
+        />
+        <Row
+          styles={styles}
+          colors={colors}
+          icon={
+            <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={colors.brand600} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <Path d="M5 8l7 6 7-6" />
+              <Rect x={3} y={5} width={18} height={14} rx={2} />
+            </Svg>
+          }
+          label={t('index.language')}
+          onPress={() => router.push('/(tabs)/settings/language' as never)}
         />
         <Row
           styles={styles}
@@ -202,8 +218,8 @@ export default function SettingsScreen() {
               <Path d="M13.73 21a2 2 0 0 1-3.46 0" />
             </Svg>
           }
-          label="Notifications"
-          onPress={() => Alert.alert('Notifications coming soon', 'This needs a push-notification service, which is not built yet.')}
+          label={t('index.notifications')}
+          onPress={() => Alert.alert(t('index.notificationsComingSoonTitle'), t('index.notificationsComingSoonBody'))}
         />
       </View>
 
@@ -219,7 +235,7 @@ export default function SettingsScreen() {
               <Path d="M21 12H9" />
             </Svg>
           }
-          label="Sign out"
+          label={t('index.signOut')}
           danger
           onPress={signOut}
         />

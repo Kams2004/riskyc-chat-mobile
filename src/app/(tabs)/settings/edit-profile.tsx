@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { Alert, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
+import { useTranslation } from 'react-i18next';
 
 import { Avatar } from '../../../components/Avatar';
 import { Button } from '../../../components/Button';
@@ -22,6 +23,7 @@ export default function EditProfileScreen() {
 
   const { displayName, avatarObjectKey, updateProfile } = useAuth();
   const { onboarding } = useLocalSearchParams<{ onboarding?: string }>();
+  const { t } = useTranslation('settings');
   const [name, setName] = useState(displayName ?? '');
   // Only set once the user picks a NEW photo this session — until then the
   // existing remote avatarObjectKey (if any) is shown via Avatar/useMediaUrl,
@@ -68,7 +70,7 @@ export default function EditProfileScreen() {
       }
     } catch (e) {
       console.warn('[EditProfile] save failed', e);
-      Alert.alert('Could not save', 'Please check your connection and try again.');
+      Alert.alert(t('editProfile.saveError'), t('common:checkConnectionAndRetry'));
     } finally {
       setIsSaving(false);
     }
@@ -82,7 +84,7 @@ export default function EditProfileScreen() {
             <Path d="M15 18l-6-6 6-6" />
           </Svg>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{displayName ? 'Edit profile' : 'Set up your profile'}</Text>
+        <Text style={styles.headerTitle}>{displayName ? t('editProfile.titleEdit') : t('editProfile.titleSetup')}</Text>
       </View>
 
       {/*
@@ -124,10 +126,10 @@ export default function EditProfileScreen() {
         </View>
 
         <View style={styles.field}>
-          <Text style={styles.label}>Name</Text>
+          <Text style={styles.label}>{t('editProfile.nameLabel')}</Text>
           <TextInput
             style={styles.input}
-            placeholder="Your name"
+            placeholder={t('editProfile.namePlaceholder')}
             placeholderTextColor={colors.textMuted}
             value={name}
             onChangeText={setName}
@@ -135,7 +137,7 @@ export default function EditProfileScreen() {
         </View>
 
         <Button onPress={handleSave} loading={isSaving} disabled={!name.trim()} style={styles.saveButton}>
-          Save
+          {t('common:save')}
         </Button>
       </ScrollView>
     </KeyboardScreen>

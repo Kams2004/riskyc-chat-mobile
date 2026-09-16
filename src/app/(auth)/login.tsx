@@ -3,6 +3,7 @@ import LottieView from 'lottie-react-native';
 import { useEffect, useState } from 'react';
 import { Keyboard, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 
 import { Button } from '../../components/Button';
 import { KeyboardScreen } from '../../components/KeyboardScreen';
@@ -18,6 +19,7 @@ export default function LoginScreen() {
   const insets = useSafeAreaInsets();
   const styles = makeStyles(colors);
   const { completeSystemLogin } = useAuth();
+  const { t } = useTranslation('auth');
 
   // Set when the verify screen sends someone back here after hitting the
   // SMS trial cap — lands them straight on the Email tab instead of phone,
@@ -72,18 +74,18 @@ export default function LoginScreen() {
 
   return (
     <KeyboardScreen style={[styles.container, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 20 }]}>
-      <Text style={styles.title}>Enter your {mode === 'phone' ? 'phone number' : 'email address'}</Text>
-      <Text style={styles.subtitle}>RiskyC Chat will send a verification code to confirm it's you.</Text>
+      <Text style={styles.title}>{mode === 'phone' ? t('login.titlePhone') : t('login.titleEmail')}</Text>
+      <Text style={styles.subtitle}>{t('login.subtitle')}</Text>
 
       <View style={styles.toggleRow}>
-        <ToggleTab label="Phone" active={mode === 'phone'} onPress={() => setMode('phone')} styles={styles} />
-        <ToggleTab label="Email" active={mode === 'email'} onPress={() => setMode('email')} styles={styles} />
+        <ToggleTab label={t('login.phoneTab')} active={mode === 'phone'} onPress={() => setMode('phone')} styles={styles} />
+        <ToggleTab label={t('login.emailTab')} active={mode === 'email'} onPress={() => setMode('email')} styles={styles} />
       </View>
 
       {mode === 'phone' ? (
         <TextInput
           style={styles.input}
-          placeholder="+237 6XX XXX XXX"
+          placeholder={t('login.phonePlaceholder')}
           placeholderTextColor={colors.textMuted}
           keyboardType="phone-pad"
           autoComplete="tel"
@@ -93,7 +95,7 @@ export default function LoginScreen() {
       ) : (
         <TextInput
           style={styles.input}
-          placeholder="you@example.com"
+          placeholder={t('login.emailPlaceholder')}
           placeholderTextColor={colors.textMuted}
           keyboardType="email-address"
           autoCapitalize="none"
@@ -120,7 +122,7 @@ export default function LoginScreen() {
       )}
 
       <Button onPress={handleSendCode} disabled={!value} loading={isSubmitting}>
-        Send code
+        {t('login.sendCode')}
       </Button>
     </KeyboardScreen>
   );

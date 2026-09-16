@@ -1,0 +1,31 @@
+export default {
+  index: {
+    title: 'Paramètres',
+    addYourName: 'Ajoutez votre nom',
+    myQrCode: 'Mon code QR',
+    appearance: 'Apparence',
+    themeSystem: 'Système',
+    themeLight: 'Clair',
+    themeDark: 'Sombre',
+    account: 'Compte',
+    loggedInDevices: 'Appareils connectés',
+    privacy: 'Confidentialité',
+    notifications: 'Notifications',
+    notificationsComingSoonTitle: 'Notifications bientôt disponibles',
+    notificationsComingSoonBody: "Ceci nécessite un service de notifications push, qui n'est pas encore construit.",
+    language: 'Langue',
+    signOut: 'Se déconnecter',
+  },
+  language: {
+    title: 'Langue',
+    english: 'Anglais',
+    french: 'Français',
+  },
+  editProfile: {
+    titleEdit: 'Modifier le profil',
+    titleSetup: 'Configurez votre profil',
+    nameLabel: 'Nom',
+    namePlaceholder: 'Votre nom',
+    saveError: 'Impossible d’enregistrer',
+  },
+};

@@ -2,6 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 
 import { useAuth } from '../../features/auth/AuthContext';
 import * as authApi from '../../features/auth/api';
@@ -17,6 +18,7 @@ export default function VerifyScreen() {
   const insets = useSafeAreaInsets();
   const styles = makeStyles(colors);
   const { signInWithOtp } = useAuth();
+  const { t } = useTranslation('auth');
 
   const { identifierType, identifierValue } = useLocalSearchParams<{
     identifierType: 'phone' | 'email';
@@ -49,7 +51,7 @@ export default function VerifyScreen() {
     signInWithOtp({ type: identifierType, value: identifierValue }, code)
       .catch((e) => {
         if (cancelled) return;
-        setError(e instanceof Error ? e.message : 'Incorrect code, please try again');
+        setError(e instanceof Error ? e.message : t('verify.incorrectCode'));
         setCode('');
       })
       .finally(() => {
@@ -74,10 +76,10 @@ export default function VerifyScreen() {
           setSmsTrialLimitReached(true);
           setError(null);
         } else {
-          setError("You're sending codes too quickly — please wait a bit before trying again.");
+          setError(t('verify.tooManyRequests'));
         }
       } else {
-        setError(e instanceof Error ? e.message : 'Could not resend the code. Please try again.');
+        setError(e instanceof Error ? e.message : t('verify.couldNotResend'));
       }
     } finally {
       setIsResending(false);
@@ -92,9 +94,10 @@ export default function VerifyScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 20 }]}>
-      <Text style={styles.title}>Verify your {identifierType === 'phone' ? 'number' : 'email'}</Text>
+      <Text style={styles.title}>{identifierType === 'phone' ? t('verify.titlePhone') : t('verify.titleEmail')}</Text>
       <Text style={styles.subtitle}>
-        Enter the code we sent to <Text style={styles.bold}>{identifierValue}</Text>
+        {t('verify.subtitlePrefix')}
+        <Text style={styles.bold}>{identifierValue}</Text>
       </Text>
 
       <View style={styles.boxesTouchable} onTouchEnd={() => inputRef.current?.focus()}>
@@ -121,19 +124,17 @@ export default function VerifyScreen() {
 
       {smsTrialLimitReached ? (
         <View style={styles.trialLimitBox}>
-          <Text style={styles.trialLimitText}>
-            You've reached the SMS code limit for this number. Please use email instead to sign in.
-          </Text>
+          <Text style={styles.trialLimitText}>{t('verify.smsLimitReached')}</Text>
           <TouchableOpacity onPress={useEmailInstead}>
-            <Text style={[styles.resend, styles.link]}>Use email instead</Text>
+            <Text style={[styles.resend, styles.link]}>{t('verify.useEmailInstead')}</Text>
           </TouchableOpacity>
         </View>
       ) : (
         <TouchableOpacity onPress={handleResend} disabled={isResending || resendCooldown > 0}>
           <Text style={styles.resend}>
-            Didn't receive a code?{' '}
+            {t('verify.didntReceiveCode')}{' '}
             <Text style={[styles.link, (isResending || resendCooldown > 0) && styles.linkDisabled]}>
-              {resendCooldown > 0 ? `Resend (${resendCooldown}s)` : isResending ? 'Sending…' : 'Resend'}
+              {resendCooldown > 0 ? t('verify.resendWithCooldown', { seconds: resendCooldown }) : isResending ? t('verify.sending') : t('verify.resend')}
             </Text>
           </Text>
         </TouchableOpacity>
