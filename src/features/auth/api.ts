@@ -7,7 +7,15 @@ function identifierBody(identifier: Identifier) {
   return identifier.type === 'phone' ? { phoneNumber: identifier.value } : { email: identifier.value };
 }
 
-export function requestOtp(identifier: Identifier): Promise<void> {
+/**
+ * Normally resolves to undefined (a plain 202 Accepted, empty body) and the
+ * caller pushes the code-entry screen next. The one exception is the
+ * system-account access identifier (see auth-service's SystemAccountService)
+ * — the server skips the whole OTP flow for it and returns a real token
+ * payload here instead, which the caller detects and uses to sign in
+ * directly, no code screen involved.
+ */
+export function requestOtp(identifier: Identifier): Promise<VerifyOtpResponse | undefined> {
   return apiFetch(`${config.authServiceUrl}/api/auth/otp/request`, {
     method: 'POST',
     body: JSON.stringify(identifierBody(identifier)),

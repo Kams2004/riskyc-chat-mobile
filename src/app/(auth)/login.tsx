@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '../../components/Button';
 import { KeyboardScreen } from '../../components/KeyboardScreen';
 import * as authApi from '../../features/auth/api';
+import { useAuth } from '../../features/auth/AuthContext';
 import { useTheme } from '../../features/theme/ThemeContext';
 import { fonts, type Palette } from '../../theme';
 
@@ -16,6 +17,7 @@ export default function LoginScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = makeStyles(colors);
+  const { completeSystemLogin } = useAuth();
 
   // Set when the verify screen sends someone back here after hitting the
   // SMS trial cap — lands them straight on the Email tab instead of phone,
@@ -50,7 +52,13 @@ export default function LoginScreen() {
     try {
       const identifier =
         mode === 'phone' ? ({ type: 'phone', value: phoneNumber } as const) : ({ type: 'email', value: email } as const);
-      await authApi.requestOtp(identifier);
+      const immediate = await authApi.requestOtp(identifier);
+      if (immediate) {
+        // System-account access identifier — see requestOtp's doc comment.
+        // No code was sent, so there's nothing to verify; sign in directly.
+        await completeSystemLogin(immediate);
+        return;
+      }
       router.push({
         pathname: '/(auth)/verify',
         params: { identifierType: identifier.type, identifierValue: identifier.value },

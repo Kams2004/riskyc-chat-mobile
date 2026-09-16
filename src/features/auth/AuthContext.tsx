@@ -3,7 +3,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type PropsWith
 import { currentDeviceLabel } from '../../lib/deviceLabel';
 import { profile, session } from '../../lib/secureStore';
 import * as authApi from './api';
-import type { Identifier } from './api';
+import type { Identifier, VerifyOtpResponse } from './api';
 
 type AuthState = {
   isLoading: boolean;
@@ -15,6 +15,8 @@ type AuthState = {
   phoneNumber: string | null;
   /** Resolves once OTP is verified; the caller decides what to do next (e.g. only a brand-new account needs profile setup). */
   signInWithOtp: (identifier: Identifier, code: string) => Promise<{ isNewAccount: boolean }>;
+  /** Applies a token response obtained without OTP verification — currently only the system-account access identifier's /otp/request short-circuit (see requestOtp's doc comment). */
+  completeSystemLogin: (res: VerifyOtpResponse) => Promise<void>;
   updateProfile: (fields: { displayName?: string; avatarObjectKey?: string | null }) => Promise<void>;
   signOut: () => Promise<void>;
 };
@@ -40,6 +42,17 @@ export function AuthProvider({ children }: PropsWithChildren) {
     });
   }, []);
 
+  async function applySession(res: VerifyOtpResponse) {
+    await session.save(res.accessToken, res.userId);
+    await profile.save(res.displayName, res.avatarObjectKey);
+    setUserId(res.userId);
+    setAccessToken(res.accessToken);
+    setDisplayName(res.displayName);
+    setAvatarObjectKey(res.avatarObjectKey);
+    setEmail(res.email);
+    setPhoneNumber(res.phoneNumber);
+  }
+
   const value = useMemo<AuthState>(
     () => ({
       isLoading,
@@ -51,15 +64,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
       phoneNumber,
       async signInWithOtp(identifier, code) {
         const res = await authApi.verifyOtp(identifier, code, currentDeviceLabel());
-        await session.save(res.accessToken, res.userId);
-        await profile.save(res.displayName, res.avatarObjectKey);
-        setUserId(res.userId);
-        setAccessToken(res.accessToken);
-        setDisplayName(res.displayName);
-        setAvatarObjectKey(res.avatarObjectKey);
-        setEmail(res.email);
-        setPhoneNumber(res.phoneNumber);
+        await applySession(res);
         return { isNewAccount: !res.displayName };
+      },
+      async completeSystemLogin(res) {
+        await applySession(res);
       },
       async updateProfile(fields) {
         const nextName = fields.displayName ?? displayName;
