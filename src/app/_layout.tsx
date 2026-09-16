@@ -16,12 +16,15 @@ import { DATABASE_NAME } from '../data/db';
 import { migrateDbIfNeeded } from '../data/schema';
 import { AuthProvider, useAuth } from '../features/auth/AuthContext';
 import { CallProvider } from '../features/calls/CallContext';
+import { GroupCallProvider } from '../features/calls/GroupCallContext';
 import { useInboxSocket } from '../features/messaging/inboxSocket';
 import { usePushNotifications } from '../features/notifications/usePushNotifications';
 import { usePresenceHeartbeat } from '../features/presence/usePresenceHeartbeat';
 import { ThemeProvider, useTheme } from '../features/theme/ThemeContext';
 import { loadPreferences } from '../lib/preferences';
 import { CallOverlay } from '../components/CallOverlay';
+import { GroupCallOverlay } from '../components/GroupCallOverlay';
+import { IncomingGroupCallBanner } from '../components/IncomingGroupCallBanner';
 import { MinimizedCallBubble } from '../components/MinimizedCallBubble';
 
 SplashScreen.preventAutoHideAsync();
@@ -57,7 +60,9 @@ export default function RootLayout() {
         <ThemeProvider>
           <AuthProvider>
             <CallProvider>
-              <Root />
+              <GroupCallProvider>
+                <Root />
+              </GroupCallProvider>
             </CallProvider>
           </AuthProvider>
         </ThemeProvider>
@@ -76,6 +81,8 @@ function Root() {
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <RootNavigator />
       <CallOverlay />
+      <GroupCallOverlay />
+      <IncomingGroupCallBanner />
       <MinimizedCallBubble />
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
     </View>

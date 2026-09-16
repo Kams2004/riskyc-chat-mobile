@@ -12,7 +12,7 @@ import { config } from '../../lib/config';
 import { ApiError } from '../../lib/httpClient';
 import { playRingtone, setSpeakerphoneEnabled, stopRingtone } from '../../lib/sounds';
 import { getCallSnapshot } from './api';
-import { CallSignalingSocket, type CallIceCandidate, type CallInvite, type CallType } from './signaling';
+import { CallSignalingSocket, type CallIceCandidate, type CallInvite, type CallType, type GroupCallInviteMessage } from './signaling';
 
 // STUN first (free, no relay bandwidth) with the self-hosted TURN server as
 // fallback for when caller/callee are on genuinely different networks and a
@@ -53,6 +53,9 @@ type CallContextValue = {
   toggleSpeaker: () => void;
   minimizeCall: () => void;
   restoreCall: () => void;
+  /** A group-call invite arrived on this same persistent /queue/calls channel — see GroupCallInviteMessage. Consumed by IncomingGroupCallBanner (app root), which is also the only place that knows about GroupCallContext. */
+  pendingGroupInvite: GroupCallInviteMessage | null;
+  dismissGroupInvite: () => void;
 };
 
 const CallContext = createContext<CallContextValue | null>(null);
@@ -92,6 +95,8 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   const [isCameraOff, setIsCameraOff] = useState(false);
   const [isSpeakerOn, setIsSpeakerOn] = useState(false);
   const [connectedAt, setConnectedAt] = useState<number | null>(null);
+  const [pendingGroupInvite, setPendingGroupInvite] = useState<GroupCallInviteMessage | null>(null);
+  const dismissGroupInvite = useCallback(() => setPendingGroupInvite(null), []);
 
   const resetCallState = useCallback(() => {
     stopRingtone();
@@ -378,6 +383,12 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         if (end.callId !== activeCallIdRef.current) return;
         resetCallState();
       },
+      onGroupInvite: (invite) => {
+        // Own invite echoing back (the starting client is also a group
+        // member) — never show yourself your own "incoming call" prompt.
+        if (invite.callerId === userId) return;
+        setPendingGroupInvite(invite);
+      },
     });
 
     return () => {
@@ -408,6 +419,8 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     minimizeCall,
     restoreCall,
     seedIncomingCallFromNotification,
+    pendingGroupInvite,
+    dismissGroupInvite,
   };
 
   return <CallContext.Provider value={value}>{children}</CallContext.Provider>;

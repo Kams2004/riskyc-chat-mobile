@@ -35,6 +35,7 @@ import { VoiceMessageBubble } from '../../../components/VoiceMessageBubble';
 import { VoiceRecorder } from '../../../components/VoiceRecorder';
 import { useAuth } from '../../../features/auth/AuthContext';
 import { useCall } from '../../../features/calls/CallContext';
+import { useGroupCall } from '../../../features/calls/GroupCallContext';
 import { getGroup } from '../../../features/groups/api';
 import { uploadMedia } from '../../../features/media/api';
 import { useMediaUrl } from '../../../features/media/useMediaUrl';
@@ -376,6 +377,7 @@ export default function ChatThreadScreen() {
   }, [db, groupId, isGroup, recipientId]);
 
   const { startCall } = useCall();
+  const { startGroupCall } = useGroupCall();
   const { messages, sendMessage, editMessage, deleteMessage, pinMessage, typingUserIds, notifyTyping } = useConversation({
     conversationId,
     recipientId,
@@ -807,7 +809,7 @@ export default function ChatThreadScreen() {
           style={styles.headerActionTouchable}
           onPress={() => {
             if (isGroup) {
-              Alert.alert('Group calls not supported', 'Voice calling is only available in 1:1 chats for now.');
+              if (groupId) startGroupCall(groupId, displayName, groupMembers.map((m) => m.user_id), 'AUDIO');
               return;
             }
             if (recipientId && resolvedName) startCall(recipientId, resolvedName, 'AUDIO');
@@ -821,7 +823,7 @@ export default function ChatThreadScreen() {
           style={styles.headerActionTouchable}
           onPress={() => {
             if (isGroup) {
-              Alert.alert('Group calls not supported', 'Video calling is only available in 1:1 chats for now.');
+              if (groupId) startGroupCall(groupId, displayName, groupMembers.map((m) => m.user_id), 'VIDEO');
               return;
             }
             if (recipientId && resolvedName) startCall(recipientId, resolvedName, 'VIDEO');

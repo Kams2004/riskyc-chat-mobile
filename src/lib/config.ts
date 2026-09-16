@@ -41,6 +41,8 @@ export const config = {
   turnCredential: process.env.EXPO_PUBLIC_TURN_CREDENTIAL ?? 'riskyc-turn-secret',
   /** The deployed web app (see web/README.md) — its /invite page is what "Invite a friend" shares a link to. */
   webAppUrl: process.env.EXPO_PUBLIC_WEB_APP_URL ?? 'http://167.86.120.214:8085',
+  /** Group-calling SFU (backend/sfu-service) — separate service/port from messaging-service's 1:1 call signaling. */
+  sfuServiceUrl: process.env.EXPO_PUBLIC_SFU_SERVICE_URL ?? 'http://167.86.120.214:8095',
 } as const;
 
 /**
@@ -52,4 +54,25 @@ export const config = {
 export function messagingWebSocketUrl(accessToken?: string | null): string {
   const base = `${config.messagingServiceUrl.replace(/^http/, 'ws')}/ws`;
   return accessToken ? `${base}?token=${encodeURIComponent(accessToken)}` : base;
+}
+
+/**
+ * sfu-service's protoo-wire signaling endpoint — auth + room-join all happen
+ * in this one handshake (see backend/sfu-service/src/signaling/protooServer.ts),
+ * unlike messagingWebSocketUrl which only carries the token.
+ */
+export function sfuWebSocketUrl(
+  accessToken: string | null | undefined,
+  groupId: string,
+  displayName: string,
+  callType: 'AUDIO' | 'VIDEO'
+): string {
+  const base = config.sfuServiceUrl.replace(/^http/, 'ws');
+  const params = new URLSearchParams({
+    token: accessToken ?? '',
+    groupId,
+    displayName,
+    callType,
+  });
+  return `${base}?${params.toString()}`;
 }

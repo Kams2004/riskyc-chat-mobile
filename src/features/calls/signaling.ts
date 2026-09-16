@@ -21,6 +21,8 @@ export type CallIceCandidate = {
   sdpMLineIndex: number | null;
 };
 export type CallEnd = { callId: string; fromUserId: string; reason: string };
+/** roomId is always === groupId (see backend/sfu-service's room model) — carried anyway for symmetry with CallInvite's callId. */
+export type GroupCallInviteMessage = { roomId: string; groupId: string; callerId: string; callerName: string; callType: CallType };
 
 type QueuedFrame = { destination: string; body: string };
 
@@ -29,6 +31,8 @@ type Handlers = {
   onAnswer?: (answer: CallAnswer) => void;
   onIce?: (ice: CallIceCandidate) => void;
   onEnd?: (end: CallEnd) => void;
+  /** Fanned out via messaging-service's GroupCallController — a different call system (sfu-service) entirely, riding this same persistent channel purely for delivery, same as 1:1 invites. */
+  onGroupInvite?: (invite: GroupCallInviteMessage) => void;
 };
 
 /**
@@ -70,6 +74,9 @@ export class CallSignalingSocket {
             break;
           case 'end':
             handlers.onEnd?.(body as CallEnd);
+            break;
+          case 'group-invite':
+            handlers.onGroupInvite?.(body as GroupCallInviteMessage);
             break;
         }
       });
