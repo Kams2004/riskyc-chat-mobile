@@ -115,7 +115,11 @@ function RootNavigator() {
     previousUserId.current = userId;
     if (justSignedIn && !displayName) {
       router.replace('/(tabs)/settings' as never);
-      router.push('/(tabs)/settings/edit-profile' as never);
+      // The onboarding=1 param (not canGoBack(), which this same push now
+      // makes true) is what edit-profile.tsx checks to decide Save should
+      // land on the chat list, not back on the Settings screen it was only
+      // ever pushed on top of to keep that tab's stack correctly rooted.
+      router.push({ pathname: '/(tabs)/settings/edit-profile', params: { onboarding: '1' } } as never);
     }
   }, [userId, displayName]);
 

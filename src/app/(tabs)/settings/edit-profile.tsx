@@ -1,6 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -21,6 +21,7 @@ export default function EditProfileScreen() {
   const styles = makeStyles(colors);
 
   const { displayName, avatarObjectKey, updateProfile } = useAuth();
+  const { onboarding } = useLocalSearchParams<{ onboarding?: string }>();
   const [name, setName] = useState(displayName ?? '');
   // Only set once the user picks a NEW photo this session — until then the
   // existing remote avatarObjectKey (if any) is shown via Avatar/useMediaUrl,
@@ -51,14 +52,16 @@ export default function EditProfileScreen() {
       const newAvatarObjectKey = freshLocalUri ? await uploadImage(freshLocalUri) : undefined;
       await updateMyProfile({ displayName: name, ...(newAvatarObjectKey ? { avatarObjectKey: newAvatarObjectKey } : {}) });
       await updateProfile({ displayName: name, ...(newAvatarObjectKey ? { avatarObjectKey: newAvatarObjectKey } : {}) });
-      // router.back() silently does nothing if there's no history to go
-      // back to — which is exactly what a brand-new account routed straight
-      // here (see app/_layout.tsx's onboarding redirect) has, since it never
-      // saw the chat list first. Checking canGoBack() directly is more
-      // robust than inferring "new account" from displayName (captured at
-      // mount — stale the moment updateProfile above changes it), and can't
-      // ever leave Save looking like it silently did nothing.
-      if (router.canGoBack()) {
+      // Onboarding is now pushed on top of Settings' own index (see
+      // app/_layout.tsx's onboarding redirect), so canGoBack() alone can no
+      // longer tell onboarding apart from a normal in-app edit — both are
+      // true here. The onboarding=1 param does that job instead: finishing
+      // onboarding should land on the chat list, not back on the bare
+      // Settings screen it was only pushed over to keep that tab's stack
+      // correctly rooted for later visits.
+      if (onboarding) {
+        router.replace('/(tabs)/chats');
+      } else if (router.canGoBack()) {
         router.back();
       } else {
         router.replace('/(tabs)/chats');
