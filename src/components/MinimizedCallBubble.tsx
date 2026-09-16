@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 
 import { useCall } from '../features/calls/CallContext';
 import { UNRESOLVED_PERSON_PLACEHOLDER } from '../features/messaging/conversationId';
@@ -20,6 +21,7 @@ import { Avatar } from './Avatar';
 export function MinimizedCallBubble() {
   const insets = useSafeAreaInsets();
   const { callState, incomingCall, outgoingCall, restoreCall } = useCall();
+  const { t } = useTranslation('calls');
   const [name, setName] = useState<string | null>(null);
 
   const otherUserId = incomingCall?.fromUserId ?? outgoingCall?.toUserId ?? null;
@@ -44,7 +46,7 @@ export function MinimizedCallBubble() {
     >
       <Avatar label={name || outgoingCall?.toUserName || '?'} size={36} />
       <Text style={styles.label} numberOfLines={1}>
-        {name || outgoingCall?.toUserName || 'Call'}
+        {name || outgoingCall?.toUserName || t('minimizedBubble.call')}
       </Text>
     </TouchableOpacity>
   );

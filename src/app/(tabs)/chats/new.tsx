@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
+import { useTranslation } from 'react-i18next';
 
 import { Avatar } from '../../../components/Avatar';
 import { KeyboardScreen } from '../../../components/KeyboardScreen';
@@ -28,6 +29,7 @@ export default function NewConversationScreen() {
   const insets = useSafeAreaInsets();
   const styles = makeStyles(colors);
   const { userId } = useAuth();
+  const { t } = useTranslation('chats');
 
   const [query, setQuery] = useState('');
   const [loadState, setLoadState] = useState<LoadState>('loading');
@@ -69,7 +71,7 @@ export default function NewConversationScreen() {
         }
       } catch (e) {
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : 'Could not load your contacts');
+          setError(e instanceof Error ? e.message : t('newChat.loadErrorFallback'));
           setLoadState('granted');
         }
       }
@@ -106,7 +108,7 @@ export default function NewConversationScreen() {
   async function inviteFriend() {
     const url = `${config.webAppUrl}/invite`;
     try {
-      await Share.share({ message: `Join me on RiskyC Chat: ${url}`, url });
+      await Share.share({ message: t('newChat.inviteMessage', { url }), url });
     } catch {
       // User dismissed the share sheet — nothing to do.
     }
@@ -120,7 +122,7 @@ export default function NewConversationScreen() {
             <Path d="M18 6L6 18M6 6l12 12" />
           </Svg>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>New conversation</Text>
+        <Text style={styles.headerTitle}>{t('newChat.headerTitle')}</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -132,7 +134,7 @@ export default function NewConversationScreen() {
             <Path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
           </Svg>
         </View>
-        <Text style={styles.actionLabel}>New group</Text>
+        <Text style={styles.actionLabel}>{t('newChat.newGroup')}</Text>
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.actionRow} onPress={() => router.push('/(tabs)/chats/qr' as never)}>
@@ -143,7 +145,7 @@ export default function NewConversationScreen() {
             <Path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2" />
           </Svg>
         </View>
-        <Text style={styles.actionLabel}>New contact</Text>
+        <Text style={styles.actionLabel}>{t('newChat.newContact')}</Text>
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.actionRow} onPress={inviteFriend}>
@@ -154,7 +156,7 @@ export default function NewConversationScreen() {
             <Path d="M12 2v13" />
           </Svg>
         </View>
-        <Text style={styles.actionLabel}>Invite a friend</Text>
+        <Text style={styles.actionLabel}>{t('newChat.inviteFriend')}</Text>
       </TouchableOpacity>
 
       <View style={styles.searchBar}>
@@ -164,7 +166,7 @@ export default function NewConversationScreen() {
         </Svg>
         <TextInput
           style={styles.searchInput}
-          placeholder="Search your contacts by name or number"
+          placeholder={t('newChat.searchPlaceholder')}
           placeholderTextColor={colors.textMuted}
           value={query}
           onChangeText={setQuery}
@@ -180,10 +182,7 @@ export default function NewConversationScreen() {
 
       {loadState === 'denied' && (
         <View style={styles.stateBox}>
-          <Text style={styles.emptyText}>
-            RiskyC Chat only shows people already in your contacts, to keep strangers from starting a chat with you.
-            {'\n\n'}Allow contacts access in your device settings to see who's already on RiskyC Chat.
-          </Text>
+          <Text style={styles.emptyText}>{t('newChat.deniedBody')}</Text>
         </View>
       )}
 
@@ -196,7 +195,7 @@ export default function NewConversationScreen() {
       {loadState === 'granted' && !error && results.length === 0 && (
         <View style={styles.stateBox}>
           <Text style={styles.emptyText}>
-            {query ? 'No one in your contacts matches that search.' : "None of your contacts are on RiskyC Chat yet — try inviting one!"}
+            {query ? t('newChat.emptyNoMatch') : t('newChat.emptyNoContacts')}
           </Text>
         </View>
       )}
@@ -213,7 +212,7 @@ export default function NewConversationScreen() {
                 size={48}
               />
               <View style={{ flex: 1 }}>
-                <Text style={styles.rowName}>{item.displayName || 'Unnamed user'}</Text>
+                <Text style={styles.rowName}>{item.displayName || t('newChat.unnamedUser')}</Text>
                 <Text style={styles.rowSubtitle}>{item.email ?? item.phoneNumber}</Text>
               </View>
             </TouchableOpacity>

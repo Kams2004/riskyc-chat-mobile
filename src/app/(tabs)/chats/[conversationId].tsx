@@ -22,6 +22,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path, Rect } from 'react-native-svg';
+import { useTranslation } from 'react-i18next';
 
 import { AttachmentSheet } from '../../../components/AttachmentSheet';
 import { Avatar } from '../../../components/Avatar';
@@ -70,10 +71,10 @@ function formatTime(iso: string) {
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-function formatStatusLabel(online: boolean, lastSeen: string | null): string {
-  if (online) return 'online';
-  if (!lastSeen) return 'offline';
-  return `last seen ${formatTime(lastSeen)}`;
+function formatStatusLabel(online: boolean, lastSeen: string | null, t: (key: string, options?: Record<string, unknown>) => string): string {
+  if (online) return t('thread.status.online');
+  if (!lastSeen) return t('thread.status.offline');
+  return t('thread.status.lastSeen', { time: formatTime(lastSeen) });
 }
 
 function formatFileSize(bytes?: number | null): string {
@@ -125,6 +126,7 @@ const imageStyles = StyleSheet.create({
 
 function MessageFile({ fileName, objectKey, tintColor, labelColor }: { fileName: string | null; objectKey: string | null; tintColor: string; labelColor: string }) {
   const url = useMediaUrl(objectKey);
+  const { t } = useTranslation('chats');
   return (
     <TouchableOpacity
       style={fileRowStyles.row}
@@ -137,7 +139,7 @@ function MessageFile({ fileName, objectKey, tintColor, labelColor }: { fileName:
           <Path d="M14 2v6h6" />
         </Svg>
       </View>
-      <Text style={[fileRowStyles.name, { color: labelColor }]} numberOfLines={1}>{fileName || 'Document'}</Text>
+      <Text style={[fileRowStyles.name, { color: labelColor }]} numberOfLines={1}>{fileName || t('thread.document')}</Text>
     </TouchableOpacity>
   );
 }
@@ -176,14 +178,15 @@ function CallLogRow({
   colors: Palette;
   onCallBack?: () => void;
 }) {
+  const { t } = useTranslation('chats');
   const isVideo = callType === 'VIDEO';
   const missed = outcome === 'MISSED';
   const declined = outcome === 'DECLINED';
   const iconColor = missed || declined ? '#e53935' : colors.brand600;
 
-  let label = isVideo ? 'Video call' : 'Voice call';
-  if (missed) label = isMine ? `${label} · No answer` : `Missed ${label.toLowerCase()}`;
-  else if (declined) label = isMine ? `${label} · Declined` : `${label} · You declined`;
+  let label = isVideo ? t('thread.call.video') : t('thread.call.voice');
+  if (missed) label = isMine ? t('thread.call.missedMine', { label }) : t('thread.call.missedTheirs', { label });
+  else if (declined) label = isMine ? t('thread.call.declinedMine', { label }) : t('thread.call.declinedTheirs', { label });
 
   return (
     <TouchableOpacity
@@ -238,18 +241,21 @@ function MessageInfoModal({
   colors: Palette;
 }) {
   const styles = infoModalStyles(colors);
+  const { t } = useTranslation('chats');
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <TouchableWithoutFeedback onPress={onClose}>
         <View style={styles.backdrop} />
       </TouchableWithoutFeedback>
       <View style={styles.sheet}>
-        <Text style={styles.title}>Message info</Text>
-        {rows.length === 0 && <Text style={styles.empty}>No one else in this group yet.</Text>}
+        <Text style={styles.title}>{t('thread.messageInfo.title')}</Text>
+        {rows.length === 0 && <Text style={styles.empty}>{t('thread.messageInfo.empty')}</Text>}
         {rows.map((row) => (
           <View key={row.userId} style={styles.row}>
             <Text style={styles.name}>{row.displayName}</Text>
-            <Text style={styles.status}>{row.status === 'read' ? 'Read' : row.status === 'delivered' ? 'Delivered' : 'Sent'}</Text>
+            <Text style={styles.status}>
+              {row.status === 'read' ? t('thread.messageInfo.statusRead') : row.status === 'delivered' ? t('thread.messageInfo.statusDelivered') : t('thread.messageInfo.statusSent')}
+            </Text>
           </View>
         ))}
       </View>
@@ -307,6 +313,7 @@ export default function ChatThreadScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = makeStyles(colors);
+  const { t } = useTranslation('chats');
 
   const {
     conversationId,
@@ -405,18 +412,18 @@ export default function ChatThreadScreen() {
   const didConsumeScrollParamRef = useRef(false);
 
   function memberName(userId2: string): string {
-    if (userId2 === userId) return 'You';
+    if (userId2 === userId) return t('common:you');
     if (!isGroup && userId2 === recipientId) return resolvedName || UNRESOLVED_PERSON_PLACEHOLDER;
     return groupMembers.find((m) => m.user_id === userId2)?.display_name || UNRESOLVED_PERSON_PLACEHOLDER;
   }
 
   function snippetFor(message: LocalMessage): string {
-    if (message.media_type === 'IMAGE') return '📷 Photo';
-    if (message.media_type === 'VIDEO') return '🎥 Video';
-    if (message.media_type === 'AUDIO') return '🎤 Voice message';
-    if (message.media_type === 'FILE') return '📎 Document';
+    if (message.media_type === 'IMAGE') return t('thread.snippet.photo');
+    if (message.media_type === 'VIDEO') return t('thread.snippet.video');
+    if (message.media_type === 'AUDIO') return t('thread.snippet.voiceMessage');
+    if (message.media_type === 'FILE') return t('thread.snippet.document');
     const attachments = parseAttachments(message);
-    if (attachments.length > 0) return `📷 ${attachments.length} photos`;
+    if (attachments.length > 0) return t('thread.snippet.photosCount', { count: attachments.length });
     return message.ciphertext.length > 80 ? message.ciphertext.slice(0, 77) + '...' : message.ciphertext;
   }
 
@@ -502,10 +509,10 @@ export default function ChatThreadScreen() {
     setSelectedMessageId(null);
     setMoreMenuMessage(null);
     const name = memberName(message.sender_id);
-    Alert.alert(`Report ${name}?`, 'Tell us briefly what happened.', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('thread.reportSender.title', { name }), t('thread.reportSender.body'), [
+      { text: t('common:cancel'), style: 'cancel' },
       {
-        text: 'Report',
+        text: t('common:report'),
         style: 'destructive',
         onPress: () => reportUser(message.sender_id, 'Reported from a group message').catch(() => {}),
       },
@@ -563,11 +570,11 @@ export default function ChatThreadScreen() {
 
   const typingLabel = (() => {
     if (typingUserIds.length === 0) return null;
-    if (!isGroup) return 'typing...';
+    if (!isGroup) return t('thread.typing.self');
     const names = typingUserIds.map(memberName);
-    if (names.length === 1) return `${names[0]} is typing...`;
-    if (names.length === 2) return `${names[0]} and ${names[1]} are typing...`;
-    return `${names.length} people are typing...`;
+    if (names.length === 1) return t('thread.typing.one', { name: names[0] });
+    if (names.length === 2) return t('thread.typing.two', { name1: names[0], name2: names[1] });
+    return t('thread.typing.many', { count: names.length });
   })();
 
   // Messages render oldest-first; without this a FlatList never moves on its
@@ -618,17 +625,17 @@ export default function ChatThreadScreen() {
 
   /** Own message: WhatsApp-style choice between the two delete scopes. */
   function confirmDeleteMine(messageId: string) {
-    Alert.alert('Delete message?', undefined, [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('thread.deleteMessage.title'), undefined, [
+      { text: t('common:cancel'), style: 'cancel' },
       {
-        text: 'Delete for me',
+        text: t('thread.deleteMessage.forMe'),
         onPress: async () => {
           setSelectedMessageId(null);
           await deleteMessage(messageId, 'me');
         },
       },
       {
-        text: 'Delete for everyone',
+        text: t('thread.deleteMessage.forEveryone'),
         style: 'destructive',
         onPress: async () => {
           setSelectedMessageId(null);
@@ -640,10 +647,10 @@ export default function ChatThreadScreen() {
 
   /** Received message: only one destructive option, so a plain confirm — no scope to choose between. */
   function confirmDeleteForMe(messageId: string) {
-    Alert.alert('Delete message?', 'This only removes it from your side — the sender keeps their copy.', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('thread.deleteMessage.title'), t('thread.deleteMessage.receivedBody'), [
+      { text: t('common:cancel'), style: 'cancel' },
       {
-        text: 'Delete for me',
+        text: t('thread.deleteMessage.forMe'),
         style: 'destructive',
         onPress: async () => {
           setSelectedMessageId(null);
@@ -666,7 +673,7 @@ export default function ChatThreadScreen() {
   async function pickFromLibrary() {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert('Permission needed', 'Allow photo library access to send a picture.');
+      Alert.alert(t('thread.permission.neededTitle'), t('thread.permission.photoLibraryBody'));
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -700,7 +707,7 @@ export default function ChatThreadScreen() {
   async function pickFromCamera() {
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert('Permission needed', 'Allow camera access to take a picture.');
+      Alert.alert(t('thread.permission.neededTitle'), t('thread.permission.cameraBody'));
       return;
     }
     const result = await ImagePicker.launchCameraAsync({ quality: 0.8 });
@@ -740,7 +747,7 @@ export default function ChatThreadScreen() {
       return true;
     } catch (e) {
       console.warn('[ChatThreadScreen] media send failed', e);
-      Alert.alert('Could not send', 'Please check your connection and try again.');
+      Alert.alert(t('thread.sendFailedTitle'), t('common:checkConnectionAndRetry'));
       return false;
     }
   }
@@ -762,7 +769,7 @@ export default function ChatThreadScreen() {
       return true;
     } catch (e) {
       console.warn('[ChatThreadScreen] gallery send failed', e);
-      Alert.alert('Could not send', 'Please check your connection and try again.');
+      Alert.alert(t('thread.sendFailedTitle'), t('common:checkConnectionAndRetry'));
       return false;
     }
   }
@@ -796,11 +803,11 @@ export default function ChatThreadScreen() {
             {typingLabel ? (
               <Text style={[styles.statusLabel, styles.typingLabel]} numberOfLines={1}>{typingLabel}</Text>
             ) : isGroup ? (
-              <Text style={styles.statusLabel}>{groupMembers.length} members</Text>
+              <Text style={styles.statusLabel}>{t('thread.membersCount', { count: groupMembers.length })}</Text>
             ) : (
               <View style={styles.statusRow}>
                 {online && <View style={styles.statusDot} />}
-                <Text style={styles.statusLabel}>{formatStatusLabel(online, lastSeen)}</Text>
+                <Text style={styles.statusLabel}>{formatStatusLabel(online, lastSeen, t)}</Text>
               </View>
             )}
           </View>
@@ -855,35 +862,35 @@ export default function ChatThreadScreen() {
             <View style={{ flex: 1 }} />
             {selectedIsMine && isGroup && (
               <TouchableOpacity style={styles.selectionAction} onPress={() => showMessageInfo(selected)}>
-                <Text style={styles.selectionActionLabel}>Info</Text>
+                <Text style={styles.selectionActionLabel}>{t('thread.selection.info')}</Text>
               </TouchableOpacity>
             )}
             {selectedIsMine && !selected.media_type && (
               <TouchableOpacity style={styles.selectionAction} onPress={() => startEdit(selected)}>
-                <Text style={styles.selectionActionLabel}>Edit</Text>
+                <Text style={styles.selectionActionLabel}>{t('thread.selection.edit')}</Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity style={styles.selectionAction} onPress={() => startReply(selected)}>
-              <Text style={styles.selectionActionLabel}>Reply</Text>
+              <Text style={styles.selectionActionLabel}>{t('thread.selection.reply')}</Text>
             </TouchableOpacity>
             {!isGroup && (
               <TouchableOpacity style={styles.selectionAction} onPress={() => togglePin(selected)}>
-                <Text style={styles.selectionActionLabel}>{selected.pinned ? 'Unpin' : 'Pin'}</Text>
+                <Text style={styles.selectionActionLabel}>{selected.pinned ? t('thread.selection.unpin') : t('thread.selection.pin')}</Text>
               </TouchableOpacity>
             )}
             {!selected.media_type && (
               <TouchableOpacity style={styles.selectionAction} onPress={() => copyMessage(selected)}>
-                <Text style={styles.selectionActionLabel}>Copy</Text>
+                <Text style={styles.selectionActionLabel}>{t('thread.selection.copy')}</Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity style={styles.selectionAction} onPress={() => forwardSelected(selected.message_id)}>
-              <Text style={styles.selectionActionLabel}>Forward</Text>
+              <Text style={styles.selectionActionLabel}>{t('thread.selection.forward')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.selectionAction}
               onPress={() => (selectedIsMine ? confirmDeleteMine(selected.message_id) : confirmDeleteForMe(selected.message_id))}
             >
-              <Text style={[styles.selectionActionLabel, { color: colors.brand700 }]}>Delete</Text>
+              <Text style={[styles.selectionActionLabel, { color: colors.brand700 }]}>{t('thread.selection.delete')}</Text>
             </TouchableOpacity>
             {isGroup && (
               <TouchableOpacity
@@ -948,7 +955,7 @@ export default function ChatThreadScreen() {
           if (item.deleted) {
             return (
               <View style={[styles.bubble, isMine ? styles.outgoing : styles.incoming, styles.deletedBubble]}>
-                <Text style={styles.deletedText}>This message was deleted</Text>
+                <Text style={styles.deletedText}>{t('thread.deletedMessage')}</Text>
               </View>
             );
           }
@@ -988,7 +995,7 @@ export default function ChatThreadScreen() {
                 <Text style={styles.senderLabel}>{memberName(item.sender_id)}</Text>
               )}
               {!!item.forwarded && (
-                <Text style={isMine ? styles.forwardedLabel : styles.forwardedLabelIncoming}>Forwarded</Text>
+                <Text style={isMine ? styles.forwardedLabel : styles.forwardedLabelIncoming}>{t('thread.forwardedLabel')}</Text>
               )}
               {!!item.reply_to_message_id && (
                 <QuotedBlock
@@ -1058,7 +1065,7 @@ export default function ChatThreadScreen() {
                 <Text style={isMine ? styles.outgoingText : styles.incomingText}>{item.ciphertext}</Text>
               )}
               <View style={isMine ? styles.metaRow : styles.metaRowIncoming}>
-                {!!item.edited && <Text style={isMine ? styles.editedLabel : styles.editedLabelIncoming}>edited</Text>}
+                {!!item.edited && <Text style={isMine ? styles.editedLabel : styles.editedLabelIncoming}>{t('thread.editedLabel')}</Text>}
                 <Text style={isMine ? styles.outgoingTime : styles.incomingTime}>{formatTime(item.sent_at)}</Text>
                 {isMine && <MessageTicks status={item.status} />}
               </View>
@@ -1071,7 +1078,7 @@ export default function ChatThreadScreen() {
 
       {editingMessageId && (
         <View style={styles.editingBanner}>
-          <Text style={styles.editingBannerLabel}>Editing message</Text>
+          <Text style={styles.editingBannerLabel}>{t('thread.editingMessage')}</Text>
           <TouchableOpacity onPress={cancelEdit}>
             <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={colors.textMuted} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
               <Path d="M18 6L6 18M6 6l12 12" />
@@ -1085,7 +1092,7 @@ export default function ChatThreadScreen() {
           <View style={{ flexDirection: 'row', flex: 1, gap: 8, alignItems: 'stretch' }}>
             <View style={[quotedStyles.bar, { backgroundColor: colors.brand600 }]} />
             <View style={{ flex: 1 }}>
-              <Text style={styles.editingBannerLabel}>Replying to {memberName(replyDraft.senderId)}</Text>
+              <Text style={styles.editingBannerLabel}>{t('thread.replyingTo', { name: memberName(replyDraft.senderId) })}</Text>
               <Text style={styles.replyPreviewSnippet} numberOfLines={1}>{replyDraft.snippet}</Text>
             </View>
           </View>
@@ -1099,7 +1106,7 @@ export default function ChatThreadScreen() {
 
       {isGroup && onlyAdminsCanMessage && !isGroupAdmin ? (
         <View style={[styles.composer, styles.composerDisabledNotice, { paddingBottom: insets.bottom + 10 }]}>
-          <Text style={styles.composerDisabledText}>Only admins can send messages in this group.</Text>
+          <Text style={styles.composerDisabledText}>{t('thread.adminsOnlyNotice')}</Text>
         </View>
       ) : (
       <View style={[styles.composer, { paddingBottom: insets.bottom + 10 }]}>
@@ -1119,7 +1126,7 @@ export default function ChatThreadScreen() {
                 setDraft(text);
                 if (text.trim()) notifyTyping();
               }}
-              placeholder="Message"
+              placeholder={t('thread.composerPlaceholder')}
               placeholderTextColor={colors.textMuted}
               multiline
             />
@@ -1181,13 +1188,13 @@ export default function ChatThreadScreen() {
         items={
           moreMenuMessage
             ? [
-                { label: 'Copy', onPress: () => copyMessage(moreMenuMessage) },
+                { label: t('thread.selection.copy'), onPress: () => copyMessage(moreMenuMessage) },
                 ...(moreMenuMessage.sender_id !== userId
-                  ? [{ label: 'Reply privately', onPress: () => replyPrivately(moreMenuMessage) }]
+                  ? [{ label: t('thread.menu.replyPrivately'), onPress: () => replyPrivately(moreMenuMessage) }]
                   : []),
-                { label: moreMenuMessage.pinned ? 'Unpin' : 'Pin', onPress: () => togglePin(moreMenuMessage) },
+                { label: moreMenuMessage.pinned ? t('thread.selection.unpin') : t('thread.selection.pin'), onPress: () => togglePin(moreMenuMessage) },
                 ...(moreMenuMessage.sender_id !== userId
-                  ? [{ label: `Report ${memberName(moreMenuMessage.sender_id)}`, danger: true, onPress: () => confirmReportSender(moreMenuMessage) }]
+                  ? [{ label: t('thread.menu.report', { name: memberName(moreMenuMessage.sender_id) }), danger: true, onPress: () => confirmReportSender(moreMenuMessage) }]
                   : []),
               ]
             : []
@@ -1198,35 +1205,35 @@ export default function ChatThreadScreen() {
         visible={overflowMenuVisible}
         onClose={() => setOverflowMenuVisible(false)}
         items={[
-          { label: 'New group', onPress: () => router.push('/(tabs)/chats/new-group') },
+          { label: t('thread.menu.newGroup'), onPress: () => router.push('/(tabs)/chats/new-group') },
           {
-            label: isGroup ? 'Group info' : 'View contact',
+            label: isGroup ? t('thread.menu.groupInfo') : t('thread.menu.viewContact'),
             onPress: () =>
               isGroup
                 ? router.push({ pathname: '/(tabs)/chats/group-info', params: { groupId } })
                 : recipientId && router.push({ pathname: '/(tabs)/chats/contact-details', params: { conversationId, userId: recipientId } }),
           },
-          { label: 'Search', onPress: () => router.push({ pathname: '/(tabs)/chats/search', params: { conversationId } }) },
-          { label: 'Media, links, and docs', onPress: () => router.push({ pathname: '/(tabs)/chats/media-links-docs', params: { conversationId } }) },
-          { label: 'Mute notifications', onPress: () => Alert.alert('Coming soon', 'Per-conversation muting is not built yet.') },
+          { label: t('thread.menu.search'), onPress: () => router.push({ pathname: '/(tabs)/chats/search', params: { conversationId } }) },
+          { label: t('thread.menu.mediaLinksDocs'), onPress: () => router.push({ pathname: '/(tabs)/chats/media-links-docs', params: { conversationId } }) },
+          { label: t('thread.menu.muteNotifications'), onPress: () => Alert.alert(t('thread.menu.comingSoonTitle'), t('thread.menu.muteComingSoonBody')) },
           {
-            label: 'Clear chat',
+            label: t('thread.menu.clearChat'),
             danger: true,
             onPress: () =>
-              Alert.alert('Clear chat?', 'This removes the messages from this device only.', [
-                { text: 'Cancel', style: 'cancel' },
-                { text: 'Clear', style: 'destructive', onPress: () => clearConversationMessages(db, conversationId) },
+              Alert.alert(t('thread.menu.clearChatConfirmTitle'), t('thread.menu.clearChatConfirmBody'), [
+                { text: t('common:cancel'), style: 'cancel' },
+                { text: t('thread.menu.clear'), style: 'destructive', onPress: () => clearConversationMessages(db, conversationId) },
               ]),
           },
           ...(!isGroup && recipientId
             ? [
                 {
-                  label: `Block ${resolvedName || 'this contact'}`,
+                  label: t('thread.menu.blockContact', { name: resolvedName || t('thread.menu.defaultContactName') }),
                   danger: true,
                   onPress: () =>
-                    Alert.alert(`Block ${resolvedName || 'this contact'}?`, "You won't receive calls or messages from them anymore.", [
-                      { text: 'Cancel', style: 'cancel' as const },
-                      { text: 'Block', style: 'destructive' as const, onPress: () => blockUser(recipientId) },
+                    Alert.alert(t('thread.menu.blockConfirmTitle', { name: resolvedName || t('thread.menu.defaultContactName') }), t('thread.menu.blockConfirmBody'), [
+                      { text: t('common:cancel'), style: 'cancel' as const },
+                      { text: t('common:block'), style: 'destructive' as const, onPress: () => blockUser(recipientId) },
                     ]),
                 },
               ]

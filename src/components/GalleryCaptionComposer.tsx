@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { ActivityIndicator, Image, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
+import { useTranslation } from 'react-i18next';
 
 import { useTheme } from '../features/theme/ThemeContext';
 import { fonts, gradients, type Palette } from '../theme';
@@ -20,6 +21,7 @@ export function GalleryCaptionComposer({ items, onCancel, onSend }: GalleryCapti
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = makeStyles(colors);
+  const { t } = useTranslation('media');
   const [caption, setCaption] = useState('');
   const [isSending, setIsSending] = useState(false);
 
@@ -78,7 +80,7 @@ export function GalleryCaptionComposer({ items, onCancel, onSend }: GalleryCapti
               style={styles.input}
               value={caption}
               onChangeText={setCaption}
-              placeholder={`Add a caption (${items.length} items)`}
+              placeholder={t('captionComposer.placeholderWithCount', { count: items.length })}
               placeholderTextColor={colors.textMuted}
               multiline
             />

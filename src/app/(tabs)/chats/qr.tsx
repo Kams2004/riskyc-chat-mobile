@@ -5,6 +5,7 @@ import { ActivityIndicator, Button, StyleSheet, Text, TouchableOpacity, View } f
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import QRCode from 'react-native-qrcode-svg';
 import Svg, { Path } from 'react-native-svg';
+import { useTranslation } from 'react-i18next';
 
 import { Avatar } from '../../../components/Avatar';
 import { useAuth } from '../../../features/auth/AuthContext';
@@ -25,6 +26,7 @@ export default function QrScreen() {
   const { userId, displayName, avatarObjectKey } = useAuth();
   const { initialTab } = useLocalSearchParams<{ initialTab?: Tab }>();
   const [tab, setTab] = useState<Tab>(initialTab === 'mine' ? 'mine' : 'scan');
+  const { t } = useTranslation('chats');
 
   return (
     <View style={styles.container}>
@@ -34,20 +36,20 @@ export default function QrScreen() {
             <Path d="M15 18l-6-6 6-6" />
           </Svg>
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: tab === 'scan' ? '#ffffff' : colors.textPrimary }]}>QR code</Text>
+        <Text style={[styles.headerTitle, { color: tab === 'scan' ? '#ffffff' : colors.textPrimary }]}>{t('qr.headerTitle')}</Text>
         <View style={{ width: 44 }} />
       </View>
 
       <View style={[styles.tabRow, { backgroundColor: tab === 'scan' ? 'transparent' : colors.tint1 }]}>
         <TouchableOpacity style={styles.tab} onPress={() => setTab('scan')}>
           <Text style={[styles.tabLabel, { color: tab === 'scan' ? '#ffffff' : colors.textMuted }, tab === 'scan' && styles.tabLabelActive]}>
-            SCAN CODE
+            {t('qr.tabScan')}
           </Text>
           {tab === 'scan' && <View style={styles.tabUnderline} />}
         </TouchableOpacity>
         <TouchableOpacity style={styles.tab} onPress={() => setTab('mine')}>
           <Text style={[styles.tabLabel, { color: tab === 'mine' ? colors.brand600 : colors.textMuted }, tab === 'mine' && styles.tabLabelActive]}>
-            MY CODE
+            {t('qr.tabMine')}
           </Text>
           {tab === 'mine' && <View style={[styles.tabUnderline, { backgroundColor: colors.brand600 }]} />}
         </TouchableOpacity>
@@ -59,12 +61,12 @@ export default function QrScreen() {
         <View style={styles.mineContainer}>
           <View style={styles.card}>
             <Avatar objectKey={avatarObjectKey} label={displayName || userId || '?'} size={72} />
-            <Text style={styles.name}>{displayName || 'You'}</Text>
+            <Text style={styles.name}>{displayName || t('qr.youFallback')}</Text>
             <View style={styles.qrWrap}>
               <QRCode value={`${QR_PREFIX}${userId}`} size={200} color={colors.brand900} backgroundColor="#ffffff" />
             </View>
           </View>
-          <Text style={styles.caption}>Anyone who scans this code can start a chat with you in RiskyC Chat.</Text>
+          <Text style={styles.caption}>{t('qr.caption')}</Text>
         </View>
       )}
     </View>
@@ -75,6 +77,7 @@ function ScanPane() {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
   const { userId } = useAuth();
+  const { t } = useTranslation('chats');
   const [permission, requestPermission] = useCameraPermissions();
   const [isResolving, setIsResolving] = useState(false);
   const hasHandledScan = useRef(false);
@@ -105,11 +108,9 @@ function ScanPane() {
   if (!permission.granted) {
     return (
       <View style={[styles.scanPane, styles.permissionContainer]}>
-        <Text style={styles.permissionTitle}>Camera access needed</Text>
-        <Text style={styles.permissionBody}>
-          RiskyC Chat needs your camera to scan a contact's QR code and start a chat with them.
-        </Text>
-        <Button title="Grant access" onPress={requestPermission} color={colors.brand600} />
+        <Text style={styles.permissionTitle}>{t('qr.cameraPermissionTitle')}</Text>
+        <Text style={styles.permissionBody}>{t('qr.cameraPermissionBody')}</Text>
+        <Button title={t('qr.grantAccess')} onPress={requestPermission} color={colors.brand600} />
       </View>
     );
   }

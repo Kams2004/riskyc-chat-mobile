@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Image, Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
+import { useTranslation } from 'react-i18next';
 
 import { getMediaSummary, searchInConversation, type MediaSummaryItem, type SearchResult } from '../../../features/messaging/api';
 import { useMediaUrl } from '../../../features/media/useMediaUrl';
@@ -26,6 +27,7 @@ export default function MediaLinksDocsScreen() {
   const insets = useSafeAreaInsets();
   const themedStyles = makeStyles(colors);
   const { conversationId } = useLocalSearchParams<{ conversationId: string }>();
+  const { t } = useTranslation('chats');
 
   const [tab, setTab] = useState<Tab>('media');
   const [media, setMedia] = useState<MediaSummaryItem[]>([]);
@@ -60,14 +62,16 @@ export default function MediaLinksDocsScreen() {
             <Path d="M15 18l-6-6 6-6" />
           </Svg>
         </TouchableOpacity>
-        <Text style={themedStyles.headerTitle}>Media, links, and docs</Text>
+        <Text style={themedStyles.headerTitle}>{t('mediaLinksDocs.headerTitle')}</Text>
         <View style={{ width: 40 }} />
       </View>
 
       <View style={themedStyles.tabRow}>
-        {(['media', 'links', 'docs'] as Tab[]).map((t) => (
-          <TouchableOpacity key={t} style={[themedStyles.tab, tab === t && themedStyles.tabActive]} onPress={() => setTab(t)}>
-            <Text style={[themedStyles.tabLabel, tab === t && themedStyles.tabLabelActive]}>{t[0].toUpperCase() + t.slice(1)}</Text>
+        {(['media', 'links', 'docs'] as Tab[]).map((tabKey) => (
+          <TouchableOpacity key={tabKey} style={[themedStyles.tab, tab === tabKey && themedStyles.tabActive]} onPress={() => setTab(tabKey)}>
+            <Text style={[themedStyles.tabLabel, tab === tabKey && themedStyles.tabLabelActive]}>
+              {tabKey === 'media' ? t('mediaLinksDocs.tabMedia') : tabKey === 'links' ? t('mediaLinksDocs.tabLinks') : t('mediaLinksDocs.tabDocs')}
+            </Text>
           </TouchableOpacity>
         ))}
       </View>
@@ -81,7 +85,7 @@ export default function MediaLinksDocsScreen() {
           keyExtractor={(item) => item.messageId}
           contentContainerStyle={{ padding: 2 }}
           renderItem={({ item }) => <MediaTile objectKey={item.mediaObjectKey} />}
-          ListEmptyComponent={<Text style={themedStyles.empty}>No media shared yet.</Text>}
+          ListEmptyComponent={<Text style={themedStyles.empty}>{t('mediaLinksDocs.emptyMedia')}</Text>}
         />
       ) : tab === 'links' ? (
         <FlatList
@@ -92,7 +96,7 @@ export default function MediaLinksDocsScreen() {
               <Text style={themedStyles.linkText} numberOfLines={1}>{item.url}</Text>
             </TouchableOpacity>
           )}
-          ListEmptyComponent={<Text style={themedStyles.empty}>No links shared yet.</Text>}
+          ListEmptyComponent={<Text style={themedStyles.empty}>{t('mediaLinksDocs.emptyLinks')}</Text>}
         />
       ) : (
         <FlatList
@@ -100,10 +104,10 @@ export default function MediaLinksDocsScreen() {
           keyExtractor={(item) => item.messageId}
           renderItem={({ item }) => (
             <View style={themedStyles.listRow}>
-              <Text style={themedStyles.linkText} numberOfLines={1}>{item.mediaFileName || 'Document'}</Text>
+              <Text style={themedStyles.linkText} numberOfLines={1}>{item.mediaFileName || t('mediaLinksDocs.document')}</Text>
             </View>
           )}
-          ListEmptyComponent={<Text style={themedStyles.empty}>No documents shared yet.</Text>}
+          ListEmptyComponent={<Text style={themedStyles.empty}>{t('mediaLinksDocs.emptyDocs')}</Text>}
         />
       )}
     </View>

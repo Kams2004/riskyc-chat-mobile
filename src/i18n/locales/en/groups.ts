@@ -1,1 +1,48 @@
-export default {};
+export default {
+  groupInfo: {
+    headerTitle: 'Group info',
+    memberCount: '{{count}} members',
+    youSuffix: ' (you)',
+    thisPerson: 'This person',
+    unnamedUser: 'Unnamed user',
+    unknownUser: 'Unknown user',
+    roleAdmin: 'Admin',
+    addMembers: 'Add members',
+    addSearchPlaceholder: 'Search people to add',
+    mediaLinksDocs: 'Media, links, and docs',
+    onlyAdminsCanMessage: 'Only admins can send messages',
+    onlyAdminsDescription: 'Like an announcement group — other members can still read but not post.',
+    leaveGroup: 'Leave group',
+    leaveHint: "If you're the group's only admin, leaving promotes whoever joined earliest to admin.",
+    confirmRemove: {
+      title: 'Remove member?',
+      body: '{{name}} will be removed from the group.',
+      confirm: 'Remove',
+    },
+    confirmLeave: {
+      title: 'Leave group?',
+      body: 'You will no longer receive messages from this group.',
+      confirm: 'Leave',
+    },
+    memberActions: {
+      dismissAsAdmin: 'Dismiss as admin',
+      makeGroupAdmin: 'Make group admin',
+      removeFromGroup: 'Remove from group',
+    },
+    roleUpdateError: {
+      title: 'Could not update role',
+      body: 'The group must keep at least one admin.',
+    },
+  },
+  newGroup: {
+    headerTitle: 'New group',
+    groupNamePlaceholder: 'Group name',
+    selectedCount: '{{count}} selected',
+    searchPlaceholder: 'Search people to add',
+    unnamedUser: 'Unnamed user',
+    createError: {
+      title: 'Could not create group',
+      body: 'Please try again.',
+    },
+  },
+};

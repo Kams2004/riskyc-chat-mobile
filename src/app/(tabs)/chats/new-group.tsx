@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
+import { useTranslation } from 'react-i18next';
 
 import { Avatar } from '../../../components/Avatar';
 import { KeyboardScreen } from '../../../components/KeyboardScreen';
@@ -18,6 +19,7 @@ export default function NewGroupScreen() {
   const insets = useSafeAreaInsets();
   const styles = makeStyles(colors);
   const { userId } = useAuth();
+  const { t } = useTranslation('groups');
 
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<UserResult[]>([]);
@@ -67,7 +69,7 @@ export default function NewGroupScreen() {
       });
     } catch (e) {
       console.warn('[NewGroup] create failed', e);
-      Alert.alert('Could not create group', 'Please try again.');
+      Alert.alert(t('newGroup.createError.title'), t('newGroup.createError.body'));
     } finally {
       setIsCreating(false);
     }
@@ -81,14 +83,14 @@ export default function NewGroupScreen() {
             <Path d="M18 6L6 18M6 6l12 12" />
           </Svg>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>New group</Text>
+        <Text style={styles.headerTitle}>{t('newGroup.headerTitle')}</Text>
         <View style={{ width: 40 }} />
       </View>
 
       <View style={styles.nameBar}>
         <TextInput
           style={styles.nameInput}
-          placeholder="Group name"
+          placeholder={t('newGroup.groupNamePlaceholder')}
           placeholderTextColor={colors.textMuted}
           value={groupName}
           onChangeText={setGroupName}
@@ -96,7 +98,7 @@ export default function NewGroupScreen() {
       </View>
 
       {selected.size > 0 && (
-        <Text style={styles.selectedCount}>{selected.size} selected</Text>
+        <Text style={styles.selectedCount}>{t('newGroup.selectedCount', { count: selected.size })}</Text>
       )}
 
       <View style={styles.searchBar}>
@@ -106,7 +108,7 @@ export default function NewGroupScreen() {
         </Svg>
         <TextInput
           style={styles.searchInput}
-          placeholder="Search people to add"
+          placeholder={t('newGroup.searchPlaceholder')}
           placeholderTextColor={colors.textMuted}
           value={query}
           onChangeText={setQuery}
@@ -128,7 +130,7 @@ export default function NewGroupScreen() {
               <TouchableOpacity style={styles.row} onPress={() => toggle(item)}>
                 <Avatar objectKey={item.avatarObjectKey} label={item.displayName || item.email || '?'} size={44} />
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.rowName}>{item.displayName || 'Unnamed user'}</Text>
+                  <Text style={styles.rowName}>{item.displayName || t('newGroup.unnamedUser')}</Text>
                   <Text style={styles.rowSubtitle}>{item.email ?? item.phoneNumber}</Text>
                 </View>
                 <View style={[styles.checkbox, isSelected && { backgroundColor: colors.brand500, borderColor: colors.brand500 }]}>

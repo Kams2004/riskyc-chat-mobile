@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { ActivityIndicator, Image, KeyboardAvoidingView, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
+import { useTranslation } from 'react-i18next';
 
 import { useTheme } from '../features/theme/ThemeContext';
 import { fonts, gradients, type Palette } from '../theme';
@@ -24,6 +25,7 @@ type MediaCaptionComposerProps = {
 /** WhatsApp-style preview-with-caption screen shown before actually sending a picked photo or document. */
 export function MediaCaptionComposer({ media, onCancel, onSend }: MediaCaptionComposerProps) {
   const { colors } = useTheme();
+  const { t } = useTranslation('media');
   const insets = useSafeAreaInsets();
   const styles = makeStyles(colors);
   const [caption, setCaption] = useState('');
@@ -74,7 +76,7 @@ export function MediaCaptionComposer({ media, onCancel, onSend }: MediaCaptionCo
               style={styles.input}
               value={caption}
               onChangeText={setCaption}
-              placeholder="Add a caption"
+              placeholder={t('captionComposer.placeholder')}
               placeholderTextColor={colors.textMuted}
               multiline
             />

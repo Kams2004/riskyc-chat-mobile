@@ -3,6 +3,7 @@ import { useCallback, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
+import { useTranslation } from 'react-i18next';
 
 import { Avatar } from '../../components/Avatar';
 import { listCallHistory, type CallResult } from '../../features/calls/api';
@@ -23,10 +24,10 @@ function formatWhen(iso: string): string {
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
-function statusLabel(row: CallRow): string {
-  if (row.status === 'MISSED') return 'Missed';
-  if (row.status === 'DECLINED') return row.isOutgoing ? 'Declined' : 'Declined';
-  return row.isOutgoing ? 'Outgoing' : 'Incoming';
+function statusLabel(row: CallRow, t: (key: string) => string): string {
+  if (row.status === 'MISSED') return t('status.missed');
+  if (row.status === 'DECLINED') return t('status.declined');
+  return row.isOutgoing ? t('status.outgoing') : t('status.incoming');
 }
 
 export default function CallsScreen() {
@@ -35,6 +36,7 @@ export default function CallsScreen() {
   const styles = makeStyles(colors);
   const { userId } = useAuth();
   const { startCall } = useCall();
+  const { t } = useTranslation('calls');
   const [calls, setCalls] = useState<CallRow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -74,7 +76,7 @@ export default function CallsScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <Text style={styles.title}>Calls</Text>
+        <Text style={styles.title}>{t('screen.title')}</Text>
       </View>
       {loading && (
         <View style={styles.empty}>
@@ -83,7 +85,7 @@ export default function CallsScreen() {
       )}
       {!loading && calls.length === 0 && (
         <View style={styles.empty}>
-          <Text style={styles.emptyText}>No calls yet</Text>
+          <Text style={styles.emptyText}>{t('screen.empty')}</Text>
         </View>
       )}
       <FlatList
@@ -100,7 +102,7 @@ export default function CallsScreen() {
                   {item.isOutgoing ? <Path d="M7 17L17 7M17 7H9M17 7v8" /> : <Path d="M17 7L7 17M7 17h8M7 17V9" />}
                 </Svg>
                 <Text style={[styles.sub, item.status === 'MISSED' && { color: '#e53935' }]}>
-                  {statusLabel(item)} · {formatWhen(item.startedAt)}
+                  {statusLabel(item, t)} · {formatWhen(item.startedAt)}
                 </Text>
               </View>
             </View>

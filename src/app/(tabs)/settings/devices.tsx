@@ -3,6 +3,7 @@ import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
+import { useTranslation } from 'react-i18next';
 
 import { useAuth } from '../../../features/auth/AuthContext';
 import { listSessions, revokeSession, type SessionResult } from '../../../features/sessions/api';
@@ -18,6 +19,7 @@ export default function DevicesScreen() {
   const insets = useSafeAreaInsets();
   const styles = makeStyles(colors);
   const { signOut } = useAuth();
+  const { t } = useTranslation('settings');
   const [sessions, setSessions] = useState<SessionResult[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [revokingId, setRevokingId] = useState<string | null>(null);
@@ -34,14 +36,14 @@ export default function DevicesScreen() {
 
   function confirmRevoke(item: SessionResult) {
     Alert.alert(
-      item.isCurrent ? 'Sign out this device?' : `Sign out "${item.deviceLabel || 'this device'}"?`,
       item.isCurrent
-        ? 'This is the device you\'re using right now — you\'ll be signed out immediately.'
-        : 'That device will be signed out the next time it tries to use the app.',
+        ? t('devices.signOutThisDeviceTitle')
+        : t('devices.signOutNamedDeviceTitle', { device: item.deviceLabel || t('devices.thisDevice') }),
+      item.isCurrent ? t('devices.signOutCurrentMessage') : t('devices.signOutOtherMessage'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common:cancel'), style: 'cancel' },
         {
-          text: 'Sign out',
+          text: t('devices.signOut'),
           style: 'destructive',
           onPress: async () => {
             setRevokingId(item.id);
@@ -53,7 +55,7 @@ export default function DevicesScreen() {
               }
               await load();
             } catch (e) {
-              Alert.alert('Could not sign out that device', 'Please check your connection and try again.');
+              Alert.alert(t('devices.revokeError'), t('common:checkConnectionAndRetry'));
             } finally {
               setRevokingId(null);
             }
@@ -71,7 +73,7 @@ export default function DevicesScreen() {
             <Path d="M15 18l-6-6 6-6" />
           </Svg>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Logged-in devices</Text>
+        <Text style={styles.headerTitle}>{t('devices.title')}</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -85,15 +87,15 @@ export default function DevicesScreen() {
           <View style={styles.row}>
             <View style={{ flex: 1 }}>
               <Text style={styles.rowTitle}>
-                {item.deviceLabel || 'Unknown device'} {item.isCurrent && <Text style={styles.currentBadge}>· This device</Text>}
+                {item.deviceLabel || t('devices.unknownDevice')} {item.isCurrent && <Text style={styles.currentBadge}>{t('devices.currentDeviceBadge')}</Text>}
               </Text>
-              <Text style={styles.rowSubtitle}>Active {formatWhen(item.lastSeenAt)}</Text>
+              <Text style={styles.rowSubtitle}>{t('devices.activeAt', { when: formatWhen(item.lastSeenAt) })}</Text>
             </View>
             {revokingId === item.id ? (
               <ActivityIndicator color={colors.brand500} />
             ) : (
               <TouchableOpacity onPress={() => confirmRevoke(item)}>
-                <Text style={styles.signOutLabel}>Sign out</Text>
+                <Text style={styles.signOutLabel}>{t('devices.signOut')}</Text>
               </TouchableOpacity>
             )}
           </View>

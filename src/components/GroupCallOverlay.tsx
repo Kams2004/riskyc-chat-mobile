@@ -3,6 +3,7 @@ import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MediaStream, RTCView } from 'react-native-webrtc';
 import Svg, { Path } from 'react-native-svg';
+import { useTranslation } from 'react-i18next';
 
 import { useGroupCall, type GroupCallParticipant } from '../features/calls/GroupCallContext';
 import { useTheme } from '../features/theme/ThemeContext';
@@ -59,6 +60,7 @@ export function GroupCallOverlay() {
     toggleMute,
     toggleCamera,
   } = useGroupCall();
+  const { t } = useTranslation('calls');
 
   if (groupCallState === 'idle') return null;
 
@@ -71,10 +73,10 @@ export function GroupCallOverlay() {
         <View style={styles.container}>
           <View style={[styles.topBar, { paddingTop: insets.top + 12 }]}>
             <Text style={styles.topBarTitle} numberOfLines={1}>
-              {groupName ?? 'Group call'}
+              {groupName ?? t('groupOverlay.fallbackTitle')}
             </Text>
             <Text style={styles.topBarSubtitle}>
-              {groupCallState === 'connecting' ? 'Connecting…' : `${participants.length + 1} in call`}
+              {groupCallState === 'connecting' ? t('groupOverlay.connecting') : t('groupOverlay.inCall', { count: participants.length + 1 })}
             </Text>
           </View>
 
@@ -82,15 +84,15 @@ export function GroupCallOverlay() {
             {isVideo && localVideoStream && !isCameraOff && (
               <View style={styles.tile}>
                 <RTCView streamURL={localVideoStream.toURL()} style={StyleSheet.absoluteFill} objectFit="cover" mirror />
-                <Text style={styles.tileName}>You</Text>
+                <Text style={styles.tileName}>{t('groupOverlay.you')}</Text>
               </View>
             )}
             {(!isVideo || !localVideoStream || isCameraOff) && (
               <View style={styles.tile}>
                 <View style={styles.tilePlaceholder}>
-                  <Avatar label="You" size={56} />
+                  <Avatar label={t('groupOverlay.you')} size={56} />
                 </View>
-                <Text style={styles.tileName}>You{isMuted ? ' · muted' : ''}</Text>
+                <Text style={styles.tileName}>{isMuted ? t('groupOverlay.youMuted') : t('groupOverlay.you')}</Text>
               </View>
             )}
             {participants.map((p) => (

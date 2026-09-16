@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
+import { useTranslation } from 'react-i18next';
 
 import { Button } from '../../../components/Button';
 import { KeyboardScreen } from '../../../components/KeyboardScreen';
@@ -30,6 +31,7 @@ export default function ChangeIdentifierScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = makeStyles(colors);
+  const { t } = useTranslation('settings');
   const { mode: modeParam } = useLocalSearchParams<{ mode?: Mode }>();
   const mode: Mode = modeParam === 'phone' ? 'phone' : 'email';
 
@@ -51,13 +53,13 @@ export default function ChangeIdentifierScreen() {
 
   function describeError(e: unknown): string {
     if (e instanceof ApiError) {
-      if (e.status === 409) return `This ${mode === 'phone' ? 'number' : 'email'} is already in use by another account.`;
+      if (e.status === 409) return mode === 'phone' ? t('changeIdentifier.alreadyInUsePhone') : t('changeIdentifier.alreadyInUseEmail');
       const reason = (e.body as { reason?: string } | undefined)?.reason;
       if (e.status === 429 && reason !== 'SMS_TRIAL_LIMIT_REACHED') {
-        return "You're sending codes too quickly — please wait a bit before trying again.";
+        return t('changeIdentifier.tooManyRequests');
       }
     }
-    return e instanceof Error ? e.message : 'Something went wrong. Please try again.';
+    return e instanceof Error ? e.message : t('changeIdentifier.genericError');
   }
 
   async function handleSendCode() {
@@ -71,7 +73,7 @@ export default function ChangeIdentifierScreen() {
       setResendCooldown(RESEND_COOLDOWN_SECONDS);
     } catch (e) {
       if (e instanceof ApiError && e.status === 429 && (e.body as { reason?: string } | undefined)?.reason === 'SMS_TRIAL_LIMIT_REACHED') {
-        setError("You've reached the SMS code limit for this number. Please try again later, or use email instead.");
+        setError(t('changeIdentifier.smsLimitReached'));
       } else {
         setError(describeError(e));
       }
@@ -132,18 +134,18 @@ export default function ChangeIdentifierScreen() {
             <Path d="M15 18l-6-6 6-6" />
           </Svg>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Change {mode === 'phone' ? 'phone number' : 'email'}</Text>
+        <Text style={styles.headerTitle}>{mode === 'phone' ? t('changeIdentifier.titlePhone') : t('changeIdentifier.titleEmail')}</Text>
         <View style={{ width: 40 }} />
       </View>
 
       {step === 'enter' ? (
         <>
           <Text style={styles.subtitle}>
-            Enter your new {mode === 'phone' ? 'phone number' : 'email address'}. We'll send a code to confirm it's yours.
+            {mode === 'phone' ? t('changeIdentifier.subtitleEnterPhone') : t('changeIdentifier.subtitleEnterEmail')}
           </Text>
           <TextInput
             style={styles.input}
-            placeholder={mode === 'phone' ? '+237 6XX XXX XXX' : 'you@example.com'}
+            placeholder={mode === 'phone' ? t('changeIdentifier.phonePlaceholder') : t('changeIdentifier.emailPlaceholder')}
             placeholderTextColor={colors.textMuted}
             keyboardType={mode === 'phone' ? 'phone-pad' : 'email-address'}
             autoCapitalize="none"
@@ -155,13 +157,14 @@ export default function ChangeIdentifierScreen() {
           {error && <Text style={styles.error}>{error}</Text>}
           <View style={{ flex: 1 }} />
           <Button onPress={handleSendCode} disabled={!value} loading={isSubmitting}>
-            Send code
+            {t('changeIdentifier.sendCode')}
           </Button>
         </>
       ) : (
         <>
           <Text style={styles.subtitle}>
-            Enter the code we sent to <Text style={styles.bold}>{value}</Text>
+            {t('changeIdentifier.subtitleVerifyPrefix')}
+            <Text style={styles.bold}>{value}</Text>
           </Text>
           <View style={styles.boxesTouchable} onTouchEnd={() => inputRef.current?.focus()}>
             {digits.map((digit, i) => (
@@ -184,14 +187,18 @@ export default function ChangeIdentifierScreen() {
           {error && <Text style={styles.error}>{error}</Text>}
           {smsTrialLimitReached ? (
             <Text style={styles.trialLimitText}>
-              You've reached the SMS code limit for this number. Please try again later, or use email instead.
+              {t('changeIdentifier.smsLimitReached')}
             </Text>
           ) : (
             <TouchableOpacity onPress={handleResend} disabled={isResending || resendCooldown > 0}>
               <Text style={styles.resend}>
-                Didn't receive a code?{' '}
+                {t('changeIdentifier.didntReceiveCode')}{' '}
                 <Text style={[styles.link, (isResending || resendCooldown > 0) && styles.linkDisabled]}>
-                  {resendCooldown > 0 ? `Resend (${resendCooldown}s)` : isResending ? 'Sending…' : 'Resend'}
+                  {resendCooldown > 0
+                    ? t('changeIdentifier.resendWithCooldown', { seconds: resendCooldown })
+                    : isResending
+                      ? t('changeIdentifier.sending')
+                      : t('changeIdentifier.resend')}
                 </Text>
               </Text>
             </TouchableOpacity>

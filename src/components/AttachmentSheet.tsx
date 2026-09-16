@@ -1,5 +1,6 @@
 import { Modal, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
 import Svg, { Path, Rect } from 'react-native-svg';
+import { useTranslation } from 'react-i18next';
 
 import { useTheme } from '../features/theme/ThemeContext';
 import { fonts, type Palette } from '../theme';
@@ -16,6 +17,7 @@ type AttachmentSheetProps = {
 export function AttachmentSheet({ visible, onClose, onPickPhotos, onPickCamera, onPickDocument }: AttachmentSheetProps) {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
+  const { t } = useTranslation('media');
 
   function choose(action: () => void) {
     onClose();
@@ -30,7 +32,7 @@ export function AttachmentSheet({ visible, onClose, onPickPhotos, onPickCamera, 
       <View style={styles.sheet}>
         <View style={styles.row}>
           <SheetOption
-            label="Photos"
+            label={t('attachmentSheet.photos')}
             color={colors.brand500}
             onPress={() => choose(onPickPhotos)}
             icon={
@@ -42,7 +44,7 @@ export function AttachmentSheet({ visible, onClose, onPickPhotos, onPickCamera, 
             }
           />
           <SheetOption
-            label="Camera"
+            label={t('attachmentSheet.camera')}
             color={colors.gold500}
             onPress={() => choose(onPickCamera)}
             icon={
@@ -53,7 +55,7 @@ export function AttachmentSheet({ visible, onClose, onPickPhotos, onPickCamera, 
             }
           />
           <SheetOption
-            label="Document"
+            label={t('attachmentSheet.document')}
             color={colors.brand700}
             onPress={() => choose(onPickDocument)}
             icon={

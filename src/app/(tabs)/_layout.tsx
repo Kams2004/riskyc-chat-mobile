@@ -2,6 +2,7 @@ import { Tabs } from 'expo-router';
 import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
+import { useTranslation } from 'react-i18next';
 
 import { Avatar } from '../../components/Avatar';
 import { useAuth } from '../../features/auth/AuthContext';
@@ -79,6 +80,10 @@ export default function TabsLayout() {
   const insets = useSafeAreaInsets();
   const { userId, displayName, avatarObjectKey } = useAuth();
   const initials = (displayName ?? userId ?? '?').slice(0, 2).toUpperCase();
+  // Reuses each tab's own screen-title key rather than a fourth namespace
+  // just for three labels — no default namespace needed since every call
+  // below is explicitly prefixed.
+  const { t } = useTranslation();
 
   return (
     <Tabs
@@ -112,21 +117,21 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="chats"
         options={{
-          title: 'Chats',
+          title: t('chats:list.title'),
           tabBarIcon: ({ color, focused }) => <ChatsIcon color={color} focused={focused} colors={colors} />,
         }}
       />
       <Tabs.Screen
         name="calls"
         options={{
-          title: 'Calls',
+          title: t('calls:screen.title'),
           tabBarIcon: ({ color, focused }) => <CallsIcon color={color} focused={focused} colors={colors} />,
         }}
       />
       <Tabs.Screen
         name="settings"
         options={{
-          title: 'Settings',
+          title: t('settings:index.title'),
           tabBarIcon: ({ focused }) => (
             <ProfileIcon focused={focused} colors={colors} avatarObjectKey={avatarObjectKey} initials={initials} />
           ),

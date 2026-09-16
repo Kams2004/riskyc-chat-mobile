@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { Alert } from 'react-native';
+import { useTranslation } from 'react-i18next';
 
 import { useCall } from '../features/calls/CallContext';
 import { useGroupCall } from '../features/calls/GroupCallContext';
@@ -14,6 +15,7 @@ import { getGroup } from '../features/groups/api';
 export function IncomingGroupCallBanner() {
   const { pendingGroupInvite, dismissGroupInvite } = useCall();
   const { groupCallState, joinGroupCall } = useGroupCall();
+  const { t } = useTranslation('calls');
 
   useEffect(() => {
     if (!pendingGroupInvite) return;
@@ -30,11 +32,15 @@ export function IncomingGroupCallBanner() {
     getGroup(invite.groupId)
       .then((group) => {
         if (cancelled) return;
-        const kind = invite.callType === 'VIDEO' ? 'video call' : 'voice call';
-        Alert.alert(`${invite.callerName || 'Someone'} started a group ${kind}`, group.name, [
-          { text: 'Dismiss', style: 'cancel', onPress: dismissGroupInvite },
+        const name = invite.callerName || t('incomingBanner.someone');
+        const title =
+          invite.callType === 'VIDEO'
+            ? t('incomingBanner.startedVideoCall', { name })
+            : t('incomingBanner.startedVoiceCall', { name });
+        Alert.alert(title, group.name, [
+          { text: t('incomingBanner.dismiss'), style: 'cancel', onPress: dismissGroupInvite },
           {
-            text: 'Join',
+            text: t('incomingBanner.join'),
             onPress: () => {
               dismissGroupInvite();
               joinGroupCall(invite.groupId, group.name, invite.callType);

@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
+import { useTranslation } from 'react-i18next';
 
 import { preferences } from '../../../lib/preferences';
 import { useTheme } from '../../../features/theme/ThemeContext';
@@ -43,6 +44,7 @@ export default function PrivacyScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = makeStyles(colors);
+  const { t } = useTranslation('settings');
 
   const [sendReadReceipts, setSendReadReceiptsState] = useState(preferences.isSendReadReceipts());
   const [showOnlineStatus, setShowOnlineStatusState] = useState(preferences.isShowOnlineStatus());
@@ -55,14 +57,14 @@ export default function PrivacyScreen() {
             <Path d="M15 18l-6-6 6-6" />
           </Svg>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Privacy</Text>
+        <Text style={styles.headerTitle}>{t('privacy.title')}</Text>
         <View style={{ width: 40 }} />
       </View>
 
       <View style={styles.card}>
         <ToggleRow
-          title="Read receipts"
-          description="Let people see when you've read their messages. Turning this off also stops sending them for messages you receive."
+          title={t('privacy.readReceiptsTitle')}
+          description={t('privacy.readReceiptsDescription')}
           value={sendReadReceipts}
           onValueChange={(value) => {
             setSendReadReceiptsState(value);
@@ -73,8 +75,8 @@ export default function PrivacyScreen() {
         />
         <View style={styles.divider} />
         <ToggleRow
-          title="Show online status"
-          description="Let people see when you're online. You can still see when others are online either way."
+          title={t('privacy.onlineStatusTitle')}
+          description={t('privacy.onlineStatusDescription')}
           value={showOnlineStatus}
           onValueChange={(value) => {
             setShowOnlineStatusState(value);

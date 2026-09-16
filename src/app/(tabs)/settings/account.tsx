@@ -3,6 +3,7 @@ import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
+import { useTranslation } from 'react-i18next';
 
 import { useAuth } from '../../../features/auth/AuthContext';
 import { useTheme } from '../../../features/theme/ThemeContext';
@@ -15,6 +16,7 @@ export default function AccountScreen() {
   const insets = useSafeAreaInsets();
   const styles = makeStyles(colors);
   const { userId, signOut } = useAuth();
+  const { t } = useTranslation('settings');
   const [user, setUser] = useState<UserResult | null>(null);
   const [isRevealed, setIsRevealed] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -36,12 +38,12 @@ export default function AccountScreen() {
 
   function confirmDelete() {
     Alert.alert(
-      'Delete your account?',
-      "This removes your account and profile permanently. Your existing messages stay visible to people you've chatted with, but you won't be reachable or discoverable anymore. This cannot be undone.",
+      t('account.deleteConfirmTitle'),
+      t('account.deleteConfirmMessage'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common:cancel'), style: 'cancel' },
         {
-          text: 'Delete account',
+          text: t('account.deleteAccount'),
           style: 'destructive',
           onPress: async () => {
             setIsDeleting(true);
@@ -50,7 +52,7 @@ export default function AccountScreen() {
               await signOut();
             } catch (e) {
               console.warn('[Account] delete failed', e);
-              Alert.alert('Could not delete account', 'Please check your connection and try again.');
+              Alert.alert(t('account.deleteError'), t('common:checkConnectionAndRetry'));
               setIsDeleting(false);
             }
           },
@@ -67,14 +69,14 @@ export default function AccountScreen() {
             <Path d="M15 18l-6-6 6-6" />
           </Svg>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Account</Text>
+        <Text style={styles.headerTitle}>{t('account.title')}</Text>
         <View style={{ width: 40 }} />
       </View>
 
       <TouchableOpacity style={styles.card} onPress={() => setIsRevealed((prev) => !prev)} activeOpacity={0.7}>
-        <Text style={styles.label}>Registered with</Text>
+        <Text style={styles.label}>{t('account.registeredWith')}</Text>
         <Text style={styles.value}>{identifier ? (isRevealed ? identifier : maskIdentifier(identifier)) : '—'}</Text>
-        {!!identifier && <Text style={styles.revealHint}>{isRevealed ? 'Tap to hide' : 'Tap to reveal'}</Text>}
+        {!!identifier && <Text style={styles.revealHint}>{isRevealed ? t('account.tapToHide') : t('account.tapToReveal')}</Text>}
       </TouchableOpacity>
 
       {!!identifier && (
@@ -82,14 +84,14 @@ export default function AccountScreen() {
           style={styles.changeButton}
           onPress={() => router.push({ pathname: '/(tabs)/settings/change-identifier', params: { mode: identifierMode } })}
         >
-          <Text style={styles.changeLabel}>Change {identifierMode === 'phone' ? 'phone number' : 'email'}</Text>
+          <Text style={styles.changeLabel}>{identifierMode === 'phone' ? t('account.changePhoneNumber') : t('account.changeEmail')}</Text>
         </TouchableOpacity>
       )}
 
       <View style={{ flex: 1 }} />
 
       <TouchableOpacity style={styles.deleteButton} onPress={confirmDelete} disabled={isDeleting}>
-        {isDeleting ? <ActivityIndicator color={colors.brand700} /> : <Text style={styles.deleteLabel}>Delete account</Text>}
+        {isDeleting ? <ActivityIndicator color={colors.brand700} /> : <Text style={styles.deleteLabel}>{t('account.deleteAccount')}</Text>}
       </TouchableOpacity>
     </View>
   );

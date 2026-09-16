@@ -3,6 +3,7 @@ import { Alert, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-na
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RTCView } from 'react-native-webrtc';
 import Svg, { Path } from 'react-native-svg';
+import { useTranslation } from 'react-i18next';
 
 import { useCall } from '../features/calls/CallContext';
 import { UNRESOLVED_PERSON_PLACEHOLDER } from '../features/messaging/conversationId';
@@ -56,6 +57,7 @@ export function CallOverlay() {
     toggleSpeaker,
     minimizeCall,
   } = useCall();
+  const { t } = useTranslation('calls');
 
   const [callerName, setCallerName] = useState<string | null>(null);
   const [callerAvatar, setCallerAvatar] = useState<string | null>(null);
@@ -121,7 +123,7 @@ export function CallOverlay() {
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.topBarButton}
-              onPress={() => Alert.alert('Group calls', 'Adding participants mid-call is coming soon.')}
+              onPress={() => Alert.alert(t('overlay.groupCallsTitle'), t('overlay.groupCallsComingSoon'))}
             >
               <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                 <Path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -146,8 +148,8 @@ export function CallOverlay() {
             <Avatar objectKey={otherAvatar} label={otherName || '?'} size={110} />
             <Text style={styles.name}>{otherName}</Text>
             <Text style={styles.status}>
-              {callState === 'incoming-ringing' && `Incoming ${isVideo ? 'video' : 'voice'} call`}
-              {callState === 'outgoing-ringing' && 'Ringing…'}
+              {callState === 'incoming-ringing' && (isVideo ? t('overlay.incomingVideoCall') : t('overlay.incomingVoiceCall'))}
+              {callState === 'outgoing-ringing' && t('overlay.ringing')}
               {callState === 'connected' && formatDuration(elapsed)}
             </Text>
           </View>

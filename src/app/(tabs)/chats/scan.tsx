@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import { ActivityIndicator, Button, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
+import { useTranslation } from 'react-i18next';
 
 import { useAuth } from '../../../features/auth/AuthContext';
 import { conversationIdFor } from '../../../features/messaging/conversationId';
@@ -18,6 +19,7 @@ export default function ScanScreen() {
   const insets = useSafeAreaInsets();
   const styles = makeStyles(colors);
   const { userId } = useAuth();
+  const { t } = useTranslation('chats');
   const [permission, requestPermission] = useCameraPermissions();
   const [isResolving, setIsResolving] = useState(false);
   const hasHandledScan = useRef(false);
@@ -48,11 +50,9 @@ export default function ScanScreen() {
   if (!permission.granted) {
     return (
       <View style={[styles.container, styles.permissionContainer, { paddingTop: insets.top + 24 }]}>
-        <Text style={styles.permissionTitle}>Camera access needed</Text>
-        <Text style={styles.permissionBody}>
-          RiskyC Chat needs your camera to scan a contact's QR code and start a chat with them.
-        </Text>
-        <Button title="Grant access" onPress={requestPermission} color={colors.brand600} />
+        <Text style={styles.permissionTitle}>{t('scan.cameraPermissionTitle')}</Text>
+        <Text style={styles.permissionBody}>{t('scan.cameraPermissionBody')}</Text>
+        <Button title={t('scan.grantAccess')} onPress={requestPermission} color={colors.brand600} />
       </View>
     );
   }
@@ -70,7 +70,7 @@ export default function ScanScreen() {
             <Path d="M18 6L6 18M6 6l12 12" />
           </Svg>
         </TouchableOpacity>
-        <Text style={styles.overlayTitle}>Scan a RiskyC Chat QR code</Text>
+        <Text style={styles.overlayTitle}>{t('scan.overlayTitle')}</Text>
       </View>
       <View style={styles.frame} pointerEvents="none" />
       {isResolving && (

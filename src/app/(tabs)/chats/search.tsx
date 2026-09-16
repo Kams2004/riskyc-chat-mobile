@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
+import { useTranslation } from 'react-i18next';
 
 import { searchInConversation, type SearchResult } from '../../../features/messaging/api';
 import { useTheme } from '../../../features/theme/ThemeContext';
@@ -18,6 +19,7 @@ export default function SearchInConversationScreen() {
   const insets = useSafeAreaInsets();
   const styles = makeStyles(colors);
   const { conversationId } = useLocalSearchParams<{ conversationId: string }>();
+  const { t } = useTranslation('chats');
 
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -48,7 +50,7 @@ export default function SearchInConversationScreen() {
         </TouchableOpacity>
         <TextInput
           style={styles.input}
-          placeholder="Search in this conversation"
+          placeholder={t('search.placeholder')}
           placeholderTextColor={colors.textMuted}
           value={query}
           onChangeText={setQuery}
@@ -68,7 +70,7 @@ export default function SearchInConversationScreen() {
           </View>
         )}
         ListEmptyComponent={
-          !isSearching && query.trim() ? <Text style={styles.empty}>No messages found.</Text> : null
+          !isSearching && query.trim() ? <Text style={styles.empty}>{t('search.empty')}</Text> : null
         }
       />
     </View>

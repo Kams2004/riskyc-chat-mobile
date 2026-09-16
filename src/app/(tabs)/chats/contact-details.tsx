@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
+import { useTranslation } from 'react-i18next';
 
 import { ActionRow } from '../../../components/ActionRow';
 import { Avatar } from '../../../components/Avatar';
@@ -33,6 +34,7 @@ export default function ContactDetailsScreen() {
   const { userId: myUserId } = useAuth();
   const { startCall } = useCall();
   const { conversationId, userId } = useLocalSearchParams<{ conversationId: string; userId: string }>();
+  const { t } = useTranslation('chats');
 
   const [user, setUser] = useState<UserResult | null>(null);
   const [media, setMedia] = useState<MediaSummaryItem[]>([]);
@@ -59,21 +61,21 @@ export default function ContactDetailsScreen() {
   }, [load]);
 
   function confirmClearChat() {
-    Alert.alert('Clear chat?', 'This removes the messages from this device only — the other person keeps theirs.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Clear', style: 'destructive', onPress: () => clearConversationMessages(db, conversationId) },
+    Alert.alert(t('contactDetails.clearChatConfirmTitle'), t('contactDetails.clearChatConfirmBody'), [
+      { text: t('common:cancel'), style: 'cancel' },
+      { text: t('contactDetails.clearChat'), style: 'destructive', onPress: () => clearConversationMessages(db, conversationId) },
     ]);
   }
 
   function confirmToggleBlock() {
-    const name = user?.displayName || 'this person';
+    const name = user?.displayName || t('contactDetails.defaultPersonName');
     Alert.alert(
-      isBlocked ? `Unblock ${name}?` : `Block ${name}?`,
-      isBlocked ? 'You will be able to call and message each other again.' : "You won't receive calls or messages from them anymore.",
+      isBlocked ? t('contactDetails.unblockConfirmTitle', { name }) : t('contactDetails.blockConfirmTitle', { name }),
+      isBlocked ? t('contactDetails.unblockConfirmBody') : t('contactDetails.blockConfirmBody'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common:cancel'), style: 'cancel' },
         {
-          text: isBlocked ? 'Unblock' : 'Block',
+          text: isBlocked ? t('contactDetails.unblockButton') : t('common:block'),
           style: 'destructive',
           onPress: async () => {
             if (isBlocked) await unblockUser(userId);
@@ -86,15 +88,21 @@ export default function ContactDetailsScreen() {
   }
 
   function confirmReport() {
-    const name = user?.displayName || 'this person';
-    Alert.alert(`Report ${name}?`, 'What best describes the issue?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Spam', onPress: () => reportUser(userId, 'Spam').then(() => Alert.alert('Reported', 'Thanks — we received your report.')) },
+    const name = user?.displayName || t('contactDetails.defaultPersonName');
+    Alert.alert(t('contactDetails.reportConfirmTitle', { name }), t('contactDetails.reportConfirmBody'), [
+      { text: t('common:cancel'), style: 'cancel' },
       {
-        text: 'Inappropriate content',
-        onPress: () => reportUser(userId, 'Inappropriate content').then(() => Alert.alert('Reported', 'Thanks — we received your report.')),
+        text: t('contactDetails.reportSpam'),
+        onPress: () => reportUser(userId, 'Spam').then(() => Alert.alert(t('contactDetails.reportedTitle'), t('contactDetails.reportedBody'))),
       },
-      { text: 'Other', onPress: () => reportUser(userId, 'Other').then(() => Alert.alert('Reported', 'Thanks — we received your report.')) },
+      {
+        text: t('contactDetails.reportInappropriate'),
+        onPress: () => reportUser(userId, 'Inappropriate content').then(() => Alert.alert(t('contactDetails.reportedTitle'), t('contactDetails.reportedBody'))),
+      },
+      {
+        text: t('contactDetails.reportOther'),
+        onPress: () => reportUser(userId, 'Other').then(() => Alert.alert(t('contactDetails.reportedTitle'), t('contactDetails.reportedBody'))),
+      },
     ]);
   }
 
@@ -106,7 +114,7 @@ export default function ContactDetailsScreen() {
     );
   }
 
-  const name = user.displayName || 'Unnamed user';
+  const name = user.displayName || t('contactDetails.unnamedUser');
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingTop: insets.top + 12, paddingBottom: insets.bottom + 30 }}>
@@ -130,14 +138,14 @@ export default function ContactDetailsScreen() {
           <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={colors.brand600} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
             <Path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.902.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.908.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
           </Svg>
-          <Text style={styles.circleActionLabel}>Voice</Text>
+          <Text style={styles.circleActionLabel}>{t('contactDetails.voice')}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.circleAction} onPress={() => startCall(userId, name, 'VIDEO')}>
           <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={colors.brand600} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
             <Path d="M23 7l-7 5 7 5V7z" />
             <Path d="M16 5H3a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2z" />
           </Svg>
-          <Text style={styles.circleActionLabel}>Video</Text>
+          <Text style={styles.circleActionLabel}>{t('contactDetails.video')}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.circleAction}
@@ -146,7 +154,7 @@ export default function ContactDetailsScreen() {
           <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={colors.brand600} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
             <Path d="M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.35-4.35" />
           </Svg>
-          <Text style={styles.circleActionLabel}>Search</Text>
+          <Text style={styles.circleActionLabel}>{t('contactDetails.search')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -155,13 +163,13 @@ export default function ContactDetailsScreen() {
         onPress={() => router.push({ pathname: '/(tabs)/chats/media-links-docs', params: { conversationId } })}
       >
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Media, links, and docs</Text>
+          <Text style={styles.sectionTitle}>{t('contactDetails.mediaLinksDocsTitle')}</Text>
           <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={colors.textMuted} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
             <Path d="M9 18l6-6-6-6" />
           </Svg>
         </View>
         {media.length === 0 ? (
-          <Text style={styles.emptyText}>Nothing shared yet.</Text>
+          <Text style={styles.emptyText}>{t('contactDetails.nothingSharedYet')}</Text>
         ) : (
           <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
             {media.map((item) => (
@@ -172,9 +180,9 @@ export default function ContactDetailsScreen() {
       </TouchableOpacity>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Groups in common</Text>
+        <Text style={styles.sectionTitle}>{t('contactDetails.groupsInCommon')}</Text>
         {groups.length === 0 ? (
-          <Text style={styles.emptyText}>No groups in common</Text>
+          <Text style={styles.emptyText}>{t('contactDetails.noGroupsInCommon')}</Text>
         ) : (
           groups.map((g) => (
             <View key={g.id} style={styles.groupRow}>
@@ -194,7 +202,7 @@ export default function ContactDetailsScreen() {
               <Path d="M19 8v6M22 11h-6" />
             </Svg>
           }
-          label={`Create group with ${user.displayName || 'them'}`}
+          label={t('contactDetails.createGroupWith', { name: user.displayName || t('contactDetails.createGroupWithFallback') })}
           onPress={() => router.push({ pathname: '/(tabs)/chats/new-group', params: { presetMemberId: userId } })}
         />
         <ActionRow
@@ -205,8 +213,8 @@ export default function ContactDetailsScreen() {
               <Path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
             </Svg>
           }
-          label="Add to group"
-          onPress={() => Alert.alert('Coming soon', "Adding someone to an existing group from here isn't built yet — add them from the group's own info screen.")}
+          label={t('contactDetails.addToGroup')}
+          onPress={() => Alert.alert(t('contactDetails.addToGroupComingSoonTitle'), t('contactDetails.addToGroupComingSoonBody'))}
         />
         <ActionRow
           icon={
@@ -214,10 +222,10 @@ export default function ContactDetailsScreen() {
               <Path d="M12 21C12 21 4 14.545 4 8.923 4 5.649 6.577 3 9.75 3c1.68 0 3.19.867 4.25 2.25C15.06 3.867 16.57 3 18.25 3 21.423 3 24 5.649 24 8.923c0 .259-.017.514-.049.764A9.98 9.98 0 0 0 18.25 8c-1.68 0-3.19.867-4.25 2.25" />
             </Svg>
           }
-          label="Add to favourites"
+          label={t('contactDetails.addToFavourites')}
           onPress={async () => {
             await setFavorite(db, [conversationId], true);
-            Alert.alert('Added to favourites');
+            Alert.alert(t('contactDetails.addedToFavouritesTitle'));
           }}
         />
         <ActionRow
@@ -226,7 +234,7 @@ export default function ContactDetailsScreen() {
               <Path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14z" />
             </Svg>
           }
-          label="Clear chat"
+          label={t('contactDetails.clearChat')}
           onPress={confirmClearChat}
         />
         <ActionRow
@@ -236,7 +244,11 @@ export default function ContactDetailsScreen() {
               <Path d="M4.9 4.9l14.2 14.2" />
             </Svg>
           }
-          label={isBlocked ? `Unblock ${user.displayName || 'user'}` : `Block ${user.displayName || 'user'}`}
+          label={
+            isBlocked
+              ? t('contactDetails.unblock', { name: user.displayName || t('contactDetails.userFallback') })
+              : t('contactDetails.block', { name: user.displayName || t('contactDetails.userFallback') })
+          }
           danger
           onPress={confirmToggleBlock}
         />
@@ -247,7 +259,7 @@ export default function ContactDetailsScreen() {
               <Path d="M4 22v-7" />
             </Svg>
           }
-          label={`Report ${user.displayName || 'user'}`}
+          label={t('contactDetails.report', { name: user.displayName || t('contactDetails.userFallback') })}
           danger
           onPress={confirmReport}
         />

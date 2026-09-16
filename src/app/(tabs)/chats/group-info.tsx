@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
+import { useTranslation } from 'react-i18next';
 
 import { Avatar } from '../../../components/Avatar';
 import { deleteConversation, useSQLiteContext } from '../../../data/db';
@@ -21,6 +22,7 @@ export default function GroupInfoScreen() {
   const db = useSQLiteContext();
   const { userId } = useAuth();
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
+  const { t } = useTranslation('groups');
 
   const [group, setGroup] = useState<GroupResult | null>(null);
   const [members, setMembers] = useState<MemberRow[]>([]);
@@ -61,17 +63,21 @@ export default function GroupInfoScreen() {
   }
 
   function confirmRemove(member: MemberRow) {
-    Alert.alert('Remove member?', `${member.user?.displayName ?? 'This person'} will be removed from the group.`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: async () => {
-          await removeMember(groupId, member.userId);
-          await load();
+    Alert.alert(
+      t('groupInfo.confirmRemove.title'),
+      t('groupInfo.confirmRemove.body', { name: member.user?.displayName ?? t('groupInfo.thisPerson') }),
+      [
+        { text: t('common:cancel'), style: 'cancel' },
+        {
+          text: t('groupInfo.confirmRemove.confirm'),
+          style: 'destructive',
+          onPress: async () => {
+            await removeMember(groupId, member.userId);
+            await load();
+          },
         },
-      },
-    ]);
+      ]
+    );
   }
 
   async function handleToggleAdmin(member: MemberRow) {
@@ -79,17 +85,17 @@ export default function GroupInfoScreen() {
       await changeMemberRole(groupId, member.userId, member.role === 'ADMIN' ? 'MEMBER' : 'ADMIN');
       await load();
     } catch {
-      Alert.alert('Could not update role', 'The group must keep at least one admin.');
+      Alert.alert(t('groupInfo.roleUpdateError.title'), t('groupInfo.roleUpdateError.body'));
     }
   }
 
   function openMemberActions(member: MemberRow) {
     if (!isAdmin || member.userId === userId) return;
-    const name = member.user?.displayName ?? 'This person';
+    const name = member.user?.displayName ?? t('groupInfo.thisPerson');
     Alert.alert(name, undefined, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: member.role === 'ADMIN' ? 'Dismiss as admin' : 'Make group admin', onPress: () => handleToggleAdmin(member) },
-      { text: 'Remove from group', style: 'destructive', onPress: () => confirmRemove(member) },
+      { text: t('common:cancel'), style: 'cancel' },
+      { text: member.role === 'ADMIN' ? t('groupInfo.memberActions.dismissAsAdmin') : t('groupInfo.memberActions.makeGroupAdmin'), onPress: () => handleToggleAdmin(member) },
+      { text: t('groupInfo.memberActions.removeFromGroup'), style: 'destructive', onPress: () => confirmRemove(member) },
     ]);
   }
 
@@ -100,10 +106,10 @@ export default function GroupInfoScreen() {
   }
 
   function confirmLeave() {
-    Alert.alert('Leave group?', 'You will no longer receive messages from this group.', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('groupInfo.confirmLeave.title'), t('groupInfo.confirmLeave.body'), [
+      { text: t('common:cancel'), style: 'cancel' },
       {
-        text: 'Leave',
+        text: t('groupInfo.confirmLeave.confirm'),
         style: 'destructive',
         onPress: async () => {
           if (!userId) return;
@@ -137,7 +143,7 @@ export default function GroupInfoScreen() {
             <Path d="M15 18l-6-6 6-6" />
           </Svg>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Group info</Text>
+        <Text style={styles.headerTitle}>{t('groupInfo.headerTitle')}</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -152,7 +158,7 @@ export default function GroupInfoScreen() {
         ) : (
           <Text style={styles.groupName}>{group.name}</Text>
         )}
-        <Text style={styles.memberCount}>{members.length} members</Text>
+        <Text style={styles.memberCount}>{t('groupInfo.memberCount', { count: members.length })}</Text>
       </View>
 
       {isAdmin && (
@@ -162,7 +168,7 @@ export default function GroupInfoScreen() {
               <Path d="M12 5v14M5 12h14" />
             </Svg>
           </View>
-          <Text style={styles.addLabel}>Add members</Text>
+          <Text style={styles.addLabel}>{t('groupInfo.addMembers')}</Text>
         </TouchableOpacity>
       )}
 
@@ -170,7 +176,7 @@ export default function GroupInfoScreen() {
         style={styles.mediaRow}
         onPress={() => router.push({ pathname: '/(tabs)/chats/media-links-docs', params: { conversationId: groupId } })}
       >
-        <Text style={styles.mediaLabel}>Media, links, and docs</Text>
+        <Text style={styles.mediaLabel}>{t('groupInfo.mediaLinksDocs')}</Text>
         <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={colors.textMuted} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
           <Path d="M9 18l6-6-6-6" />
         </Svg>
@@ -179,8 +185,8 @@ export default function GroupInfoScreen() {
       {isAdmin && (
         <View style={styles.toggleRow}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.mediaLabel}>Only admins can send messages</Text>
-            <Text style={styles.toggleDescription}>Like an announcement group — other members can still read but not post.</Text>
+            <Text style={styles.mediaLabel}>{t('groupInfo.onlyAdminsCanMessage')}</Text>
+            <Text style={styles.toggleDescription}>{t('groupInfo.onlyAdminsDescription')}</Text>
           </View>
           <Switch
             value={group.onlyAdminsCanMessage}
@@ -195,7 +201,7 @@ export default function GroupInfoScreen() {
         <View style={styles.addSearch}>
           <TextInput
             style={styles.addSearchInput}
-            placeholder="Search people to add"
+            placeholder={t('groupInfo.addSearchPlaceholder')}
             placeholderTextColor={colors.textMuted}
             value={addQuery}
             onChangeText={setAddQuery}
@@ -204,7 +210,7 @@ export default function GroupInfoScreen() {
           {addResults.map((user) => (
             <TouchableOpacity key={user.userId} style={styles.memberRow} onPress={() => handleAddMember(user)}>
               <Avatar objectKey={user.avatarObjectKey} label={user.displayName || '?'} size={40} />
-              <Text style={styles.memberName}>{user.displayName || 'Unnamed user'}</Text>
+              <Text style={styles.memberName}>{user.displayName || t('groupInfo.unnamedUser')}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -220,19 +226,19 @@ export default function GroupInfoScreen() {
           >
             <Avatar objectKey={item.user?.avatarObjectKey} label={item.user?.displayName || '?'} size={40} />
             <View style={{ flex: 1 }}>
-              <Text style={styles.memberName}>{item.user?.displayName || 'Unknown user'}{item.userId === userId ? ' (you)' : ''}</Text>
+              <Text style={styles.memberName}>{item.user?.displayName || t('groupInfo.unknownUser')}{item.userId === userId ? t('groupInfo.youSuffix') : ''}</Text>
             </View>
-            {item.role === 'ADMIN' && <Text style={styles.roleLabel}>Admin</Text>}
+            {item.role === 'ADMIN' && <Text style={styles.roleLabel}>{t('groupInfo.roleAdmin')}</Text>}
           </TouchableOpacity>
         )}
       />
 
       <TouchableOpacity style={styles.leaveButton} onPress={confirmLeave}>
-        <Text style={styles.leaveLabel}>Leave group</Text>
+        <Text style={styles.leaveLabel}>{t('groupInfo.leaveGroup')}</Text>
       </TouchableOpacity>
       {isAdmin && (
         <Text style={styles.leaveHint}>
-          If you're the group's only admin, leaving promotes whoever joined earliest to admin.
+          {t('groupInfo.leaveHint')}
         </Text>
       )}
     </View>

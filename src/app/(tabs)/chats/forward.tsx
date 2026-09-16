@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
+import { useTranslation } from 'react-i18next';
 
 import { Avatar } from '../../../components/Avatar';
 import { getMessageById, listConversations, useSQLiteContext, type LocalConversation, type LocalMessage } from '../../../data/db';
@@ -20,6 +21,7 @@ export default function ForwardScreen() {
   const db = useSQLiteContext();
   const { userId, accessToken } = useAuth();
   const { messageId } = useLocalSearchParams<{ messageId: string }>();
+  const { t } = useTranslation('chats');
 
   const [conversations, setConversations] = useState<LocalConversation[]>([]);
   const [source, setSource] = useState<LocalMessage | null>(null);
@@ -48,7 +50,7 @@ export default function ForwardScreen() {
       });
       router.back();
     } catch (e) {
-      Alert.alert('Could not forward', e instanceof Error ? e.message : 'Please try again.');
+      Alert.alert(t('forward.failedTitle'), e instanceof Error ? e.message : t('forward.failedBody'));
     } finally {
       setSendingTo(null);
     }
@@ -62,7 +64,7 @@ export default function ForwardScreen() {
             <Path d="M18 6L6 18M6 6l12 12" />
           </Svg>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Forward to</Text>
+        <Text style={styles.headerTitle}>{t('forward.headerTitle')}</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -78,7 +80,7 @@ export default function ForwardScreen() {
             {sendingTo === item.id && <ActivityIndicator color={colors.brand500} />}
           </TouchableOpacity>
         )}
-        ListEmptyComponent={<Text style={styles.empty}>No conversations yet.</Text>}
+        ListEmptyComponent={<Text style={styles.empty}>{t('forward.empty')}</Text>}
       />
     </View>
   );

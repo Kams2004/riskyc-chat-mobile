@@ -7,6 +7,7 @@ import {
 import { useEffect, useRef, useState } from 'react';
 import { Alert, StyleSheet, TouchableOpacity, View, Text } from 'react-native';
 import Svg, { Path, Rect } from 'react-native-svg';
+import { useTranslation } from 'react-i18next';
 
 import { uploadMedia } from '../features/media/api';
 import { useTheme } from '../features/theme/ThemeContext';
@@ -37,6 +38,7 @@ type VoiceRecorderProps = {
 export function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
+  const { t } = useTranslation('media');
 
   const recorder = useAudioRecorder({ ...RecordingPresets.HIGH_QUALITY, isMeteringEnabled: true });
   const state = useAudioRecorderState(recorder, 100);
@@ -50,7 +52,7 @@ export function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) {
     (async () => {
       const permission = await requestRecordingPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert('Microphone access needed', 'Allow microphone access to record a voice message.');
+        Alert.alert(t('voiceRecorder.permissionTitle'), t('voiceRecorder.permissionBody'));
         onCancel();
         return;
       }
@@ -88,7 +90,7 @@ export function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) {
       onSend(objectKey, state.durationMillis);
     } catch (e) {
       console.warn('[VoiceRecorder] send failed', e);
-      Alert.alert('Could not send voice message', 'Please try again.');
+      Alert.alert(t('voiceRecorder.sendFailedTitle'), t('voiceRecorder.sendFailedBody'));
       onCancel();
     } finally {
       setIsUploading(false);
