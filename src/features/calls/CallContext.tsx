@@ -9,7 +9,9 @@ import {
 
 import { useAuth } from '../auth/AuthContext';
 import { config } from '../../lib/config';
+import { ApiError } from '../../lib/httpClient';
 import { playRingtone, setSpeakerphoneEnabled, stopRingtone } from '../../lib/sounds';
+import { getCallSnapshot } from './api';
 import { CallSignalingSocket, type CallIceCandidate, type CallInvite, type CallType } from './signaling';
 
 // STUN first (free, no relay bandwidth) with the self-hosted TURN server as
@@ -20,7 +22,11 @@ const ICE_SERVERS = [
   { urls: config.turnServerUrl, username: config.turnUsername, credential: config.turnCredential },
 ];
 
-export type CallState = 'idle' | 'outgoing-ringing' | 'incoming-ringing' | 'connected';
+// 'minimized' is a pure UI-presentation state layered on top of 'connected'
+// — the peer connection, streams and timers are all untouched by it, only
+// which component renders changes (CallOverlay's full Modal vs the small
+// MinimizedCallBubble). Restoring just flips it back to 'connected'.
+export type CallState = 'idle' | 'outgoing-ringing' | 'incoming-ringing' | 'connected' | 'minimized';
 
 export type IncomingCallInfo = { callId: string; fromUserId: string; type: CallType };
 export type OutgoingCallInfo = { callId: string; toUserId: string; toUserName: string; type: CallType };
@@ -40,9 +46,13 @@ type CallContextValue = {
   acceptIncoming: () => Promise<void>;
   declineIncoming: () => void;
   endCall: () => void;
+  /** Called from a notification Answer/Decline action tap — fetches the call fresh via REST (see CallController#getCall) and seeds state as if the live invite had just arrived, since the socket may not have reconnected yet. Returns false if the call is no longer reachable (already ended/answered elsewhere). */
+  seedIncomingCallFromNotification: (callId: string) => Promise<boolean>;
   toggleMute: () => void;
   toggleCamera: () => void;
   toggleSpeaker: () => void;
+  minimizeCall: () => void;
+  restoreCall: () => void;
 };
 
 const CallContext = createContext<CallContextValue | null>(null);
@@ -54,7 +64,7 @@ export function useCall(): CallContextValue {
 }
 
 export function CallProvider({ children }: { children: React.ReactNode }) {
-  const { userId, accessToken } = useAuth();
+  const { userId, accessToken, displayName } = useAuth();
   const socketRef = useRef<CallSignalingSocket | null>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
@@ -133,7 +143,13 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === 'connected') {
-        setCallState('connected');
+        // Guard against clobbering 'minimized' back to 'connected' — this
+        // can refire on ICE renegotiation well after the call was minimized,
+        // and a minimized call reappearing full-screen on its own would be a
+        // jarring surprise mid-conversation.
+        if (callStateRef.current !== 'minimized') {
+          setCallState('connected');
+        }
         setConnectedAt((prev) => prev ?? Date.now());
       } else if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
         // Remote side dropped without a clean call.end (network loss, app kill).
@@ -180,9 +196,9 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       const offer = await pc.createOffer({});
       await pc.setLocalDescription(offer);
 
-      socketRef.current.sendInvite({ callId, toUserId: recipientId, type, sdpOffer: offer.sdp ?? '' });
+      socketRef.current.sendInvite({ callId, toUserId: recipientId, type, sdpOffer: offer.sdp ?? '', callerName: displayName });
     },
-    [callState, createPeerConnection, userId]
+    [callState, createPeerConnection, displayName, userId]
   );
 
   const acceptIncoming = useCallback(async () => {
@@ -214,6 +230,48 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     setSpeakerphoneEnabled(speakerDefault);
     setIsSpeakerOn(speakerDefault);
   }, [createPeerConnection, flushPendingIce]);
+
+  const seedIncomingCallFromNotification = useCallback(
+    async (callId: string): Promise<boolean> => {
+      // Already handling this exact call — the live invite beat the
+      // notification-triggered fetch to it (a brief background, not a cold
+      // start). Nothing more to seed; report success either way.
+      if (activeCallIdRef.current === callId) {
+        return true;
+      }
+      if (callStateRef.current !== 'idle') {
+        return false;
+      }
+      try {
+        const snapshot = await getCallSnapshot(callId);
+        pendingInviteRef.current = {
+          callId: snapshot.callId,
+          fromUserId: snapshot.fromUserId,
+          toUserId: userId ?? '',
+          type: snapshot.type,
+          sdpOffer: snapshot.sdpOffer,
+          callerName: snapshot.callerName,
+        };
+        activeCallIdRef.current = snapshot.callId;
+        otherUserIdRef.current = snapshot.fromUserId;
+        setCallType(snapshot.type);
+        setIncomingCall({ callId: snapshot.callId, fromUserId: snapshot.fromUserId, type: snapshot.type });
+        setCallState('incoming-ringing');
+        playRingtone();
+        return true;
+      } catch (e) {
+        // 410 means the call already ended/was answered elsewhere before
+        // this action got processed — a stale notification, not an error.
+        if (e instanceof ApiError && e.status === 410) {
+          console.log('[CallContext] notification call no longer ringing', callId);
+        } else {
+          console.warn('[CallContext] could not seed call from notification', e);
+        }
+        return false;
+      }
+    },
+    [userId]
+  );
 
   const declineIncoming = useCallback(() => {
     const invite = pendingInviteRef.current;
@@ -252,6 +310,15 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     setIsSpeakerOn(next);
   }, [isSpeakerOn]);
 
+  /** Only meaningful mid-call — minimizing before connecting would just hide the ringing/incoming UI with no way back in. */
+  const minimizeCall = useCallback(() => {
+    if (callStateRef.current === 'connected') setCallState('minimized');
+  }, []);
+
+  const restoreCall = useCallback(() => {
+    if (callStateRef.current === 'minimized') setCallState('connected');
+  }, []);
+
   useEffect(() => {
     if (!userId || !accessToken) return;
 
@@ -260,6 +327,13 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
     socket.connect({
       onInvite: (invite) => {
+        // Already being handled — a notification Answer/Decline tap already
+        // seeded this exact call (see seedIncomingCallFromNotification)
+        // before this live invite caught up over the socket. Not "busy":
+        // silently ignore rather than declining a call already in progress.
+        if (invite.callId === activeCallIdRef.current) {
+          return;
+        }
         // Busy: already on a call — decline immediately, same as a phone.
         if (callStateRef.current !== 'idle') {
           socket.sendEnd({ callId: invite.callId, reason: 'declined' });
@@ -331,6 +405,9 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     toggleMute,
     toggleCamera,
     toggleSpeaker,
+    minimizeCall,
+    restoreCall,
+    seedIncomingCallFromNotification,
   };
 
   return <CallContext.Provider value={value}>{children}</CallContext.Provider>;

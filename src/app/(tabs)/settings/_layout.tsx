@@ -6,6 +6,8 @@ export default function SettingsLayout() {
       <Stack.Screen name="index" />
       <Stack.Screen name="edit-profile" />
       <Stack.Screen name="account" />
+      <Stack.Screen name="change-identifier" />
+      <Stack.Screen name="devices" />
       <Stack.Screen name="privacy" />
     </Stack>
   );

@@ -22,6 +22,7 @@ import { usePresenceHeartbeat } from '../features/presence/usePresenceHeartbeat'
 import { ThemeProvider, useTheme } from '../features/theme/ThemeContext';
 import { loadPreferences } from '../lib/preferences';
 import { CallOverlay } from '../components/CallOverlay';
+import { MinimizedCallBubble } from '../components/MinimizedCallBubble';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -75,6 +76,7 @@ function Root() {
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <RootNavigator />
       <CallOverlay />
+      <MinimizedCallBubble />
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
     </View>
   );

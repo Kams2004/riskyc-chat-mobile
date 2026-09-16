@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react';
 
+import { currentDeviceLabel } from '../../lib/deviceLabel';
 import { profile, session } from '../../lib/secureStore';
 import * as authApi from './api';
 import type { Identifier } from './api';
@@ -49,7 +50,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       email,
       phoneNumber,
       async signInWithOtp(identifier, code) {
-        const res = await authApi.verifyOtp(identifier, code);
+        const res = await authApi.verifyOtp(identifier, code, currentDeviceLabel());
         await session.save(res.accessToken, res.userId);
         await profile.save(res.displayName, res.avatarObjectKey);
         setUserId(res.userId);

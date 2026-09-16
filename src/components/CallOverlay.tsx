@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RTCView } from 'react-native-webrtc';
 import Svg, { Path } from 'react-native-svg';
@@ -10,6 +10,7 @@ import { getUser } from '../features/users/api';
 import { useTheme } from '../features/theme/ThemeContext';
 import { fonts } from '../theme';
 import { Avatar } from './Avatar';
+import { ChatWallpaper } from './ChatWallpaper';
 
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60).toString().padStart(2, '0');
@@ -53,10 +54,17 @@ export function CallOverlay() {
     toggleMute,
     toggleCamera,
     toggleSpeaker,
+    minimizeCall,
   } = useCall();
 
   const [callerName, setCallerName] = useState<string | null>(null);
   const [callerAvatar, setCallerAvatar] = useState<string | null>(null);
+  // Outgoing calls previously never fetched the other party's avatar at all
+  // (only incoming calls did, via callerAvatar above) — always showing
+  // initials until the call was answered. Fetched symmetrically here, same
+  // shape as the incoming-call effect below, rather than threading avatar
+  // data through startCall/CallContext (a UI-only concern).
+  const [outgoingAvatar, setOutgoingAvatar] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
@@ -74,6 +82,16 @@ export function CallOverlay() {
   }, [incomingCall]);
 
   useEffect(() => {
+    if (!outgoingCall) {
+      setOutgoingAvatar(null);
+      return;
+    }
+    getUser(outgoingCall.toUserId)
+      .then((user) => setOutgoingAvatar(user.avatarObjectKey))
+      .catch(() => setOutgoingAvatar(null));
+  }, [outgoingCall]);
+
+  useEffect(() => {
     if (!connectedAt) {
       setElapsed(0);
       return;
@@ -82,14 +100,37 @@ export function CallOverlay() {
     return () => clearInterval(interval);
   }, [connectedAt]);
 
-  if (callState === 'idle') return null;
+  // 'minimized' renders nothing here — MinimizedCallBubble (mounted
+  // alongside this component at the app root) takes over instead.
+  if (callState === 'idle' || callState === 'minimized') return null;
 
   const otherName = incomingCall ? callerName : outgoingCall?.toUserName ?? '';
+  const otherAvatar = incomingCall ? callerAvatar : outgoingAvatar;
   const isVideo = callType === 'VIDEO';
 
   return (
     <Modal visible transparent={false} animationType="slide">
-      <View style={[styles.container, { backgroundColor: '#1a0d10' }]}>
+      <ChatWallpaper dark>
+        <View style={styles.container}>
+        {callState === 'connected' && (
+          <View style={[styles.topBar, { paddingTop: insets.top + 12 }]}>
+            <TouchableOpacity style={styles.topBarButton} onPress={minimizeCall}>
+              <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <Path d="M6 9l6 6 6-6" />
+              </Svg>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.topBarButton}
+              onPress={() => Alert.alert('Group calls', 'Adding participants mid-call is coming soon.')}
+            >
+              <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <Path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                <Path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" />
+                <Path d="M19 8v6M22 11h-6" />
+              </Svg>
+            </TouchableOpacity>
+          </View>
+        )}
         {isVideo && callState === 'connected' && remoteStream ? (
           <RTCView streamURL={remoteStream.toURL()} style={StyleSheet.absoluteFill} objectFit="cover" />
         ) : null}
@@ -102,7 +143,7 @@ export function CallOverlay() {
 
         {(!isVideo || callState !== 'connected' || !remoteStream) && (
           <View style={styles.centerInfo}>
-            <Avatar objectKey={callState === 'incoming-ringing' ? callerAvatar : null} label={otherName || '?'} size={110} />
+            <Avatar objectKey={otherAvatar} label={otherName || '?'} size={110} />
             <Text style={styles.name}>{otherName}</Text>
             <Text style={styles.status}>
               {callState === 'incoming-ringing' && `Incoming ${isVideo ? 'video' : 'voice'} call`}
@@ -175,13 +216,32 @@ export function CallOverlay() {
             </>
           )}
         </View>
-      </View>
+        </View>
+      </ChatWallpaper>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, alignItems: 'center' },
+  topBar: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    zIndex: 10,
+  },
+  topBarButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
   centerInfo: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 },
   name: { fontFamily: fonts.sansSemiBold, fontSize: 22, color: '#ffffff', marginTop: 8 },
   status: { fontFamily: fonts.sans, fontSize: 15, color: 'rgba(255,255,255,0.7)' },

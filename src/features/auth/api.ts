@@ -26,9 +26,9 @@ export type VerifyOtpResponse = {
   phoneNumber: string | null;
 };
 
-export function verifyOtp(identifier: Identifier, code: string): Promise<VerifyOtpResponse> {
+export function verifyOtp(identifier: Identifier, code: string, deviceLabel?: string | null): Promise<VerifyOtpResponse> {
   return apiFetch(`${config.authServiceUrl}/api/auth/otp/verify`, {
     method: 'POST',
-    body: JSON.stringify({ ...identifierBody(identifier), code }),
+    body: JSON.stringify({ ...identifierBody(identifier), code, deviceLabel }),
   });
 }

@@ -5,7 +5,9 @@ import {
   advanceMessagesStatus,
   applyMessageMutation,
   applyReceipt,
+  markDeletedForMe,
   recomputeGroupMessageStatus,
+  setPinnedLocally,
   useSQLiteContext,
   listMessages,
   upsertConversation,
@@ -57,8 +59,27 @@ function envelopeToLocalMessage(envelope: messagingApi.MessageEnvelope): LocalMe
     media_duration_ms: envelope.mediaDurationMs ?? null,
     edited: envelope.edited ? 1 : 0,
     deleted: envelope.deleted ? 1 : 0,
+    forwarded: envelope.forwarded ? 1 : 0,
+    // Never arrives over the wire for the acting user (delete-for-me is
+    // never broadcast) — if it's already deleted-for-me, MessageHistoryController
+    // filters it out of history before it ever reaches here in the first
+    // place, so this is always 0 for a freshly-received envelope.
+    deleted_for_me: 0,
+    attachments_json: envelope.attachments && envelope.attachments.length > 0 ? JSON.stringify(envelope.attachments) : null,
+    reply_to_message_id: envelope.replyToMessageId ?? null,
+    reply_to_conversation_id: envelope.replyToConversationId ?? null,
+    reply_to_sender_id: envelope.replyToSenderId ?? null,
+    reply_to_snippet: envelope.replyToSnippet ?? null,
+    pinned: envelope.pinned ? 1 : 0,
   };
 }
+
+export type ReplyToDraft = {
+  messageId: string;
+  conversationId: string;
+  senderId: string;
+  snippet: string;
+};
 
 /**
  * Local-first conversation hook: the UI always renders from SQLite.
@@ -178,6 +199,7 @@ export function useConversation({
           ciphertext: mutation.ciphertext,
           edited: mutation.edited,
           deleted: mutation.deleted,
+          pinned: mutation.pinned,
         });
         if (!cancelled) await reload();
       });
@@ -256,8 +278,18 @@ export function useConversation({
   }, [conversationId]);
 
   const sendMessage = useCallback(
-    async (plaintext: string, media?: OutgoingMedia) => {
+    async (plaintext: string, media?: OutgoingMedia, attachments?: OutgoingMedia[], replyTo?: ReplyToDraft) => {
       if (!userId) throw new Error('Cannot send a message while signed out');
+      const attachmentDtos =
+        attachments && attachments.length > 0
+          ? attachments.map((a, i) => ({
+              position: i,
+              mediaType: a.type as 'IMAGE' | 'VIDEO',
+              mediaObjectKey: a.objectKey,
+              mediaFileName: a.fileName ?? null,
+              mediaDurationMs: a.durationMs ?? null,
+            }))
+          : undefined;
       const envelope = {
         messageId: randomUUID(),
         conversationId,
@@ -272,6 +304,11 @@ export function useConversation({
         mediaObjectKey: media?.objectKey,
         mediaFileName: media?.fileName,
         mediaDurationMs: media?.durationMs,
+        attachments: attachmentDtos,
+        replyToMessageId: replyTo?.messageId ?? null,
+        replyToConversationId: replyTo?.conversationId ?? null,
+        replyToSenderId: replyTo?.senderId ?? null,
+        replyToSnippet: replyTo?.snippet ?? null,
       };
       await upsertMessage(db, {
         message_id: envelope.messageId,
@@ -287,6 +324,14 @@ export function useConversation({
         media_duration_ms: media?.durationMs ?? null,
         edited: 0,
         deleted: 0,
+        forwarded: 0,
+        deleted_for_me: 0,
+        attachments_json: attachmentDtos ? JSON.stringify(attachmentDtos) : null,
+        reply_to_message_id: envelope.replyToMessageId,
+        reply_to_conversation_id: envelope.replyToConversationId,
+        reply_to_sender_id: envelope.replyToSenderId,
+        reply_to_snippet: envelope.replyToSnippet,
+        pinned: 0,
       });
       await upsertConversation(db, conversationId, titleRef.current, envelope.sentAt, avatarRef.current, isGroup);
       await reload();
@@ -294,6 +339,16 @@ export function useConversation({
       socketRef.current?.send(envelope);
     },
     [conversationId, db, groupId, isGroup, recipientId, reload, stopTyping, userId]
+  );
+
+  /** Toggles a message's shared pin — optimistic local update, then synced via /chat.pin. */
+  const pinMessage = useCallback(
+    async (messageId: string, pinned: boolean) => {
+      await setPinnedLocally(db, messageId, pinned);
+      await reload();
+      socketRef.current?.sendPin({ conversationId, messageId, pinned });
+    },
+    [conversationId, db, reload]
   );
 
   const editMessage = useCallback(
@@ -305,14 +360,27 @@ export function useConversation({
     [conversationId, db, reload]
   );
 
+  /**
+   * "everyone" (own messages only, enforced server-side too) marks the
+   * shared row deleted and syncs to every participant. "me" only ever
+   * touches this device's local deleted_for_me column — no shared mutation,
+   * no optimistic broadcast expectation, since the server never echoes it
+   * back to the acting user either.
+   */
   const deleteMessage = useCallback(
-    async (messageId: string) => {
+    async (messageId: string, scope: 'everyone' | 'me') => {
+      if (scope === 'me') {
+        await markDeletedForMe(db, messageId);
+        await reload();
+        socketRef.current?.sendDelete({ conversationId, messageId, scope: 'ME' });
+        return;
+      }
       await applyMessageMutation(db, messageId, { ciphertext: null, edited: false, deleted: true });
       await reload();
-      socketRef.current?.sendDelete({ conversationId, messageId });
+      socketRef.current?.sendDelete({ conversationId, messageId, scope: 'EVERYONE' });
     },
     [conversationId, db, reload]
   );
 
-  return { messages, sendMessage, editMessage, deleteMessage, typingUserIds, notifyTyping };
+  return { messages, sendMessage, editMessage, deleteMessage, pinMessage, typingUserIds, notifyTyping };
 }

@@ -174,6 +174,18 @@ export default function SettingsScreen() {
           colors={colors}
           icon={
             <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={colors.brand600} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <Rect x={2} y={4} width={20} height={13} rx={2} />
+              <Path d="M8 21h8M12 17v4" />
+            </Svg>
+          }
+          label="Logged-in devices"
+          onPress={() => router.push('/(tabs)/settings/devices' as never)}
+        />
+        <Row
+          styles={styles}
+          colors={colors}
+          icon={
+            <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={colors.brand600} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
               <Path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
             </Svg>
           }

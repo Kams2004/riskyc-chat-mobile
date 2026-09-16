@@ -1,12 +1,12 @@
-import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 
 import { useAuth } from '../../../features/auth/AuthContext';
 import { useTheme } from '../../../features/theme/ThemeContext';
-import { deleteMyAccount, getUser } from '../../../features/users/api';
+import { deleteMyAccount, getUser, type UserResult } from '../../../features/users/api';
 import { maskIdentifier } from '../../../lib/mask';
 import { fonts, type Palette } from '../../../theme';
 
@@ -15,16 +15,24 @@ export default function AccountScreen() {
   const insets = useSafeAreaInsets();
   const styles = makeStyles(colors);
   const { userId, signOut } = useAuth();
-  const [identifier, setIdentifier] = useState<string | null>(null);
+  const [user, setUser] = useState<UserResult | null>(null);
   const [isRevealed, setIsRevealed] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  useEffect(() => {
-    if (!userId) return;
-    getUser(userId)
-      .then((user) => setIdentifier(user.email ?? user.phoneNumber))
-      .catch(() => {});
-  }, [userId]);
+  // Re-fetches every time this screen regains focus, not just on mount — a
+  // change-identifier round trip pushes forward then pops back here, and a
+  // plain useEffect (mount-only) would keep showing the stale value.
+  useFocusEffect(
+    useCallback(() => {
+      if (!userId) return;
+      getUser(userId)
+        .then(setUser)
+        .catch(() => {});
+    }, [userId])
+  );
+
+  const identifier = user ? (user.email ?? user.phoneNumber) : null;
+  const identifierMode: 'phone' | 'email' = user?.email ? 'email' : 'phone';
 
   function confirmDelete() {
     Alert.alert(
@@ -69,6 +77,15 @@ export default function AccountScreen() {
         {!!identifier && <Text style={styles.revealHint}>{isRevealed ? 'Tap to hide' : 'Tap to reveal'}</Text>}
       </TouchableOpacity>
 
+      {!!identifier && (
+        <TouchableOpacity
+          style={styles.changeButton}
+          onPress={() => router.push({ pathname: '/(tabs)/settings/change-identifier', params: { mode: identifierMode } })}
+        >
+          <Text style={styles.changeLabel}>Change {identifierMode === 'phone' ? 'phone number' : 'email'}</Text>
+        </TouchableOpacity>
+      )}
+
       <View style={{ flex: 1 }} />
 
       <TouchableOpacity style={styles.deleteButton} onPress={confirmDelete} disabled={isDeleting}>
@@ -88,6 +105,8 @@ function makeStyles(colors: Palette) {
     label: { fontFamily: fonts.sansSemiBold, fontSize: 11, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1 },
     value: { fontFamily: fonts.sansMedium, fontSize: 15, color: colors.textPrimary },
     revealHint: { fontFamily: fonts.sans, fontSize: 11.5, color: colors.textMuted, marginTop: 2 },
+    changeButton: { paddingVertical: 14, paddingHorizontal: 4 },
+    changeLabel: { fontFamily: fonts.sansSemiBold, fontSize: 14, color: colors.brand600 },
     deleteButton: { paddingVertical: 14, alignItems: 'center' },
     deleteLabel: { fontFamily: fonts.sansSemiBold, fontSize: 15, color: colors.brand700 },
   });

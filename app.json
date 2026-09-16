@@ -59,7 +59,17 @@
           "icon": "./assets/notification-icon.png",
           "color": "#ff1a5e",
           "defaultChannel": "messages",
-          "sounds": ["./assets/sounds/notification.wav", "./assets/sounds/ringtone.wav"]
+          "sounds": [
+            "./assets/sounds/notification.wav",
+            "./assets/sounds/ringtone.wav"
+          ]
+        }
+      ],
+      "expo-video",
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "RiskyC Chat uses your contacts to show you which of your friends are already using the app — only phone numbers/emails are checked against accounts, nothing is uploaded or shared."
         }
       ]
     ],

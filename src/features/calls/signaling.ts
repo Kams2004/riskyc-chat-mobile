@@ -4,7 +4,14 @@ import { messagingWebSocketUrl } from '../../lib/config';
 
 export type CallType = 'AUDIO' | 'VIDEO';
 
-export type CallInvite = { callId: string; fromUserId: string; toUserId: string; type: CallType; sdpOffer: string };
+export type CallInvite = {
+  callId: string;
+  fromUserId: string;
+  toUserId: string;
+  type: CallType;
+  sdpOffer: string;
+  callerName?: string | null;
+};
 export type CallAnswer = { callId: string; fromUserId: string; sdpAnswer: string };
 export type CallIceCandidate = {
   callId: string;

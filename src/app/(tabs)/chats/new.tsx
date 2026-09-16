@@ -1,6 +1,7 @@
+import * as Contacts from 'expo-contacts';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, FlatList, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 
@@ -9,8 +10,18 @@ import { KeyboardScreen } from '../../../components/KeyboardScreen';
 import { useAuth } from '../../../features/auth/AuthContext';
 import { conversationIdFor } from '../../../features/messaging/conversationId';
 import { useTheme } from '../../../features/theme/ThemeContext';
-import { searchUsers, type UserResult } from '../../../features/users/api';
+import { config } from '../../../lib/config';
+import { matchContacts, type UserResult } from '../../../features/users/api';
 import { fonts, type Palette } from '../../../theme';
+
+type LoadState = 'loading' | 'granted' | 'denied';
+
+/** Loose normalization (strip everything but leading + and digits) — good enough to match the app's own simple "+237..." storage format without pulling in a full libphonenumber dependency. */
+function normalizePhone(raw: string): string {
+  const trimmed = raw.trim();
+  const plus = trimmed.startsWith('+') ? '+' : '';
+  return plus + trimmed.replace(/[^\d]/g, '');
+}
 
 export default function NewConversationScreen() {
   const { colors } = useTheme();
@@ -19,31 +30,65 @@ export default function NewConversationScreen() {
   const { userId } = useAuth();
 
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<UserResult[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [loadState, setLoadState] = useState<LoadState>('loading');
+  const [contactUsers, setContactUsers] = useState<UserResult[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  // Contacts-only discovery: reads the device's own contacts ONCE, matches
+  // them against accounts server-side (see UserController#matchContacts),
+  // and every search below filters that already-matched set locally rather
+  // than ever hitting a free-text/global search — so a user can only find
+  // and start a chat with people they've already got in their phone or SIM
+  // contacts, not a stranger's account. Browsers have no contacts API, so
+  // this is mobile-only; web's global search is a documented platform gap,
+  // not something to fake here.
   useEffect(() => {
     let cancelled = false;
-    setIsLoading(true);
-    setError(null);
-    const timer = setTimeout(() => {
-      searchUsers(query)
-        .then((users) => {
-          if (!cancelled) setResults(users);
-        })
-        .catch((e) => {
-          if (!cancelled) setError(e instanceof Error ? e.message : 'Could not load users');
-        })
-        .finally(() => {
-          if (!cancelled) setIsLoading(false);
-        });
-    }, 250);
+    (async () => {
+      const permission = await Contacts.requestPermissionsAsync();
+      if (!permission.granted) {
+        if (!cancelled) setLoadState('denied');
+        return;
+      }
+      try {
+        const details = await Contacts.Contact.getAllDetails([Contacts.ContactField.PHONES, Contacts.ContactField.EMAILS]);
+        const phoneNumbers = new Set<string>();
+        const emails = new Set<string>();
+        for (const contact of details) {
+          for (const phone of contact.phones ?? []) {
+            if (phone.number) phoneNumbers.add(normalizePhone(phone.number));
+          }
+          for (const email of contact.emails ?? []) {
+            if (email.address) emails.add(email.address.trim().toLowerCase());
+          }
+        }
+        const matched = await matchContacts([...phoneNumbers], [...emails]);
+        if (!cancelled) {
+          setContactUsers(matched);
+          setLoadState('granted');
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : 'Could not load your contacts');
+          setLoadState('granted');
+        }
+      }
+    })();
     return () => {
       cancelled = true;
-      clearTimeout(timer);
     };
-  }, [query]);
+  }, []);
+
+  const results = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return contactUsers;
+    return contactUsers.filter(
+      (u) =>
+        (u.displayName ?? '').toLowerCase().includes(q) ||
+        (u.phoneNumber ?? '').toLowerCase().includes(q) ||
+        (u.email ?? '').toLowerCase().includes(q)
+    );
+  }, [contactUsers, query]);
 
   function openConversationWith(user: UserResult) {
     if (!userId) return;
@@ -56,6 +101,15 @@ export default function NewConversationScreen() {
         recipientAvatarObjectKey: user.avatarObjectKey ?? '',
       },
     });
+  }
+
+  async function inviteFriend() {
+    const url = `${config.webAppUrl}/invite`;
+    try {
+      await Share.share({ message: `Join me on RiskyC Chat: ${url}`, url });
+    } catch {
+      // User dismissed the share sheet — nothing to do.
+    }
   }
 
   return (
@@ -92,6 +146,17 @@ export default function NewConversationScreen() {
         <Text style={styles.actionLabel}>New contact</Text>
       </TouchableOpacity>
 
+      <TouchableOpacity style={styles.actionRow} onPress={inviteFriend}>
+        <View style={[styles.actionIconCircle, { backgroundColor: colors.brand700 }]}>
+          <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <Path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+            <Path d="M16 6l-4-4-4 4" />
+            <Path d="M12 2v13" />
+          </Svg>
+        </View>
+        <Text style={styles.actionLabel}>Invite a friend</Text>
+      </TouchableOpacity>
+
       <View style={styles.searchBar}>
         <Svg width={17} height={17} viewBox="0 0 24 24" fill="none" stroke={colors.brand300} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
           <Path d="M11 3a8 8 0 1 0 0 16 8 8 0 0 0 0-16z" />
@@ -99,34 +164,44 @@ export default function NewConversationScreen() {
         </Svg>
         <TextInput
           style={styles.searchInput}
-          placeholder="Search by name or email"
+          placeholder="Search your contacts by name or number"
           placeholderTextColor={colors.textMuted}
           value={query}
           onChangeText={setQuery}
           autoCapitalize="none"
-          autoFocus
         />
       </View>
 
-      {isLoading && (
+      {loadState === 'loading' && (
         <View style={styles.stateBox}>
           <ActivityIndicator color={colors.brand500} />
         </View>
       )}
 
-      {!isLoading && error && (
+      {loadState === 'denied' && (
+        <View style={styles.stateBox}>
+          <Text style={styles.emptyText}>
+            RiskyC Chat only shows people already in your contacts, to keep strangers from starting a chat with you.
+            {'\n\n'}Allow contacts access in your device settings to see who's already on RiskyC Chat.
+          </Text>
+        </View>
+      )}
+
+      {loadState === 'granted' && error && (
         <View style={styles.stateBox}>
           <Text style={styles.errorText}>{error}</Text>
         </View>
       )}
 
-      {!isLoading && !error && results.length === 0 && (
+      {loadState === 'granted' && !error && results.length === 0 && (
         <View style={styles.stateBox}>
-          <Text style={styles.emptyText}>{query ? 'No one matches that search.' : 'No other users yet.'}</Text>
+          <Text style={styles.emptyText}>
+            {query ? 'No one in your contacts matches that search.' : "None of your contacts are on RiskyC Chat yet — try inviting one!"}
+          </Text>
         </View>
       )}
 
-      {!isLoading && !error && (
+      {loadState === 'granted' && !error && (
         <FlatList
           data={results}
           keyExtractor={(item) => item.userId}
@@ -166,12 +241,13 @@ function makeStyles(colors: Palette) {
       borderRadius: 14,
       paddingHorizontal: 16,
       paddingVertical: 4,
+      marginTop: 4,
       marginBottom: 12,
     },
     searchInput: { flex: 1, fontFamily: fonts.sans, fontSize: 14.5, color: colors.textPrimary, paddingVertical: 10 },
-    stateBox: { alignItems: 'center', marginTop: 48 },
+    stateBox: { alignItems: 'center', marginTop: 48, paddingHorizontal: 12 },
     errorText: { fontFamily: fonts.sans, color: colors.brand800, textAlign: 'center', paddingHorizontal: 24 },
-    emptyText: { fontFamily: fonts.sans, color: colors.textMuted },
+    emptyText: { fontFamily: fonts.sans, color: colors.textMuted, textAlign: 'center', lineHeight: 19 },
     row: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.hairline },
     rowName: { fontFamily: fonts.sansSemiBold, fontSize: 15.5, color: colors.textPrimary },
     rowSubtitle: { fontFamily: fonts.sans, fontSize: 12.5, color: colors.textMuted, marginTop: 2 },

@@ -6,7 +6,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
  * half of the "local-first sync" approach from the architecture proposal —
  * the UI always reads from SQLite, never waits on the network round trip.
  */
-const CURRENT_VERSION = 4;
+const CURRENT_VERSION = 7;
 
 export async function migrateDbIfNeeded(db: SQLiteDatabase) {
   const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
@@ -79,7 +79,41 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
     version = 4;
   }
 
-  // Future schema changes: `if (version === 4) { ...; version = 5; }` and so on.
+  if (version === 4) {
+    await db.execAsync(`
+      ALTER TABLE messages ADD COLUMN forwarded INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE messages ADD COLUMN deleted_for_me INTEGER NOT NULL DEFAULT 0;
+    `);
+    version = 5;
+  }
+
+  if (version === 5) {
+    // JSON-serialized AttachmentItem[] (see db.ts) for a multi-image/video
+    // gallery send — a plain TEXT column rather than a child table (unlike
+    // the server's message_attachment table) since this is read-only
+    // display data on the client, not something ever queried/filtered by
+    // attachment fields individually.
+    await db.execAsync(`ALTER TABLE messages ADD COLUMN attachments_json TEXT;`);
+    version = 6;
+  }
+
+  if (version === 6) {
+    // Reply-to fields are denormalized straight onto the message row (see
+    // Message.java's own comment) — generated client-side at send time so a
+    // "reply privately" recipient, whose local DB never had the original
+    // conversation synced, still has enough to render the quote. `pinned`
+    // is a single shared per-conversation flag, not a separate table.
+    await db.execAsync(`
+      ALTER TABLE messages ADD COLUMN reply_to_message_id TEXT;
+      ALTER TABLE messages ADD COLUMN reply_to_conversation_id TEXT;
+      ALTER TABLE messages ADD COLUMN reply_to_sender_id TEXT;
+      ALTER TABLE messages ADD COLUMN reply_to_snippet TEXT;
+      ALTER TABLE messages ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;
+    `);
+    version = 7;
+  }
+
+  // Future schema changes: `if (version === 7) { ...; version = 8; }` and so on.
 
   await db.execAsync(`PRAGMA user_version = ${CURRENT_VERSION}`);
 }

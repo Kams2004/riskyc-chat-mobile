@@ -3,12 +3,16 @@ import { DeviceEventEmitter } from 'react-native';
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import {
+  advanceMessagesStatus,
   applyMessageMutation,
+  applyReceipt,
   getConversationTitle,
+  recomputeGroupMessageStatus,
   upsertConversation,
   upsertGroupMembers,
   upsertMessage,
   useSQLiteContext,
+  type LocalMessage,
 } from '../../data/db';
 import { useAuth } from '../auth/AuthContext';
 import { getGroup } from '../groups/api';
@@ -99,6 +103,14 @@ export function useInboxSocket() {
           media_duration_ms: envelope.mediaDurationMs ?? null,
           edited: envelope.edited ? 1 : 0,
           deleted: envelope.deleted ? 1 : 0,
+          forwarded: envelope.forwarded ? 1 : 0,
+          deleted_for_me: 0,
+          attachments_json: envelope.attachments && envelope.attachments.length > 0 ? JSON.stringify(envelope.attachments) : null,
+          reply_to_message_id: envelope.replyToMessageId ?? null,
+          reply_to_conversation_id: envelope.replyToConversationId ?? null,
+          reply_to_sender_id: envelope.replyToSenderId ?? null,
+          reply_to_snippet: envelope.replyToSnippet ?? null,
+          pinned: envelope.pinned ? 1 : 0,
         });
         playNotificationSound();
 
@@ -146,7 +158,25 @@ export function useInboxSocket() {
           ciphertext: mutation.ciphertext,
           edited: mutation.edited,
           deleted: mutation.deleted,
+          pinned: mutation.pinned,
         });
+        DeviceEventEmitter.emit(CONVERSATIONS_CHANGED_EVENT);
+      });
+
+      // This account's own read/delivery state, changed on one of its OTHER
+      // devices (see ChatController#ack/#ackGroup) — applies the exact same
+      // local-status update useConversation.ts's own subscriptions already
+      // do, so the chat list's unread badge (a derived COUNT query, see
+      // db.ts) self-corrects without that conversation's thread ever being
+      // opened on this device.
+      socket.subscribeToUserReadState(async (update) => {
+        if (cancelled) return;
+        if ('messageIds' in update) {
+          await advanceMessagesStatus(db, update.messageIds, update.status.toLowerCase() as LocalMessage['status']);
+        } else {
+          await applyReceipt(db, update.messageId, update.userId, update.status.toLowerCase() as LocalMessage['status']);
+          await recomputeGroupMessageStatus(db, update.messageId, update.conversationId);
+        }
         DeviceEventEmitter.emit(CONVERSATIONS_CHANGED_EVENT);
       });
     });

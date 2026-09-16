@@ -1,8 +1,9 @@
+import * as Clipboard from 'expo-clipboard';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -24,7 +25,12 @@ import Svg, { Path, Rect } from 'react-native-svg';
 
 import { AttachmentSheet } from '../../../components/AttachmentSheet';
 import { Avatar } from '../../../components/Avatar';
+import { ChatOverflowMenu } from '../../../components/ChatOverflowMenu';
+import { ChatWallpaper } from '../../../components/ChatWallpaper';
+import { GalleryCaptionComposer, type PendingGalleryItem } from '../../../components/GalleryCaptionComposer';
 import { MediaCaptionComposer, type PendingMedia } from '../../../components/MediaCaptionComposer';
+import { MediaViewer } from '../../../components/MediaViewer';
+import { MessageAttachmentGrid } from '../../../components/MessageAttachmentGrid';
 import { VoiceMessageBubble } from '../../../components/VoiceMessageBubble';
 import { VoiceRecorder } from '../../../components/VoiceRecorder';
 import { useAuth } from '../../../features/auth/AuthContext';
@@ -33,20 +39,25 @@ import { getGroup } from '../../../features/groups/api';
 import { uploadMedia } from '../../../features/media/api';
 import { useMediaUrl } from '../../../features/media/useMediaUrl';
 import {
+  conversationIdFor,
   looksLikeUnresolvedName,
+  otherPartyFrom,
   UNRESOLVED_PERSON_PLACEHOLDER,
   UNRESOLVED_TITLE_PLACEHOLDER,
 } from '../../../features/messaging/conversationId';
-import { useConversation } from '../../../features/messaging/useConversation';
+import { useConversation, type ReplyToDraft } from '../../../features/messaging/useConversation';
 import { usePresence } from '../../../features/presence/usePresence';
 import { useTheme } from '../../../features/theme/ThemeContext';
-import { getUser } from '../../../features/users/api';
+import { blockUser, getUser, reportUser } from '../../../features/users/api';
 import { fonts, gradients, type Palette } from '../../../theme';
 import {
+  clearConversationMessages,
   getReceiptsForMessage,
   listGroupMembers,
+  parseAttachments,
   upsertGroupMembers,
   useSQLiteContext,
+  type AttachmentItem,
   type LocalGroupMember,
   type LocalMessage,
 } from '../../../data/db';
@@ -90,7 +101,7 @@ function MessageTicks({ status }: { status: LocalMessage['status'] }) {
   );
 }
 
-function MessageImage({ objectKey }: { objectKey: string | null }) {
+function MessageImage({ objectKey, onPress }: { objectKey: string | null; onPress?: () => void }) {
   const url = useMediaUrl(objectKey);
   if (!url) {
     return (
@@ -99,7 +110,11 @@ function MessageImage({ objectKey }: { objectKey: string | null }) {
       </View>
     );
   }
-  return <Image source={{ uri: url }} style={imageStyles.image} />;
+  return (
+    <TouchableOpacity onPress={onPress} disabled={!onPress} activeOpacity={0.9}>
+      <Image source={{ uri: url }} style={imageStyles.image} />
+    </TouchableOpacity>
+  );
 }
 
 const imageStyles = StyleSheet.create({
@@ -151,12 +166,14 @@ function CallLogRow({
   durationMs,
   isMine,
   colors,
+  onCallBack,
 }: {
   callType: string | null;
   outcome: string;
   durationMs: number | null;
   isMine: boolean;
   colors: Palette;
+  onCallBack?: () => void;
 }) {
   const isVideo = callType === 'VIDEO';
   const missed = outcome === 'MISSED';
@@ -168,7 +185,12 @@ function CallLogRow({
   else if (declined) label = isMine ? `${label} · Declined` : `${label} · You declined`;
 
   return (
-    <View style={[callLogStyles.pill, { backgroundColor: colors.tint1 }]}>
+    <TouchableOpacity
+      style={[callLogStyles.pill, { backgroundColor: colors.tint1 }]}
+      onPress={onCallBack}
+      disabled={!onCallBack}
+      activeOpacity={0.7}
+    >
       <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
         {isMine ? <Path d="M7 17L17 7M17 7H9M17 7v8" /> : <Path d="M17 7L7 17M7 17h8M7 17V9" />}
       </Svg>
@@ -176,7 +198,12 @@ function CallLogRow({
       {!!durationMs && durationMs > 0 && (
         <Text style={[callLogStyles.duration, { color: colors.textMuted }]}>{formatCallDuration(durationMs)}</Text>
       )}
-    </View>
+      {!!onCallBack && (
+        <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={colors.brand600} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+          <Path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.902.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.908.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
+        </Svg>
+      )}
+    </TouchableOpacity>
   );
 }
 
@@ -241,17 +268,67 @@ function infoModalStyles(colors: Palette) {
   });
 }
 
+/** Quoted-message block shown atop a bubble (received reply) or above the composer (drafting a reply). Tappable to jump to the original. */
+function QuotedBlock({
+  senderLabel,
+  snippet,
+  onPress,
+  tint,
+  textColor,
+  labelColor,
+}: {
+  senderLabel: string;
+  snippet: string;
+  onPress?: () => void;
+  tint: string;
+  textColor: string;
+  labelColor: string;
+}) {
+  return (
+    <TouchableOpacity style={[quotedStyles.block, { backgroundColor: tint }]} onPress={onPress} disabled={!onPress} activeOpacity={0.7}>
+      <View style={[quotedStyles.bar, { backgroundColor: labelColor }]} />
+      <View style={{ flex: 1 }}>
+        <Text style={[quotedStyles.sender, { color: labelColor }]} numberOfLines={1}>{senderLabel}</Text>
+        <Text style={[quotedStyles.snippet, { color: textColor }]} numberOfLines={1}>{snippet}</Text>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+const quotedStyles = StyleSheet.create({
+  block: { flexDirection: 'row', gap: 8, borderRadius: 8, padding: 7, marginBottom: 6, alignItems: 'stretch' },
+  bar: { width: 3, borderRadius: 2 },
+  sender: { fontFamily: fonts.sansSemiBold, fontSize: 12 },
+  snippet: { fontFamily: fonts.sans, fontSize: 12.5, marginTop: 1 },
+});
+
 export default function ChatThreadScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = makeStyles(colors);
 
-  const { conversationId, recipientId, groupId, recipientName, recipientAvatarObjectKey } = useLocalSearchParams<{
+  const {
+    conversationId,
+    recipientId,
+    groupId,
+    recipientName,
+    recipientAvatarObjectKey,
+    scrollToMessageId,
+    replyMessageId,
+    replyConversationId,
+    replySenderId,
+    replySnippet,
+  } = useLocalSearchParams<{
     conversationId: string;
     recipientId?: string;
     groupId?: string;
     recipientName?: string;
     recipientAvatarObjectKey?: string;
+    scrollToMessageId?: string;
+    replyMessageId?: string;
+    replyConversationId?: string;
+    replySenderId?: string;
+    replySnippet?: string;
   }>();
   const isGroup = !!groupId;
   const db = useSQLiteContext();
@@ -261,6 +338,8 @@ export default function ChatThreadScreen() {
   );
   const [resolvedAvatarKey, setResolvedAvatarKey] = useState<string | null | undefined>(recipientAvatarObjectKey);
   const [groupMembers, setGroupMembers] = useState<LocalGroupMember[]>([]);
+  const [onlyAdminsCanMessage, setOnlyAdminsCanMessage] = useState(false);
+  const isGroupAdmin = groupMembers.find((m) => m.user_id === userId)?.role === 'ADMIN';
 
   // Self-heals a conversation whose stored title is just the other side's
   // raw id (e.g. opened before name resolution existed, or via a route that
@@ -273,6 +352,7 @@ export default function ChatThreadScreen() {
       getGroup(groupId).then(async (group) => {
         setResolvedName(group.name);
         setResolvedAvatarKey(group.avatarObjectKey);
+        setOnlyAdminsCanMessage(group.onlyAdminsCanMessage);
         const withNames = await Promise.all(
           group.members.map(async (m) => {
             const user = await getUser(m.userId).catch(() => null);
@@ -296,7 +376,7 @@ export default function ChatThreadScreen() {
   }, [db, groupId, isGroup, recipientId]);
 
   const { startCall } = useCall();
-  const { messages, sendMessage, editMessage, deleteMessage, typingUserIds, notifyTyping } = useConversation({
+  const { messages, sendMessage, editMessage, deleteMessage, pinMessage, typingUserIds, notifyTyping } = useConversation({
     conversationId,
     recipientId,
     groupId,
@@ -309,13 +389,160 @@ export default function ChatThreadScreen() {
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   const [messageInfoRows, setMessageInfoRows] = useState<ReceiptRow[] | null>(null);
   const [isRecording, setIsRecording] = useState(false);
+  const [viewer, setViewer] = useState<{ items: AttachmentItem[]; index: number } | null>(null);
   const [attachmentSheetVisible, setAttachmentSheetVisible] = useState(false);
+  const [overflowMenuVisible, setOverflowMenuVisible] = useState(false);
   const [pendingMedia, setPendingMedia] = useState<PendingMedia | null>(null);
   const [pendingMediaMimeType, setPendingMediaMimeType] = useState<string | undefined>(undefined);
+  const [pendingGallery, setPendingGallery] = useState<PendingGalleryItem[] | null>(null);
+  const [replyDraft, setReplyDraft] = useState<ReplyToDraft | null>(null);
+  const [moreMenuMessage, setMoreMenuMessage] = useState<LocalMessage | null>(null);
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+  const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const didConsumeReplyParamsRef = useRef(false);
+  const didConsumeScrollParamRef = useRef(false);
 
   function memberName(userId2: string): string {
+    if (userId2 === userId) return 'You';
+    if (!isGroup && userId2 === recipientId) return resolvedName || UNRESOLVED_PERSON_PLACEHOLDER;
     return groupMembers.find((m) => m.user_id === userId2)?.display_name || UNRESOLVED_PERSON_PLACEHOLDER;
   }
+
+  function snippetFor(message: LocalMessage): string {
+    if (message.media_type === 'IMAGE') return '📷 Photo';
+    if (message.media_type === 'VIDEO') return '🎥 Video';
+    if (message.media_type === 'AUDIO') return '🎤 Voice message';
+    if (message.media_type === 'FILE') return '📎 Document';
+    const attachments = parseAttachments(message);
+    if (attachments.length > 0) return `📷 ${attachments.length} photos`;
+    return message.ciphertext.length > 80 ? message.ciphertext.slice(0, 77) + '...' : message.ciphertext;
+  }
+
+  function startReply(message: LocalMessage) {
+    setEditingMessageId(null);
+    setReplyDraft({
+      messageId: message.message_id,
+      conversationId,
+      senderId: message.sender_id,
+      snippet: snippetFor(message),
+    });
+    setSelectedMessageId(null);
+  }
+
+  /** Same-conversation: scroll+briefly highlight. Cross-conversation (a "reply privately" quote pointing back at a group, or vice versa): resolve whether the target id is a group or a 1:1 and navigate there. */
+  async function navigateToMessage(targetConversationId: string, messageId: string) {
+    if (targetConversationId === conversationId) {
+      const index = messages.findIndex((m) => m.message_id === messageId);
+      if (index === -1) return;
+      try {
+        listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.4 });
+      } catch {
+        // handled by onScrollToIndexFailed below
+      }
+      if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+      setHighlightedMessageId(messageId);
+      highlightTimerRef.current = setTimeout(() => setHighlightedMessageId(null), 2000);
+      return;
+    }
+    if (!userId) return;
+    try {
+      const group = await getGroup(targetConversationId);
+      router.push({
+        pathname: '/(tabs)/chats/[conversationId]',
+        params: { conversationId: targetConversationId, groupId: targetConversationId, recipientName: group.name, scrollToMessageId: messageId },
+      });
+    } catch {
+      const otherId = otherPartyFrom(targetConversationId, userId);
+      const user = await getUser(otherId).catch(() => null);
+      router.push({
+        pathname: '/(tabs)/chats/[conversationId]',
+        params: {
+          conversationId: targetConversationId,
+          recipientId: otherId,
+          recipientName: user?.displayName || UNRESOLVED_TITLE_PLACEHOLDER,
+          recipientAvatarObjectKey: user?.avatarObjectKey ?? undefined,
+          scrollToMessageId: messageId,
+        },
+      });
+    }
+  }
+
+  /** Opens a 1:1 with the original message's sender, pre-filled with a reply quoting it — WhatsApp's "reply privately" from a group. */
+  async function replyPrivately(message: LocalMessage) {
+    setSelectedMessageId(null);
+    setMoreMenuMessage(null);
+    if (!userId) return;
+    const targetId = message.sender_id;
+    const targetConversationId = conversationIdFor(userId, targetId);
+    const targetUser = await getUser(targetId).catch(() => null);
+    router.push({
+      pathname: '/(tabs)/chats/[conversationId]',
+      params: {
+        conversationId: targetConversationId,
+        recipientId: targetId,
+        recipientName: targetUser?.displayName || memberName(targetId),
+        recipientAvatarObjectKey: targetUser?.avatarObjectKey ?? undefined,
+        replyMessageId: message.message_id,
+        replyConversationId: conversationId,
+        replySenderId: targetId,
+        replySnippet: snippetFor(message),
+      },
+    });
+  }
+
+  async function togglePin(message: LocalMessage) {
+    setSelectedMessageId(null);
+    setMoreMenuMessage(null);
+    await pinMessage(message.message_id, !message.pinned);
+  }
+
+  function confirmReportSender(message: LocalMessage) {
+    setSelectedMessageId(null);
+    setMoreMenuMessage(null);
+    const name = memberName(message.sender_id);
+    Alert.alert(`Report ${name}?`, 'Tell us briefly what happened.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Report',
+        style: 'destructive',
+        onPress: () => reportUser(message.sender_id, 'Reported from a group message').catch(() => {}),
+      },
+    ]);
+  }
+
+  // Prefills the reply-composer state once, from a "reply privately" navigation.
+  useEffect(() => {
+    if (didConsumeReplyParamsRef.current) return;
+    if (!replyMessageId || !replyConversationId || !replySenderId || !replySnippet) return;
+    didConsumeReplyParamsRef.current = true;
+    setReplyDraft({ messageId: replyMessageId, conversationId: replyConversationId, senderId: replySenderId, snippet: replySnippet });
+  }, [replyMessageId, replyConversationId, replySenderId, replySnippet]);
+
+  // Jumps to (and briefly highlights) a specific message once it's loaded —
+  // arriving via a quoted-reply tap from a DIFFERENT conversation.
+  useEffect(() => {
+    if (didConsumeScrollParamRef.current) return;
+    if (!scrollToMessageId || messages.length === 0) return;
+    const index = messages.findIndex((m) => m.message_id === scrollToMessageId);
+    if (index === -1) return;
+    didConsumeScrollParamRef.current = true;
+    setTimeout(() => {
+      try {
+        listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.4 });
+      } catch {
+        // handled by onScrollToIndexFailed below
+      }
+    }, 300);
+    setHighlightedMessageId(scrollToMessageId);
+    highlightTimerRef.current = setTimeout(() => setHighlightedMessageId(null), 2500);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages, scrollToMessageId]);
+
+  /** Most recently pinned, non-deleted message — feeds the thread's pin banner. Derived from `messages` (already in sync via SQLite reload) rather than a separate query. */
+  const pinnedMessage = useMemo(() => {
+    const pinned = messages.filter((m) => m.pinned && !m.deleted);
+    return pinned.length > 0 ? pinned[pinned.length - 1] : null;
+  }, [messages]);
 
   async function showMessageInfo(message: LocalMessage) {
     const receipts = await getReceiptsForMessage(db, message.message_id);
@@ -369,13 +596,16 @@ export default function ChatThreadScreen() {
       setEditingMessageId(null);
       await editMessage(messageId, text);
     } else {
-      await sendMessage(text);
+      const reply = replyDraft ?? undefined;
+      setReplyDraft(null);
+      await sendMessage(text, undefined, undefined, reply);
     }
   }
 
   function startEdit(message: LocalMessage) {
     setEditingMessageId(message.message_id);
     setDraft(message.ciphertext);
+    setReplyDraft(null);
     setSelectedMessageId(null);
   }
 
@@ -384,18 +614,51 @@ export default function ChatThreadScreen() {
     setDraft('');
   }
 
-  function confirmDelete(messageId: string) {
-    Alert.alert('Delete message?', 'This deletes it for both of you.', [
+  /** Own message: WhatsApp-style choice between the two delete scopes. */
+  function confirmDeleteMine(messageId: string) {
+    Alert.alert('Delete message?', undefined, [
       { text: 'Cancel', style: 'cancel' },
       {
-        text: 'Delete',
+        text: 'Delete for me',
+        onPress: async () => {
+          setSelectedMessageId(null);
+          await deleteMessage(messageId, 'me');
+        },
+      },
+      {
+        text: 'Delete for everyone',
         style: 'destructive',
         onPress: async () => {
           setSelectedMessageId(null);
-          await deleteMessage(messageId);
+          await deleteMessage(messageId, 'everyone');
         },
       },
     ]);
+  }
+
+  /** Received message: only one destructive option, so a plain confirm — no scope to choose between. */
+  function confirmDeleteForMe(messageId: string) {
+    Alert.alert('Delete message?', 'This only removes it from your side — the sender keeps their copy.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete for me',
+        style: 'destructive',
+        onPress: async () => {
+          setSelectedMessageId(null);
+          await deleteMessage(messageId, 'me');
+        },
+      },
+    ]);
+  }
+
+  async function copyMessage(message: LocalMessage) {
+    setSelectedMessageId(null);
+    await Clipboard.setStringAsync(message.ciphertext);
+  }
+
+  function forwardSelected(messageId: string) {
+    setSelectedMessageId(null);
+    router.push({ pathname: '/(tabs)/chats/forward', params: { messageId } });
   }
 
   async function pickFromLibrary() {
@@ -404,11 +667,32 @@ export default function ChatThreadScreen() {
       Alert.alert('Permission needed', 'Allow photo library access to send a picture.');
       return;
     }
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });
-    if (!result.canceled && result.assets[0]) {
-      setPendingMediaMimeType(result.assets[0].mimeType);
-      setPendingMedia({ kind: 'image', uri: result.assets[0].uri });
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images', 'videos'],
+      allowsMultipleSelection: true,
+      selectionLimit: 10,
+      quality: 0.8,
+    });
+    if (result.canceled || result.assets.length === 0) return;
+
+    // A single image goes through the existing single-item composer
+    // (PendingMedia has no 'video' kind) — a single VIDEO, or anything
+    // multi-select, goes through the gallery composer instead, which
+    // natively supports both media types.
+    if (result.assets.length === 1 && result.assets[0].type !== 'video') {
+      const asset = result.assets[0];
+      setPendingMediaMimeType(asset.mimeType);
+      setPendingMedia({ kind: 'image', uri: asset.uri });
+      return;
     }
+
+    setPendingGallery(
+      result.assets.map((asset) => ({
+        uri: asset.uri,
+        type: asset.type === 'video' ? 'VIDEO' : 'IMAGE',
+        mimeType: asset.mimeType,
+      }))
+    );
   }
 
   async function pickFromCamera() {
@@ -436,19 +720,21 @@ export default function ChatThreadScreen() {
   async function handleSendMedia(caption: string): Promise<boolean> {
     if (!pendingMedia) return false;
     const media = pendingMedia;
+    const reply = replyDraft ?? undefined;
     try {
       if (media.kind === 'image') {
         const objectKey = await uploadMedia(media.uri, pendingMediaMimeType ?? 'image/jpeg');
-        await sendMessage(caption, { type: 'IMAGE', objectKey });
+        await sendMessage(caption, { type: 'IMAGE', objectKey }, undefined, reply);
       } else {
         const objectKey = await uploadMedia(media.uri, pendingMediaMimeType ?? 'application/octet-stream');
-        await sendMessage(caption, { type: 'FILE', objectKey, fileName: media.name });
+        await sendMessage(caption, { type: 'FILE', objectKey, fileName: media.name }, undefined, reply);
       }
       // Only close the preview once the upload+send actually succeeded — closing
       // immediately on tap left the screen showing nothing while a slow/failed
       // upload (camera shots are large, uncompressed until this step) ran with
       // no visible feedback, which read as "the app did nothing".
       setPendingMedia(null);
+      setReplyDraft(null);
       return true;
     } catch (e) {
       console.warn('[ChatThreadScreen] media send failed', e);
@@ -457,9 +743,33 @@ export default function ChatThreadScreen() {
     }
   }
 
+  async function handleSendGallery(caption: string): Promise<boolean> {
+    if (!pendingGallery || pendingGallery.length === 0) return false;
+    const items = pendingGallery;
+    const reply = replyDraft ?? undefined;
+    try {
+      const uploaded = await Promise.all(
+        items.map(async (item) => {
+          const objectKey = await uploadMedia(item.uri, item.mimeType ?? (item.type === 'VIDEO' ? 'video/mp4' : 'image/jpeg'));
+          return { type: item.type, objectKey };
+        })
+      );
+      await sendMessage(caption, undefined, uploaded, reply);
+      setPendingGallery(null);
+      setReplyDraft(null);
+      return true;
+    } catch (e) {
+      console.warn('[ChatThreadScreen] gallery send failed', e);
+      Alert.alert('Could not send', 'Please check your connection and try again.');
+      return false;
+    }
+  }
+
   async function handleSendVoice(objectKey: string, durationMs: number) {
     setIsRecording(false);
-    await sendMessage('', { type: 'AUDIO', objectKey, durationMs });
+    const reply = replyDraft ?? undefined;
+    setReplyDraft(null);
+    await sendMessage('', { type: 'AUDIO', objectKey, durationMs }, undefined, reply);
   }
 
   return (
@@ -472,8 +782,11 @@ export default function ChatThreadScreen() {
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.headerIdentity}
-          onPress={() => isGroup && router.push({ pathname: '/(tabs)/chats/group-info', params: { groupId } })}
-          disabled={!isGroup}
+          onPress={() =>
+            isGroup
+              ? router.push({ pathname: '/(tabs)/chats/group-info', params: { groupId } })
+              : recipientId && router.push({ pathname: '/(tabs)/chats/contact-details', params: { conversationId, userId: recipientId } })
+          }
         >
           <Avatar objectKey={resolvedAvatarKey} label={displayName} size={40} />
           <View style={{ flex: 1 }}>
@@ -519,11 +832,17 @@ export default function ChatThreadScreen() {
             <Rect x={1} y={5} width={15} height={14} rx={2} />
           </Svg>
         </TouchableOpacity>
+        <TouchableOpacity style={styles.headerActionTouchable} onPress={() => setOverflowMenuVisible(true)}>
+          <Svg width={20} height={20} viewBox="0 0 24 24" fill={colors.textPrimary}>
+            <Path d="M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM12 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4z" />
+          </Svg>
+        </TouchableOpacity>
       </View>
 
       {selectedMessageId && (() => {
         const selected = messages.find((m) => m.message_id === selectedMessageId);
         if (!selected) return null;
+        const selectedIsMine = selected.sender_id === userId;
         return (
           <View style={styles.selectionBar}>
             <TouchableOpacity style={styles.selectionAction} onPress={() => setSelectedMessageId(null)}>
@@ -532,34 +851,97 @@ export default function ChatThreadScreen() {
               </Svg>
             </TouchableOpacity>
             <View style={{ flex: 1 }} />
-            {isGroup && selected.sender_id === userId && (
+            {selectedIsMine && isGroup && (
               <TouchableOpacity style={styles.selectionAction} onPress={() => showMessageInfo(selected)}>
                 <Text style={styles.selectionActionLabel}>Info</Text>
               </TouchableOpacity>
             )}
-            {!selected.media_type && (
+            {selectedIsMine && !selected.media_type && (
               <TouchableOpacity style={styles.selectionAction} onPress={() => startEdit(selected)}>
                 <Text style={styles.selectionActionLabel}>Edit</Text>
               </TouchableOpacity>
             )}
-            <TouchableOpacity style={styles.selectionAction} onPress={() => confirmDelete(selected.message_id)}>
+            <TouchableOpacity style={styles.selectionAction} onPress={() => startReply(selected)}>
+              <Text style={styles.selectionActionLabel}>Reply</Text>
+            </TouchableOpacity>
+            {!isGroup && (
+              <TouchableOpacity style={styles.selectionAction} onPress={() => togglePin(selected)}>
+                <Text style={styles.selectionActionLabel}>{selected.pinned ? 'Unpin' : 'Pin'}</Text>
+              </TouchableOpacity>
+            )}
+            {!selected.media_type && (
+              <TouchableOpacity style={styles.selectionAction} onPress={() => copyMessage(selected)}>
+                <Text style={styles.selectionActionLabel}>Copy</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={styles.selectionAction} onPress={() => forwardSelected(selected.message_id)}>
+              <Text style={styles.selectionActionLabel}>Forward</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.selectionAction}
+              onPress={() => (selectedIsMine ? confirmDeleteMine(selected.message_id) : confirmDeleteForMe(selected.message_id))}
+            >
               <Text style={[styles.selectionActionLabel, { color: colors.brand700 }]}>Delete</Text>
             </TouchableOpacity>
+            {isGroup && (
+              <TouchableOpacity
+                style={styles.selectionAction}
+                onPress={() => {
+                  setMoreMenuMessage(selected);
+                  setSelectedMessageId(null);
+                }}
+              >
+                <Svg width={18} height={18} viewBox="0 0 24 24" fill={colors.textPrimary}>
+                  <Path d="M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM12 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4z" />
+                </Svg>
+              </TouchableOpacity>
+            )}
           </View>
         );
       })()}
 
+      {pinnedMessage && (
+        <TouchableOpacity style={styles.pinBanner} onPress={() => navigateToMessage(conversationId, pinnedMessage.message_id)}>
+          <Svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke={colors.brand600} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <Path d="M12 17v5M9 3h6l-1 6 3 3v2H7v-2l3-3-1-6z" />
+          </Svg>
+          <Text style={styles.pinBannerText} numberOfLines={1}>
+            {isGroup ? `${memberName(pinnedMessage.sender_id)}: ` : ''}{snippetFor(pinnedMessage)}
+          </Text>
+          <TouchableOpacity onPress={() => togglePin(pinnedMessage)} hitSlop={8}>
+            <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={colors.textMuted} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <Path d="M18 6L6 18M6 6l12 12" />
+            </Svg>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      )}
+
+      <View style={styles.list}>
+      <ChatWallpaper>
       <FlatList
         ref={listRef}
         data={messages}
         keyExtractor={(item) => item.message_id}
         contentContainerStyle={styles.listContent}
-        style={styles.list}
+        style={styles.listInner}
         onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
+        onScrollToIndexFailed={(info) => {
+          listRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
+          setTimeout(() => {
+            try {
+              listRef.current?.scrollToIndex({ index: info.index, animated: true, viewPosition: 0.4 });
+            } catch {
+              // best-effort — leaves the list at the approximate offset above
+            }
+          }, 100);
+        }}
         renderItem={({ item }) => {
           const isMine = item.sender_id === userId;
           const isSelected = selectedMessageId === item.message_id;
-          const canSelect = isMine && !item.deleted;
+          // Both own and received messages are selectable now — a received
+          // message just gets a smaller action set (delete-for-me, forward)
+          // in the selection bar above, rather than being excluded entirely.
+          const canSelect = !item.deleted && item.media_type !== 'CALL';
 
           if (item.deleted) {
             return (
@@ -577,6 +959,11 @@ export default function ChatThreadScreen() {
                 durationMs={item.media_duration_ms}
                 isMine={isMine}
                 colors={colors}
+                onCallBack={
+                  !isGroup && recipientId && resolvedName
+                    ? () => startCall(recipientId, resolvedName, item.media_file_name === 'VIDEO' ? 'VIDEO' : 'AUDIO')
+                    : undefined
+                }
               />
             );
           }
@@ -589,6 +976,7 @@ export default function ChatThreadScreen() {
                 styles.bubble,
                 isMine ? styles.outgoing : styles.incoming,
                 isSelected && styles.bubbleSelected,
+                highlightedMessageId === item.message_id && styles.bubbleHighlighted,
               ]}
             >
               {isMine ? (
@@ -597,9 +985,50 @@ export default function ChatThreadScreen() {
               {isGroup && !isMine && (
                 <Text style={styles.senderLabel}>{memberName(item.sender_id)}</Text>
               )}
+              {!!item.forwarded && (
+                <Text style={isMine ? styles.forwardedLabel : styles.forwardedLabelIncoming}>Forwarded</Text>
+              )}
+              {!!item.reply_to_message_id && (
+                <QuotedBlock
+                  senderLabel={memberName(item.reply_to_sender_id || '')}
+                  snippet={item.reply_to_snippet || ''}
+                  onPress={() => navigateToMessage(item.reply_to_conversation_id!, item.reply_to_message_id!)}
+                  tint={isMine ? 'rgba(255,255,255,0.18)' : colors.tint1}
+                  textColor={isMine ? 'rgba(255,255,255,0.85)' : colors.textMuted}
+                  labelColor={isMine ? '#ffffff' : colors.brand600}
+                />
+              )}
+              {(() => {
+                const attachments = parseAttachments(item);
+                if (attachments.length === 0) return null;
+                return (
+                  <View style={styles.mediaWrap}>
+                    <MessageAttachmentGrid items={attachments} onOpen={(index) => setViewer({ items: attachments, index })} />
+                  </View>
+                );
+              })()}
               {item.media_type === 'IMAGE' && (
                 <View style={styles.mediaWrap}>
-                  <MessageImage objectKey={item.media_object_key} />
+                  <MessageImage
+                    objectKey={item.media_object_key}
+                    onPress={
+                      item.media_object_key
+                        ? () =>
+                            setViewer({
+                              items: [
+                                {
+                                  position: 0,
+                                  mediaType: 'IMAGE',
+                                  mediaObjectKey: item.media_object_key!,
+                                  mediaFileName: item.media_file_name,
+                                  mediaDurationMs: null,
+                                },
+                              ],
+                              index: 0,
+                            })
+                        : undefined
+                    }
+                  />
                 </View>
               )}
               {item.media_type === 'FILE' && (
@@ -635,6 +1064,8 @@ export default function ChatThreadScreen() {
           );
         }}
       />
+      </ChatWallpaper>
+      </View>
 
       {editingMessageId && (
         <View style={styles.editingBanner}>
@@ -647,6 +1078,28 @@ export default function ChatThreadScreen() {
         </View>
       )}
 
+      {!editingMessageId && replyDraft && (
+        <View style={styles.editingBanner}>
+          <View style={{ flexDirection: 'row', flex: 1, gap: 8, alignItems: 'stretch' }}>
+            <View style={[quotedStyles.bar, { backgroundColor: colors.brand600 }]} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.editingBannerLabel}>Replying to {memberName(replyDraft.senderId)}</Text>
+              <Text style={styles.replyPreviewSnippet} numberOfLines={1}>{replyDraft.snippet}</Text>
+            </View>
+          </View>
+          <TouchableOpacity onPress={() => setReplyDraft(null)}>
+            <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={colors.textMuted} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <Path d="M18 6L6 18M6 6l12 12" />
+            </Svg>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {isGroup && onlyAdminsCanMessage && !isGroupAdmin ? (
+        <View style={[styles.composer, styles.composerDisabledNotice, { paddingBottom: insets.bottom + 10 }]}>
+          <Text style={styles.composerDisabledText}>Only admins can send messages in this group.</Text>
+        </View>
+      ) : (
       <View style={[styles.composer, { paddingBottom: insets.bottom + 10 }]}>
         {isRecording ? (
           <VoiceRecorder onSend={handleSendVoice} onCancel={() => setIsRecording(false)} />
@@ -697,6 +1150,7 @@ export default function ChatThreadScreen() {
           </>
         )}
       </View>
+      )}
 
       <AttachmentSheet
         visible={attachmentSheetVisible}
@@ -708,11 +1162,74 @@ export default function ChatThreadScreen() {
 
       <MediaCaptionComposer media={pendingMedia} onCancel={() => setPendingMedia(null)} onSend={handleSendMedia} />
 
+      <GalleryCaptionComposer items={pendingGallery} onCancel={() => setPendingGallery(null)} onSend={handleSendGallery} />
+
       <MessageInfoModal
         visible={messageInfoRows !== null}
         onClose={() => setMessageInfoRows(null)}
         rows={messageInfoRows ?? []}
         colors={colors}
+      />
+
+      {viewer && <MediaViewer items={viewer.items} initialIndex={viewer.index} onClose={() => setViewer(null)} />}
+
+      <ChatOverflowMenu
+        visible={moreMenuMessage !== null}
+        onClose={() => setMoreMenuMessage(null)}
+        items={
+          moreMenuMessage
+            ? [
+                { label: 'Copy', onPress: () => copyMessage(moreMenuMessage) },
+                ...(moreMenuMessage.sender_id !== userId
+                  ? [{ label: 'Reply privately', onPress: () => replyPrivately(moreMenuMessage) }]
+                  : []),
+                { label: moreMenuMessage.pinned ? 'Unpin' : 'Pin', onPress: () => togglePin(moreMenuMessage) },
+                ...(moreMenuMessage.sender_id !== userId
+                  ? [{ label: `Report ${memberName(moreMenuMessage.sender_id)}`, danger: true, onPress: () => confirmReportSender(moreMenuMessage) }]
+                  : []),
+              ]
+            : []
+        }
+      />
+
+      <ChatOverflowMenu
+        visible={overflowMenuVisible}
+        onClose={() => setOverflowMenuVisible(false)}
+        items={[
+          { label: 'New group', onPress: () => router.push('/(tabs)/chats/new-group') },
+          {
+            label: isGroup ? 'Group info' : 'View contact',
+            onPress: () =>
+              isGroup
+                ? router.push({ pathname: '/(tabs)/chats/group-info', params: { groupId } })
+                : recipientId && router.push({ pathname: '/(tabs)/chats/contact-details', params: { conversationId, userId: recipientId } }),
+          },
+          { label: 'Search', onPress: () => router.push({ pathname: '/(tabs)/chats/search', params: { conversationId } }) },
+          { label: 'Media, links, and docs', onPress: () => router.push({ pathname: '/(tabs)/chats/media-links-docs', params: { conversationId } }) },
+          { label: 'Mute notifications', onPress: () => Alert.alert('Coming soon', 'Per-conversation muting is not built yet.') },
+          {
+            label: 'Clear chat',
+            danger: true,
+            onPress: () =>
+              Alert.alert('Clear chat?', 'This removes the messages from this device only.', [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Clear', style: 'destructive', onPress: () => clearConversationMessages(db, conversationId) },
+              ]),
+          },
+          ...(!isGroup && recipientId
+            ? [
+                {
+                  label: `Block ${resolvedName || 'this contact'}`,
+                  danger: true,
+                  onPress: () =>
+                    Alert.alert(`Block ${resolvedName || 'this contact'}?`, "You won't receive calls or messages from them anymore.", [
+                      { text: 'Cancel', style: 'cancel' as const },
+                      { text: 'Block', style: 'destructive' as const, onPress: () => blockUser(recipientId) },
+                    ]),
+                },
+              ]
+            : []),
+        ]}
       />
     </KeyboardAvoidingView>
   );
@@ -727,6 +1244,8 @@ function makeStyles(colors: Palette) {
     headerActionTouchable: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
     headerName: { fontFamily: fonts.sansSemiBold, fontSize: 15.5, color: colors.textPrimary },
     senderLabel: { fontFamily: fonts.sansSemiBold, fontSize: 12.5, color: colors.brand600, marginBottom: 3 },
+    forwardedLabel: { fontFamily: fonts.sans, fontStyle: 'italic', fontSize: 11, color: 'rgba(255,255,255,0.75)', marginBottom: 3 },
+    forwardedLabelIncoming: { fontFamily: fonts.sans, fontStyle: 'italic', fontSize: 11, color: colors.textMuted, marginBottom: 3 },
     statusRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
     statusDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.gold500 },
     statusLabel: { fontFamily: fonts.sans, fontSize: 11.5, color: colors.textMuted },
@@ -743,9 +1262,14 @@ function makeStyles(colors: Palette) {
     selectionAction: { paddingHorizontal: 12, paddingVertical: 6 },
     selectionActionLabel: { fontFamily: fonts.sansSemiBold, fontSize: 14.5, color: colors.textPrimary },
     list: { flex: 1, backgroundColor: colors.background },
+    // Transparent so the ChatWallpaper pattern behind it shows through —
+    // the outer `list` View (same flex:1) still supplies the fallback
+    // background color underneath the wallpaper's own fill.
+    listInner: { flex: 1, backgroundColor: 'transparent' },
     listContent: { flexGrow: 1, paddingVertical: 8 },
     bubble: { borderRadius: 16, padding: 10, maxWidth: '78%', marginVertical: 4, marginHorizontal: 16, overflow: 'hidden' },
     bubbleSelected: { opacity: 0.6 },
+    bubbleHighlighted: { borderWidth: 2, borderColor: colors.gold500 },
     outgoing: { alignSelf: 'flex-end', borderBottomRightRadius: 4 },
     incoming: { alignSelf: 'flex-start', backgroundColor: colors.tint2, borderBottomLeftRadius: 4 },
     deletedBubble: { backgroundColor: colors.tint1 },
@@ -770,10 +1294,24 @@ function makeStyles(colors: Palette) {
       borderTopColor: colors.hairline,
     },
     editingBannerLabel: { fontFamily: fonts.sansMedium, fontSize: 12.5, color: colors.brand700 },
+    replyPreviewSnippet: { fontFamily: fonts.sans, fontSize: 12.5, color: colors.textMuted, marginTop: 2 },
     composer: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10, borderTopWidth: 1, borderTopColor: colors.hairline, backgroundColor: colors.surface },
+    composerDisabledNotice: { justifyContent: 'center' },
+    composerDisabledText: { fontFamily: fonts.sans, fontSize: 13, color: colors.textMuted, textAlign: 'center', flex: 1 },
     iconTouchable: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
     input: { flex: 1, backgroundColor: colors.tint1, borderRadius: 22, paddingHorizontal: 16, paddingVertical: 11, fontFamily: fonts.sans, fontSize: 14, color: colors.textPrimary },
     sendButton: { width: 44, height: 44, borderRadius: 22 },
     sendTouchable: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+    pinBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      backgroundColor: colors.tint1,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.hairline,
+    },
+    pinBannerText: { flex: 1, fontFamily: fonts.sans, fontSize: 12.5, color: colors.textPrimary },
   });
 }

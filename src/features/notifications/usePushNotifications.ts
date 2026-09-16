@@ -1,11 +1,16 @@
 import * as Device from 'expo-device';
 import { router } from 'expo-router';
 import * as Notifications from 'expo-notifications';
-import { useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 
 import { useAuth } from '../auth/AuthContext';
+import { useCall } from '../calls/CallContext';
 import { registerPushToken } from './api';
+
+const INCOMING_CALL_CATEGORY = 'incoming_call';
+const ANSWER_ACTION = 'answer';
+const DECLINE_ACTION = 'decline';
 
 /**
  * Governs only the FOREGROUND case — while this screen/JS engine is alive,
@@ -26,6 +31,22 @@ Notifications.setNotificationHandler({
     shouldSetBadge: false,
   }),
 });
+
+/**
+ * Answer/Decline action buttons on the "calls" channel notification itself
+ * — lets the user respond without opening the app first. Both actions fire
+ * addNotificationResponseReceivedListener below (and getLastNotificationResponseAsync
+ * on a cold start) the same way a plain tap does, distinguished by
+ * response.actionIdentifier. Requires a dev-client/prebuild build (confirmed
+ * this project already is one, for react-native-webrtc) — Expo Go doesn't
+ * support notification categories/actions.
+ */
+async function ensureCallCategory() {
+  await Notifications.setNotificationCategoryAsync(INCOMING_CALL_CATEGORY, [
+    { identifier: ANSWER_ACTION, buttonTitle: 'Answer', options: { opensAppToForeground: true } },
+    { identifier: DECLINE_ACTION, buttonTitle: 'Decline', options: { opensAppToForeground: false, isDestructive: true } },
+  ]);
+}
 
 async function ensureAndroidChannels() {
   if (Platform.OS !== 'android') return;
@@ -49,11 +70,14 @@ type NotificationData = {
   conversationId?: string;
   groupId?: string;
   senderId?: string;
+  callId?: string;
 };
 
-/** Mounted once at the app root (see app/_layout.tsx), alongside the other always-on hooks. */
+/** Mounted once at the app root (see app/_layout.tsx), alongside the other always-on hooks — inside CallProvider, so useCall() is available here. */
 export function usePushNotifications() {
   const { userId, accessToken } = useAuth();
+  const { seedIncomingCallFromNotification, acceptIncoming, declineIncoming } = useCall();
+  const handledColdStartRef = useRef(false);
 
   useEffect(() => {
     if (!userId || !accessToken) return;
@@ -61,6 +85,7 @@ export function usePushNotifications() {
 
     (async () => {
       await ensureAndroidChannels();
+      await ensureCallCategory();
 
       // Push tokens only exist on a real device (the simulator/emulator has
       // no APNs/FCM registration at all) — requesting on one just errors.
@@ -90,21 +115,54 @@ export function usePushNotifications() {
   }, [accessToken, userId]);
 
   // Tapping a notification (from the tray, app backgrounded or killed) opens
-  // the relevant conversation — a call notification needs no extra
-  // navigation, since CallOverlay already takes over the screen on its own
-  // once the app is foregrounded and the live call-signaling socket catches up.
-  useEffect(() => {
-    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+  // the relevant conversation. A call notification's Answer/Decline actions
+  // (see ensureCallCategory) fetch the call fresh via REST and act on it
+  // immediately — this is what lets the app answer/decline a call it was
+  // never live-connected for (backgrounded past the OS grace period, or
+  // fully killed), landing straight in CallOverlay's connected view with no
+  // splash/onboarding in between, since CallOverlay is mounted at the root
+  // and reacts purely to CallContext state. A plain tap on the notification
+  // body (not an action button) just seeds the incoming-ringing state and
+  // lets the user decide from the in-app UI, same as the live-socket path.
+  const handleResponse = useCallback(
+    async (response: Notifications.NotificationResponse) => {
       const data = response.notification.request.content.data as NotificationData;
-      if (data.type !== 'message' || !data.conversationId) return;
-      router.push({
-        pathname: '/(tabs)/chats/[conversationId]',
-        params: {
-          conversationId: data.conversationId,
-          ...(data.groupId ? { groupId: data.groupId } : { recipientId: data.senderId }),
-        },
+
+      if (data.type === 'call' && data.callId) {
+        if (response.actionIdentifier === DECLINE_ACTION) {
+          if (await seedIncomingCallFromNotification(data.callId)) declineIncoming();
+        } else if (response.actionIdentifier === ANSWER_ACTION) {
+          if (await seedIncomingCallFromNotification(data.callId)) await acceptIncoming();
+        } else {
+          await seedIncomingCallFromNotification(data.callId);
+        }
+        return;
+      }
+
+      if (data.type === 'message' && data.conversationId) {
+        router.push({
+          pathname: '/(tabs)/chats/[conversationId]',
+          params: {
+            conversationId: data.conversationId,
+            ...(data.groupId ? { groupId: data.groupId } : { recipientId: data.senderId }),
+          },
+        });
+      }
+    },
+    [acceptIncoming, declineIncoming, seedIncomingCallFromNotification]
+  );
+
+  useEffect(() => {
+    const sub = Notifications.addNotificationResponseReceivedListener(handleResponse);
+    // Cold start: the app process was launched BY this notification tap (the
+    // listener above only fires for responses received while already
+    // running) — getLastNotificationResponseAsync is what surfaces that one.
+    if (!handledColdStartRef.current) {
+      handledColdStartRef.current = true;
+      Notifications.getLastNotificationResponseAsync().then((response) => {
+        if (response) handleResponse(response);
       });
-    });
+    }
     return () => sub.remove();
-  }, []);
+  }, [handleResponse]);
 }

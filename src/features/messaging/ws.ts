@@ -8,6 +8,7 @@ import type {
   MessageEditRequest,
   MessageEnvelope,
   MessageMutation,
+  MessagePinRequest,
   MessageStatusUpdate,
   TypingIndicator,
   TypingUpdate,
@@ -124,6 +125,20 @@ export class ChatSocket {
     });
   }
 
+  /**
+   * Mirrors this account's OWN read/delivery acks across its other devices
+   * (see ChatController#ack/#ackGroup's convertAndSendToUser calls) — lets a
+   * device sitting on the conversation list, not the thread that was just
+   * read elsewhere, update its local unread badge live instead of only on
+   * next full re-fetch. Carries either a MessageStatusUpdate (1:1) or a
+   * GroupReceiptUpdate (group) shape — discriminated by the caller.
+   */
+  subscribeToUserReadState(onUpdate: (update: MessageStatusUpdate | GroupReceiptUpdate) => void) {
+    return this.client.subscribe('/user/queue/read-state', (frame: IMessage) => {
+      onUpdate(JSON.parse(frame.body) as MessageStatusUpdate | GroupReceiptUpdate);
+    });
+  }
+
   send(envelope: MessageEnvelope) {
     this.enqueue({ destination: '/app/chat.send', body: JSON.stringify(envelope) });
   }
@@ -138,6 +153,10 @@ export class ChatSocket {
 
   sendDelete(request: MessageDeleteRequest) {
     this.enqueue({ destination: '/app/chat.delete', body: JSON.stringify(request) });
+  }
+
+  sendPin(request: MessagePinRequest) {
+    this.enqueue({ destination: '/app/chat.pin', body: JSON.stringify(request) });
   }
 
   /** Group counterpart to sendAck — see ChatController#ackGroup for why it's a separate endpoint. */

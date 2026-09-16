@@ -1,13 +1,13 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 
 import { Avatar } from '../../../components/Avatar';
 import { deleteConversation, useSQLiteContext } from '../../../data/db';
 import { useAuth } from '../../../features/auth/AuthContext';
-import { addMembers, getGroup, removeMember, renameGroup, type GroupResult } from '../../../features/groups/api';
+import { addMembers, changeMemberRole, getGroup, removeMember, renameGroup, type GroupResult } from '../../../features/groups/api';
 import { useTheme } from '../../../features/theme/ThemeContext';
 import { getUser, searchUsers, type UserResult } from '../../../features/users/api';
 import { fonts, type Palette } from '../../../theme';
@@ -72,6 +72,31 @@ export default function GroupInfoScreen() {
         },
       },
     ]);
+  }
+
+  async function handleToggleAdmin(member: MemberRow) {
+    try {
+      await changeMemberRole(groupId, member.userId, member.role === 'ADMIN' ? 'MEMBER' : 'ADMIN');
+      await load();
+    } catch {
+      Alert.alert('Could not update role', 'The group must keep at least one admin.');
+    }
+  }
+
+  function openMemberActions(member: MemberRow) {
+    if (!isAdmin || member.userId === userId) return;
+    const name = member.user?.displayName ?? 'This person';
+    Alert.alert(name, undefined, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: member.role === 'ADMIN' ? 'Dismiss as admin' : 'Make group admin', onPress: () => handleToggleAdmin(member) },
+      { text: 'Remove from group', style: 'destructive', onPress: () => confirmRemove(member) },
+    ]);
+  }
+
+  async function handleToggleOnlyAdmins(value: boolean) {
+    if (!group) return;
+    setGroup({ ...group, onlyAdminsCanMessage: value });
+    await renameGroup(groupId, group.name, undefined, value);
   }
 
   function confirmLeave() {
@@ -141,6 +166,31 @@ export default function GroupInfoScreen() {
         </TouchableOpacity>
       )}
 
+      <TouchableOpacity
+        style={styles.mediaRow}
+        onPress={() => router.push({ pathname: '/(tabs)/chats/media-links-docs', params: { conversationId: groupId } })}
+      >
+        <Text style={styles.mediaLabel}>Media, links, and docs</Text>
+        <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={colors.textMuted} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+          <Path d="M9 18l6-6-6-6" />
+        </Svg>
+      </TouchableOpacity>
+
+      {isAdmin && (
+        <View style={styles.toggleRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.mediaLabel}>Only admins can send messages</Text>
+            <Text style={styles.toggleDescription}>Like an announcement group — other members can still read but not post.</Text>
+          </View>
+          <Switch
+            value={group.onlyAdminsCanMessage}
+            onValueChange={handleToggleOnlyAdmins}
+            trackColor={{ false: colors.hairline, true: colors.brand400 }}
+            thumbColor="#ffffff"
+          />
+        </View>
+      )}
+
       {isAddingOpen && (
         <View style={styles.addSearch}>
           <TextInput
@@ -166,7 +216,7 @@ export default function GroupInfoScreen() {
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.memberRow}
-            onLongPress={() => isAdmin && item.userId !== userId && confirmRemove(item)}
+            onLongPress={() => openMemberActions(item)}
           >
             <Avatar objectKey={item.user?.avatarObjectKey} label={item.user?.displayName || '?'} size={40} />
             <View style={{ flex: 1 }}>
@@ -180,6 +230,11 @@ export default function GroupInfoScreen() {
       <TouchableOpacity style={styles.leaveButton} onPress={confirmLeave}>
         <Text style={styles.leaveLabel}>Leave group</Text>
       </TouchableOpacity>
+      {isAdmin && (
+        <Text style={styles.leaveHint}>
+          If you're the group's only admin, leaving promotes whoever joined earliest to admin.
+        </Text>
+      )}
     </View>
   );
 }
@@ -214,5 +269,27 @@ function makeStyles(colors: Palette) {
     roleLabel: { fontFamily: fonts.sans, fontSize: 11.5, color: colors.textMuted },
     leaveButton: { paddingVertical: 14, alignItems: 'center' },
     leaveLabel: { fontFamily: fonts.sansSemiBold, fontSize: 15, color: colors.brand700 },
+    leaveHint: { fontFamily: fonts.sans, fontSize: 11.5, color: colors.textMuted, textAlign: 'center', paddingBottom: 12 },
+    mediaRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 14,
+      borderTopWidth: 1,
+      borderTopColor: colors.hairline,
+    },
+    mediaLabel: { fontFamily: fonts.sansMedium, fontSize: 14.5, color: colors.textPrimary },
+    toggleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      paddingVertical: 14,
+      borderTopWidth: 1,
+      borderTopColor: colors.hairline,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.hairline,
+      marginBottom: 6,
+    },
+    toggleDescription: { fontFamily: fonts.sans, fontSize: 11.5, color: colors.textMuted, marginTop: 2, lineHeight: 15 },
   });
 }

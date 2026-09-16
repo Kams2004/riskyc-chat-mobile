@@ -2,7 +2,15 @@ import { useSQLiteContext, type SQLiteDatabase } from 'expo-sqlite';
 
 export const DATABASE_NAME = 'riskyc.db';
 
-export type MediaType = 'IMAGE' | 'FILE' | 'AUDIO' | 'CALL';
+export type MediaType = 'IMAGE' | 'VIDEO' | 'FILE' | 'AUDIO' | 'CALL';
+
+export type AttachmentItem = {
+  position: number;
+  mediaType: 'IMAGE' | 'VIDEO';
+  mediaObjectKey: string;
+  mediaFileName: string | null;
+  mediaDurationMs: number | null;
+};
 
 export type LocalMessage = {
   message_id: string;
@@ -21,7 +29,39 @@ export type LocalMessage = {
   // than converted.
   edited: number;
   deleted: number;
+  forwarded: number;
+  // Local mirror of the server's MessageDeletion marker (see
+  // markDeletedForMe) — set immediately on the optimistic local call and
+  // never touched by an incoming MessageMutation, which only ever carries
+  // the shared edited/deleted fields. This is a per-viewer hide, invisible
+  // to every other participant.
+  deleted_for_me: number;
+  // JSON-serialized AttachmentItem[] — populated only for a multi-image/
+  // video gallery send, null otherwise (the single-attachment fields above
+  // are used instead). See parseAttachments.
+  attachments_json: string | null;
+  // All four null for a message that isn't a reply — generated client-side
+  // at send time (see useConversation's sendMessage) so a "reply privately"
+  // recipient can render the quote without ever having synced the original
+  // conversation locally.
+  reply_to_message_id: string | null;
+  reply_to_conversation_id: string | null;
+  reply_to_sender_id: string | null;
+  reply_to_snippet: string | null;
+  // Shared, per-conversation pin (see Message.java's own comment) — 0|1.
+  pinned: number;
 };
+
+/** Never throws on malformed/missing JSON — a display concern, not worth crashing the message list over. */
+export function parseAttachments(message: LocalMessage): AttachmentItem[] {
+  if (!message.attachments_json) return [];
+  try {
+    const parsed = JSON.parse(message.attachments_json);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
 
 export type LocalConversation = {
   id: string;
@@ -44,9 +84,11 @@ export type LocalGroupMember = {
 export async function upsertMessage(db: SQLiteDatabase, message: LocalMessage) {
   await db.runAsync(
     `INSERT INTO messages (message_id, conversation_id, sender_id, recipient_id, ciphertext, sent_at, status,
-       media_type, media_object_key, media_file_name, media_duration_ms, edited, deleted)
+       media_type, media_object_key, media_file_name, media_duration_ms, edited, deleted, forwarded, attachments_json,
+       reply_to_message_id, reply_to_conversation_id, reply_to_sender_id, reply_to_snippet, pinned)
      VALUES ($messageId, $conversationId, $senderId, $recipientId, $ciphertext, $sentAt, $status,
-       $mediaType, $mediaObjectKey, $mediaFileName, $mediaDurationMs, $edited, $deleted)
+       $mediaType, $mediaObjectKey, $mediaFileName, $mediaDurationMs, $edited, $deleted, $forwarded, $attachmentsJson,
+       $replyToMessageId, $replyToConversationId, $replyToSenderId, $replyToSnippet, $pinned)
      ON CONFLICT(message_id) DO UPDATE SET status = excluded.status`,
     {
       $messageId: message.message_id,
@@ -60,31 +102,63 @@ export async function upsertMessage(db: SQLiteDatabase, message: LocalMessage) {
       $mediaObjectKey: message.media_object_key,
       $mediaFileName: message.media_file_name,
       $mediaDurationMs: message.media_duration_ms,
+      $attachmentsJson: message.attachments_json,
       $edited: message.edited,
       $deleted: message.deleted,
+      $forwarded: message.forwarded,
+      $replyToMessageId: message.reply_to_message_id,
+      $replyToConversationId: message.reply_to_conversation_id,
+      $replyToSenderId: message.reply_to_sender_id,
+      $replyToSnippet: message.reply_to_snippet,
+      $pinned: message.pinned,
     }
   );
 }
 
-/** Applies a synced edit/delete from the message's own sender — authoritative, no ordinal guard needed. */
+/** Local-only "delete for me" — never synced from the server, set immediately on the acting user's own device. */
+export async function markDeletedForMe(db: SQLiteDatabase, messageId: string) {
+  await db.runAsync('UPDATE messages SET deleted_for_me = 1 WHERE message_id = $messageId', { $messageId: messageId });
+}
+
+/** Applies a synced edit/delete/pin from the message's own conversation — authoritative, no ordinal guard needed. */
 export async function applyMessageMutation(
   db: SQLiteDatabase,
   messageId: string,
-  mutation: { ciphertext: string | null; edited: boolean; deleted: boolean }
+  mutation: { ciphertext: string | null; edited: boolean; deleted: boolean; pinned?: boolean }
 ) {
   await db.runAsync(
     `UPDATE messages SET
        ciphertext = COALESCE($ciphertext, ciphertext),
        edited = $edited,
-       deleted = $deleted
+       deleted = $deleted,
+       pinned = COALESCE($pinned, pinned)
      WHERE message_id = $messageId`,
     {
       $messageId: messageId,
       $ciphertext: mutation.ciphertext,
       $edited: mutation.edited ? 1 : 0,
       $deleted: mutation.deleted ? 1 : 0,
+      $pinned: mutation.pinned === undefined ? null : mutation.pinned ? 1 : 0,
     }
   );
+}
+
+/** Local-only optimistic pin toggle — doesn't touch edited/deleted, unlike applyMessageMutation. */
+export async function setPinnedLocally(db: SQLiteDatabase, messageId: string, pinned: boolean) {
+  await db.runAsync('UPDATE messages SET pinned = $pinned WHERE message_id = $messageId', {
+    $messageId: messageId,
+    $pinned: pinned ? 1 : 0,
+  });
+}
+
+/** Feeds the thread's pin banner — most recently pinned, not-deleted message, if any. */
+export async function getMostRecentPinnedMessage(db: SQLiteDatabase, conversationId: string): Promise<LocalMessage | null> {
+  const row = await db.getFirstAsync<LocalMessage>(
+    `SELECT * FROM messages WHERE conversation_id = $conversationId AND pinned = 1 AND deleted = 0
+     ORDER BY sent_at DESC LIMIT 1`,
+    { $conversationId: conversationId }
+  );
+  return row ?? null;
 }
 
 /** Only advances status forward (sending < sent < delivered < read) — never regresses it. */
@@ -104,9 +178,16 @@ export async function advanceMessagesStatus(db: SQLiteDatabase, messageIds: stri
   );
 }
 
+export async function getMessageById(db: SQLiteDatabase, messageId: string): Promise<LocalMessage | null> {
+  const row = await db.getFirstAsync<LocalMessage>('SELECT * FROM messages WHERE message_id = $messageId', {
+    $messageId: messageId,
+  });
+  return row ?? null;
+}
+
 export async function listMessages(db: SQLiteDatabase, conversationId: string): Promise<LocalMessage[]> {
   return db.getAllAsync<LocalMessage>(
-    'SELECT * FROM messages WHERE conversation_id = $conversationId ORDER BY sent_at ASC',
+    'SELECT * FROM messages WHERE conversation_id = $conversationId AND deleted_for_me = 0 ORDER BY sent_at ASC',
     { $conversationId: conversationId }
   );
 }
@@ -181,6 +262,11 @@ export async function deleteConversation(db: SQLiteDatabase, conversationId: str
   await db.runAsync('DELETE FROM messages WHERE conversation_id = $id', { $id: conversationId });
   await db.runAsync('DELETE FROM conversations WHERE id = $id', { $id: conversationId });
   await db.runAsync('DELETE FROM group_members WHERE group_id = $id', { $id: conversationId });
+}
+
+/** "Clear chat" — removes this device's local copy of every message, but keeps the conversation itself (unlike deleteConversation). Purely local: the server keeps its own copy, same as a real device wipe would look to anyone else. */
+export async function clearConversationMessages(db: SQLiteDatabase, conversationId: string) {
+  await db.runAsync('DELETE FROM messages WHERE conversation_id = $id', { $id: conversationId });
 }
 
 export async function upsertGroupMembers(
