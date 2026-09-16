@@ -270,15 +270,27 @@ export default function ChatListScreen() {
       />
 
       {!inSelectionMode && (
-        <LinearGradient colors={gradients.gold} style={[styles.fab, { bottom: fabBottomOffset(insets.bottom) }]}>
+        <LinearGradient
+          colors={gradients.gold}
+          style={[
+            styles.fab,
+            conversations.length === 0 ? styles.fabExpanded : styles.fabCollapsed,
+            { bottom: fabBottomOffset(insets.bottom) },
+          ]}
+        >
           <TouchableOpacity
             style={styles.fabTouchable}
             onPress={() => router.push('/(tabs)/chats/new' as never)}
             accessibilityLabel="Start a new conversation"
           >
-            <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+            <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
               <Path d="M12 5v14M5 12h14" />
             </Svg>
+            {/* Only while there are no conversations yet — once the first
+                one exists this collapses down to just the icon, permanently
+                (re-expanding on every empty search/filter view would be
+                noisy, not helpful). */}
+            {conversations.length === 0 && <Text style={styles.fabLabel}>New conversation</Text>}
           </TouchableOpacity>
         </LinearGradient>
       )}
@@ -320,15 +332,16 @@ function makeStyles(colors: Palette) {
     fab: {
       position: 'absolute',
       right: 20,
-      width: 58,
       height: 58,
-      borderRadius: 29,
       shadowColor: colors.gold600,
       shadowOffset: { width: 0, height: 10 },
       shadowOpacity: 0.4,
       shadowRadius: 16,
       elevation: 8,
     },
-    fabTouchable: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+    fabCollapsed: { width: 58, borderRadius: 29 },
+    fabExpanded: { paddingHorizontal: 22, borderRadius: 29 },
+    fabTouchable: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
+    fabLabel: { fontFamily: fonts.sansSemiBold, fontSize: 15, color: '#ffffff' },
   });
 }

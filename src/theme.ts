@@ -109,5 +109,5 @@ export function TAB_BAR_CLEARANCE(insetsBottom: number): number {
 
 /** `bottom` offset for a FAB that should float just above the tab bar. */
 export function fabBottomOffset(insetsBottom: number): number {
-  return insetsBottom + tabBarLayout.bottomMargin + tabBarLayout.height + 16;
+  return insetsBottom + tabBarLayout.bottomMargin + tabBarLayout.height + 6;
 }
