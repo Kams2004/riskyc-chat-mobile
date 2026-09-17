@@ -26,6 +26,8 @@ import { ChatSocket } from './ws';
 export const CONVERSATIONS_CHANGED_EVENT = 'riskyc:conversationsChanged';
 export const TYPING_EVENT = 'riskyc:typing';
 export const STATUS_UPDATED_EVENT = 'riskyc:statusUpdated';
+/** Emitted (with the conversationId) whenever something outside a mounted thread screen's own action functions deletes that conversation's messages directly in SQLite (e.g. "Clear chat" from contact-details.tsx) — see useConversation.ts's own subscription for why this is needed. */
+export const MESSAGES_CLEARED_EVENT = 'riskyc:messagesCleared';
 
 /**
  * Backfills any conversation this device never saw live over STOMP — a

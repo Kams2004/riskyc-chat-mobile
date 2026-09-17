@@ -1,5 +1,5 @@
-import { Tabs } from 'expo-router';
-import { View } from 'react-native';
+import { Tabs, usePathname } from 'expo-router';
+import { View, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
@@ -95,6 +95,32 @@ export default function TabsLayout() {
   // just for three labels — no default namespace needed since every call
   // below is explicitly prefixed.
   const { t } = useTranslation();
+  const pathname = usePathname();
+
+  const floatingTabBarStyle: ViewStyle = {
+    position: 'absolute',
+    left: tabBarLayout.sideMargin,
+    right: tabBarLayout.sideMargin,
+    bottom: insets.bottom + tabBarLayout.bottomMargin,
+    height: tabBarLayout.height,
+    borderRadius: tabBarLayout.height / 2,
+    backgroundColor: colors.surface,
+    borderTopWidth: 0,
+    paddingTop: 6,
+    shadowColor: colors.brand900,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.16,
+    shadowRadius: 20,
+    elevation: 10,
+  };
+  // The floating pill is drawn as an overlay on top of every tab's content
+  // (see the comment on floatingTabBarStyle) rather than reserving flex
+  // space for itself, so a genuinely full-screen sub-screen — the Status
+  // composer and its story viewer, both edge-to-edge with their own close
+  // controls right where the pill would sit — needs it explicitly hidden,
+  // or the pill floats on top of and can obscure those screens' own bottom
+  // controls (this was a real, reported bug on the composer's send button).
+  const hideTabBar = pathname.startsWith('/status/new') || pathname.startsWith('/status/viewer');
 
   return (
     <Tabs
@@ -106,22 +132,7 @@ export default function TabsLayout() {
         // Floats above the screen edge (like WhatsApp's iOS tab bar) instead
         // of docking flush to the bottom — see theme.ts's tabBarLayout/
         // TAB_BAR_CLEARANCE, which every tab screen uses to leave room for it.
-        tabBarStyle: {
-          position: 'absolute',
-          left: tabBarLayout.sideMargin,
-          right: tabBarLayout.sideMargin,
-          bottom: insets.bottom + tabBarLayout.bottomMargin,
-          height: tabBarLayout.height,
-          borderRadius: tabBarLayout.height / 2,
-          backgroundColor: colors.surface,
-          borderTopWidth: 0,
-          paddingTop: 6,
-          shadowColor: colors.brand900,
-          shadowOffset: { width: 0, height: 8 },
-          shadowOpacity: 0.16,
-          shadowRadius: 20,
-          elevation: 10,
-        },
+        tabBarStyle: floatingTabBarStyle,
         tabBarLabelStyle: { fontFamily: fonts.sansSemiBold, fontSize: 11 },
       }}
     >
@@ -137,6 +148,7 @@ export default function TabsLayout() {
         options={{
           title: t('status:tab.title'),
           tabBarIcon: ({ color, focused }) => <StatusIcon color={color} focused={focused} colors={colors} />,
+          tabBarStyle: hideTabBar ? { display: 'none' } : floatingTabBarStyle,
         }}
       />
       <Tabs.Screen

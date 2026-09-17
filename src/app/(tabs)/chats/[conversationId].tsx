@@ -54,7 +54,7 @@ import {
 import { useConversation, type ReplyToDraft } from '../../../features/messaging/useConversation';
 import { usePresence } from '../../../features/presence/usePresence';
 import { useTheme } from '../../../features/theme/ThemeContext';
-import { blockUser, getUser, reportUser } from '../../../features/users/api';
+import { blockUser, getUser, listBlockedUsers, reportUser, unblockUser } from '../../../features/users/api';
 import { getLocalContactName } from '../../../data/db';
 import { firstUrlIn, LinkPreviewCard } from '../../../components/LinkPreviewCard';
 import { TypingDots } from '../../../components/TypingDots';
@@ -488,6 +488,7 @@ export default function ChatThreadScreen() {
   const [resolvedAvatarKey, setResolvedAvatarKey] = useState<string | null | undefined>(recipientAvatarObjectKey);
   const [groupMembers, setGroupMembers] = useState<LocalGroupMember[]>([]);
   const [onlyAdminsCanMessage, setOnlyAdminsCanMessage] = useState(false);
+  const [isBlocked, setIsBlocked] = useState(false);
   const isGroupAdmin = groupMembers.find((m) => m.user_id === userId)?.role === 'ADMIN';
 
   useEffect(() => {
@@ -508,6 +509,9 @@ export default function ChatThreadScreen() {
       return;
     }
     if (!recipientId) return;
+    listBlockedUsers()
+      .then((blocked) => setIsBlocked(blocked.some((b) => b.userId === recipientId)))
+      .catch(() => {});
     // Always check for a local name override first — it takes priority over
     // both the passed-in recipientName and the server-registered displayName.
     getLocalContactName(db, recipientId)
@@ -544,6 +548,7 @@ export default function ChatThreadScreen() {
     setDisappearing,
     muted,
     setMuted,
+    reloadMessages,
   } = useConversation({
     conversationId,
     recipientId,
@@ -743,17 +748,25 @@ export default function ChatThreadScreen() {
   }, [messages]);
 
   async function showMessageInfo(message: LocalMessage) {
-    const receipts = await getReceiptsForMessage(db, message.message_id);
-    const receiptByUser = new Map(receipts.map((r) => [r.user_id, r.status]));
-    const rows: ReceiptRow[] = groupMembers
-      .filter((m) => m.user_id !== message.sender_id)
-      .map((m) => ({
-        userId: m.user_id,
-        displayName: m.display_name || UNRESOLVED_PERSON_PLACEHOLDER,
-        status: receiptByUser.get(m.user_id) ?? 'sent',
-      }));
+    if (isGroup) {
+      const receipts = await getReceiptsForMessage(db, message.message_id);
+      const receiptByUser = new Map(receipts.map((r) => [r.user_id, r.status]));
+      const rows: ReceiptRow[] = groupMembers
+        .filter((m) => m.user_id !== message.sender_id)
+        .map((m) => ({
+          userId: m.user_id,
+          displayName: m.display_name || UNRESOLVED_PERSON_PLACEHOLDER,
+          status: receiptByUser.get(m.user_id) ?? 'sent',
+        }));
+      setSelectedMessageId(null);
+      setMessageInfoRows(rows);
+      return;
+    }
+    // No group-member roster to draw per-person rows from in a 1:1 — one
+    // synthetic row for the other party, reusing the exact same modal/rows
+    // shape rather than a bespoke 1:1 layout.
     setSelectedMessageId(null);
-    setMessageInfoRows(rows);
+    setMessageInfoRows([{ userId: recipientId ?? '', displayName: displayName, status: message.status }]);
   }
   const displayName = resolvedName || UNRESOLVED_TITLE_PLACEHOLDER;
 
@@ -1044,6 +1057,7 @@ export default function ChatThreadScreen() {
         const selected = messages.find((m) => m.message_id === selectedMessageId);
         if (!selected) return null;
         const selectedIsMine = selected.sender_id === userId;
+        const isStarred = starredIds.has(selected.message_id);
         return (
           <View style={styles.selectionBar}>
             <TouchableOpacity style={styles.selectionAction} onPress={() => setSelectedMessageId(null)}>
@@ -1052,57 +1066,43 @@ export default function ChatThreadScreen() {
               </Svg>
             </TouchableOpacity>
             <View style={{ flex: 1 }} />
-            {selectedIsMine && isGroup && (
-              <TouchableOpacity style={styles.selectionAction} onPress={() => showMessageInfo(selected)}>
-                <Text style={styles.selectionActionLabel}>{t('thread.selection.info')}</Text>
-              </TouchableOpacity>
-            )}
-            {selectedIsMine && !selected.media_type && (
-              <TouchableOpacity style={styles.selectionAction} onPress={() => startEdit(selected)}>
-                <Text style={styles.selectionActionLabel}>{t('thread.selection.edit')}</Text>
-              </TouchableOpacity>
-            )}
             <TouchableOpacity style={styles.selectionAction} onPress={() => startReply(selected)}>
-              <Text style={styles.selectionActionLabel}>{t('thread.selection.reply')}</Text>
+              <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={colors.textPrimary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <Path d="M9 14L4 9l5-5" />
+                <Path d="M4 9h10.5A5.5 5.5 0 0 1 20 14.5v0A5.5 5.5 0 0 1 14.5 20H11" />
+              </Svg>
             </TouchableOpacity>
             <TouchableOpacity style={styles.selectionAction} onPress={() => toggleStar(selected.message_id)}>
-              <Text style={styles.selectionActionLabel}>{starredIds.has(selected.message_id) ? t('thread.selection.unstar') : t('thread.selection.star')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.selectionAction} onPress={() => { setSelectedMessageId(null); setReactionTargetId(selected.message_id); }}>
-              <Text style={styles.selectionActionLabel}>{t('thread.selection.react')}</Text>
-            </TouchableOpacity>
-            {!isGroup && (
-              <TouchableOpacity style={styles.selectionAction} onPress={() => togglePin(selected)}>
-                <Text style={styles.selectionActionLabel}>{selected.pinned ? t('thread.selection.unpin') : t('thread.selection.pin')}</Text>
-              </TouchableOpacity>
-            )}
-            {!selected.media_type && (
-              <TouchableOpacity style={styles.selectionAction} onPress={() => copyMessage(selected)}>
-                <Text style={styles.selectionActionLabel}>{t('thread.selection.copy')}</Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity style={styles.selectionAction} onPress={() => forwardSelected(selected.message_id)}>
-              <Text style={styles.selectionActionLabel}>{t('thread.selection.forward')}</Text>
+              <Svg width={20} height={20} viewBox="0 0 24 24" fill={isStarred ? colors.brand600 : 'none'} stroke={isStarred ? colors.brand600 : colors.textPrimary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <Path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+              </Svg>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.selectionAction}
               onPress={() => (selectedIsMine ? confirmDeleteMine(selected.message_id) : confirmDeleteForMe(selected.message_id))}
             >
-              <Text style={[styles.selectionActionLabel, { color: colors.brand700 }]}>{t('thread.selection.delete')}</Text>
+              <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={colors.brand700} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <Path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14z" />
+                <Path d="M10 11v6M14 11v6" />
+              </Svg>
             </TouchableOpacity>
-            {isGroup && (
-              <TouchableOpacity
-                style={styles.selectionAction}
-                onPress={() => {
-                  setMoreMenuMessage(selected);
-                  setSelectedMessageId(null);
-                }}
-              >
-                <Svg width={18} height={18} viewBox="0 0 24 24" fill={colors.textPrimary}>
-                  <Path d="M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM12 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4z" />
-                </Svg>
-              </TouchableOpacity>
-            )}
+            <TouchableOpacity style={styles.selectionAction} onPress={() => forwardSelected(selected.message_id)}>
+              <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={colors.textPrimary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <Path d="M15 14l5-5-5-5" />
+                <Path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5V15" />
+              </Svg>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.selectionAction}
+              onPress={() => {
+                setMoreMenuMessage(selected);
+                setSelectedMessageId(null);
+              }}
+            >
+              <Svg width={20} height={20} viewBox="0 0 24 24" fill={colors.textPrimary}>
+                <Path d="M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM12 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4z" />
+              </Svg>
+            </TouchableOpacity>
           </View>
         );
       })()}
@@ -1373,7 +1373,20 @@ export default function ChatThreadScreen() {
         </View>
       )}
 
-      {isGroup && onlyAdminsCanMessage && !isGroupAdmin ? (
+      {isBlocked ? (
+        <View style={[styles.composer, styles.composerDisabledNotice, { paddingBottom: insets.bottom + 10 }]}>
+          <Text style={styles.composerDisabledText}>{t('thread.blockedNotice', { name: resolvedName || t('thread.menu.defaultContactName') })}</Text>
+          <TouchableOpacity
+            onPress={() =>
+              unblockUser(recipientId!)
+                .then(() => setIsBlocked(false))
+                .catch(() => Alert.alert(t('common:somethingWentWrong'), t('thread.unblockFailed')))
+            }
+          >
+            <Text style={styles.composerUnblockLink}>{t('contactDetails.unblockButton')}</Text>
+          </TouchableOpacity>
+        </View>
+      ) : isGroup && onlyAdminsCanMessage && !isGroupAdmin ? (
         <View style={[styles.composer, styles.composerDisabledNotice, { paddingBottom: insets.bottom + 10 }]}>
           <Text style={styles.composerDisabledText}>{t('thread.adminsOnlyNotice')}</Text>
         </View>
@@ -1471,11 +1484,16 @@ export default function ChatThreadScreen() {
         items={
           moreMenuMessage
             ? [
-                { label: t('thread.selection.copy'), onPress: () => copyMessage(moreMenuMessage) },
-                ...(moreMenuMessage.sender_id !== userId
+                { label: t('thread.selection.info'), onPress: () => showMessageInfo(moreMenuMessage) },
+                ...(!moreMenuMessage.media_type ? [{ label: t('thread.selection.copy'), onPress: () => copyMessage(moreMenuMessage) }] : []),
+                ...(moreMenuMessage.sender_id === userId && !moreMenuMessage.media_type
+                  ? [{ label: t('thread.selection.edit'), onPress: () => startEdit(moreMenuMessage) }]
+                  : []),
+                { label: t('thread.selection.react'), onPress: () => setReactionTargetId(moreMenuMessage.message_id) },
+                { label: moreMenuMessage.pinned ? t('thread.selection.unpin') : t('thread.selection.pin'), onPress: () => togglePin(moreMenuMessage) },
+                ...(isGroup && moreMenuMessage.sender_id !== userId
                   ? [{ label: t('thread.menu.replyPrivately'), onPress: () => replyPrivately(moreMenuMessage) }]
                   : []),
-                { label: moreMenuMessage.pinned ? t('thread.selection.unpin') : t('thread.selection.pin'), onPress: () => togglePin(moreMenuMessage) },
                 ...(moreMenuMessage.sender_id !== userId
                   ? [{ label: t('thread.menu.report', { name: memberName(moreMenuMessage.sender_id) }), danger: true, onPress: () => confirmReportSender(moreMenuMessage) }]
                   : []),
@@ -1516,20 +1534,46 @@ export default function ChatThreadScreen() {
             onPress: () =>
               Alert.alert(t('thread.menu.clearChatConfirmTitle'), t('thread.menu.clearChatConfirmBody'), [
                 { text: t('common:cancel'), style: 'cancel' },
-                { text: t('thread.menu.clear'), style: 'destructive', onPress: () => clearConversationMessages(db, conversationId) },
+                {
+                  text: t('thread.menu.clear'),
+                  style: 'destructive',
+                  onPress: () => clearConversationMessages(db, conversationId).then(reloadMessages),
+                },
               ]),
           },
           ...(!isGroup && recipientId
             ? [
-                {
-                  label: t('thread.menu.blockContact', { name: resolvedName || t('thread.menu.defaultContactName') }),
-                  danger: true,
-                  onPress: () =>
-                    Alert.alert(t('thread.menu.blockConfirmTitle', { name: resolvedName || t('thread.menu.defaultContactName') }), t('thread.menu.blockConfirmBody'), [
-                      { text: t('common:cancel'), style: 'cancel' as const },
-                      { text: t('common:block'), style: 'destructive' as const, onPress: () => blockUser(recipientId) },
-                    ]),
-                },
+                isBlocked
+                  ? {
+                      label: t('thread.menu.unblockContact', { name: resolvedName || t('thread.menu.defaultContactName') }),
+                      onPress: () =>
+                        Alert.alert(t('contactDetails.unblockConfirmTitle', { name: resolvedName || t('thread.menu.defaultContactName') }), t('contactDetails.unblockConfirmBody'), [
+                          { text: t('common:cancel'), style: 'cancel' as const },
+                          {
+                            text: t('contactDetails.unblockButton'),
+                            onPress: () =>
+                              unblockUser(recipientId)
+                                .then(() => setIsBlocked(false))
+                                .catch(() => Alert.alert(t('common:somethingWentWrong'), t('thread.unblockFailed'))),
+                          },
+                        ]),
+                    }
+                  : {
+                      label: t('thread.menu.blockContact', { name: resolvedName || t('thread.menu.defaultContactName') }),
+                      danger: true,
+                      onPress: () =>
+                        Alert.alert(t('thread.menu.blockConfirmTitle', { name: resolvedName || t('thread.menu.defaultContactName') }), t('thread.menu.blockConfirmBody'), [
+                          { text: t('common:cancel'), style: 'cancel' as const },
+                          {
+                            text: t('common:block'),
+                            style: 'destructive' as const,
+                            onPress: () =>
+                              blockUser(recipientId)
+                                .then(() => setIsBlocked(true))
+                                .catch(() => Alert.alert(t('common:somethingWentWrong'), t('thread.blockFailed'))),
+                          },
+                        ]),
+                    },
               ]
             : []),
         ]}
@@ -1600,8 +1644,9 @@ function makeStyles(colors: Palette) {
     editingBannerLabel: { fontFamily: fonts.sansMedium, fontSize: 12.5, color: colors.brand700 },
     replyPreviewSnippet: { fontFamily: fonts.sans, fontSize: 12.5, color: colors.textMuted, marginTop: 2 },
     composer: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10, borderTopWidth: 1, borderTopColor: colors.hairline, backgroundColor: colors.surface },
-    composerDisabledNotice: { justifyContent: 'center' },
-    composerDisabledText: { fontFamily: fonts.sans, fontSize: 13, color: colors.textMuted, textAlign: 'center', flex: 1 },
+    composerDisabledNotice: { justifyContent: 'center', gap: 10 },
+    composerDisabledText: { fontFamily: fonts.sans, fontSize: 13, color: colors.textMuted, textAlign: 'center', flexShrink: 1 },
+    composerUnblockLink: { fontFamily: fonts.sansSemiBold, fontSize: 13, color: colors.brand600 },
     iconTouchable: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
     input: { flex: 1, backgroundColor: colors.tint1, borderRadius: 22, paddingHorizontal: 16, paddingVertical: 11, fontFamily: fonts.sans, fontSize: 14, color: colors.textPrimary },
     sendButton: { width: 44, height: 44, borderRadius: 22 },

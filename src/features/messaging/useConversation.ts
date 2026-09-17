@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { DeviceEventEmitter } from 'react-native';
 import { randomUUID } from 'expo-crypto';
 
 import {
@@ -24,6 +25,7 @@ import { useAuth } from '../auth/AuthContext';
 import { preferences } from '../../lib/preferences';
 import { UNRESOLVED_TITLE_PLACEHOLDER } from './conversationId';
 import * as messagingApi from './api';
+import { MESSAGES_CLEARED_EVENT } from './inboxSocket';
 import { ChatSocket } from './ws';
 
 export type OutgoingMedia = {
@@ -155,6 +157,17 @@ export function useConversation({
   const reload = useCallback(async () => {
     setMessages(await listMessages(db, conversationId));
   }, [db, conversationId]);
+
+  // A "Clear chat" triggered from contact-details.tsx (a different screen
+  // than this thread) deletes rows in SQLite directly — without this, an
+  // already-mounted thread underneath keeps showing its stale in-memory
+  // `messages` state until it's closed and reopened.
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener(MESSAGES_CLEARED_EVENT, (clearedConversationId: string) => {
+      if (clearedConversationId === conversationId) reload();
+    });
+    return () => sub.remove();
+  }, [conversationId, reload]);
 
   // Keeps the stored title/avatar current as they resolve, independent of
   // the socket lifecycle below.
@@ -483,5 +496,12 @@ export function useConversation({
     setDisappearing,
     muted,
     setMuted,
+    // Exposed so screens that mutate SQLite directly (e.g. "Clear chat",
+    // which deletes rows outside this hook's own action functions) can make
+    // this hook's in-memory `messages` state reflect it — otherwise the
+    // thread visibly doesn't change until it's closed and reopened, since
+    // `messages` is only ever populated on connect/action, never re-read
+    // from SQLite on every render.
+    reloadMessages: reload,
   };
 }

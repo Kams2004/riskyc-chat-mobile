@@ -32,6 +32,8 @@ export default {
     phoneHint: 'Required to be discoverable by your contacts.',
     photoPermissionTitle: 'Permission needed',
     photoPermissionBody: 'Allow photo library access to change your profile picture.',
+    phoneInUseTitle: 'Number already in use',
+    phoneInUseBody: 'There is already an account with that phone number. Please enter a different one.',
   },
   account: {
     title: 'Account',
@@ -45,6 +47,22 @@ export default {
     deleteConfirmMessage:
       "This removes your account and profile permanently. Your existing messages stay visible to people you've chatted with, but you won't be reachable or discoverable anymore. This cannot be undone.",
     deleteError: 'Could not delete account',
+  },
+  deleteAccount: {
+    title: 'Delete your account?',
+    subtitle: "This can't be undone. Before you continue, here's what happens:",
+    reasons: {
+      dataLoss: 'Your profile, display name, and photo are permanently deleted.',
+      messages: "Message history stays with the people you've chatted with, but disappears from this device.",
+      media: 'Photos, videos, voice notes, and documents you sent are no longer reachable through your account.',
+      groupsContacts: 'You leave every group, and any local names you saved for your contacts are lost.',
+      status: 'Any active status updates are removed immediately.',
+    },
+    footnote: "You won't be reachable or discoverable by phone number or email anymore.",
+    understood: 'Understood, delete my account',
+    finalConfirmTitle: 'Are you absolutely sure?',
+    finalConfirmBody: 'This is your last chance to cancel — deleting your account cannot be undone.',
+    deleting: 'Deleting your account…',
   },
   changeIdentifier: {
     titlePhone: 'Change phone number',

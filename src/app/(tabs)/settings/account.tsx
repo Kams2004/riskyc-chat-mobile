@@ -1,13 +1,13 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
 
 import { useAuth } from '../../../features/auth/AuthContext';
 import { useTheme } from '../../../features/theme/ThemeContext';
-import { deleteMyAccount, getUser, type UserResult } from '../../../features/users/api';
+import { getUser, type UserResult } from '../../../features/users/api';
 import { maskIdentifier } from '../../../lib/mask';
 import { fonts, type Palette } from '../../../theme';
 
@@ -15,11 +15,10 @@ export default function AccountScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = makeStyles(colors);
-  const { userId, signOut } = useAuth();
+  const { userId } = useAuth();
   const { t } = useTranslation('settings');
   const [user, setUser] = useState<UserResult | null>(null);
   const [isRevealed, setIsRevealed] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
 
   // Re-fetches every time this screen regains focus, not just on mount — a
   // change-identifier round trip pushes forward then pops back here, and a
@@ -35,31 +34,6 @@ export default function AccountScreen() {
 
   const identifier = user ? (user.email ?? user.phoneNumber) : null;
   const identifierMode: 'phone' | 'email' = user?.email ? 'email' : 'phone';
-
-  function confirmDelete() {
-    Alert.alert(
-      t('account.deleteConfirmTitle'),
-      t('account.deleteConfirmMessage'),
-      [
-        { text: t('common:cancel'), style: 'cancel' },
-        {
-          text: t('account.deleteAccount'),
-          style: 'destructive',
-          onPress: async () => {
-            setIsDeleting(true);
-            try {
-              await deleteMyAccount();
-              await signOut();
-            } catch (e) {
-              console.warn('[Account] delete failed', e);
-              Alert.alert(t('account.deleteError'), t('common:checkConnectionAndRetry'));
-              setIsDeleting(false);
-            }
-          },
-        },
-      ]
-    );
-  }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 20 }]}>
@@ -90,8 +64,8 @@ export default function AccountScreen() {
 
       <View style={{ flex: 1 }} />
 
-      <TouchableOpacity style={styles.deleteButton} onPress={confirmDelete} disabled={isDeleting}>
-        {isDeleting ? <ActivityIndicator color={colors.brand700} /> : <Text style={styles.deleteLabel}>{t('account.deleteAccount')}</Text>}
+      <TouchableOpacity style={styles.deleteButton} onPress={() => router.push('/(tabs)/settings/delete-account' as never)}>
+        <Text style={styles.deleteLabel}>{t('account.deleteAccount')}</Text>
       </TouchableOpacity>
     </View>
   );

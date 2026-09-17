@@ -14,6 +14,7 @@ import { useAuth } from '../../features/auth/AuthContext';
 import { uploadImage } from '../../features/media/api';
 import { useTheme } from '../../features/theme/ThemeContext';
 import { updateMyProfile } from '../../features/users/api';
+import { ApiError } from '../../lib/httpClient';
 import { fonts, gradients, type Palette } from '../../theme';
 
 /**
@@ -73,7 +74,11 @@ export default function ProfileSetupScreen() {
       router.replace('/(tabs)/chats');
     } catch (e) {
       console.warn('[ProfileSetup] save failed', e);
-      Alert.alert(t('editProfile.saveError'), t('common:checkConnectionAndRetry'));
+      if (e instanceof ApiError && e.status === 409) {
+        Alert.alert(t('editProfile.phoneInUseTitle'), t('editProfile.phoneInUseBody'));
+      } else {
+        Alert.alert(t('editProfile.saveError'), t('common:checkConnectionAndRetry'));
+      }
     } finally {
       setIsSaving(false);
     }

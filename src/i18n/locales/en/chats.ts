@@ -75,6 +75,9 @@ export default {
       cameraBody: 'Allow camera access to take a picture.',
     },
     sendFailedTitle: 'Could not send',
+    blockedNotice: 'You blocked {{name}}',
+    unblockFailed: 'Could not unblock. Please try again.',
+    blockFailed: 'Could not block. Please try again.',
     editedLabel: 'edited',
     selection: {
       star: 'Star',
@@ -114,6 +117,7 @@ export default {
       clearChatConfirmBody: 'This removes the messages from this device only.',
       clear: 'Clear',
       blockContact: 'Block {{name}}',
+      unblockContact: 'Unblock {{name}}',
       blockConfirmTitle: 'Block {{name}}?',
       blockConfirmBody: "You won't receive calls or messages from them anymore.",
       defaultContactName: 'this contact',

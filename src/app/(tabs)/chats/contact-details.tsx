@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, DeviceEventEmitter, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
@@ -12,6 +12,7 @@ import { useAuth } from '../../../features/auth/AuthContext';
 import { useCall } from '../../../features/calls/CallContext';
 import { getCommonGroups, type GroupResult } from '../../../features/groups/api';
 import { getMediaSummary, type MediaSummaryItem } from '../../../features/messaging/api';
+import { MESSAGES_CLEARED_EVENT } from '../../../features/messaging/inboxSocket';
 import { useMediaUrl } from '../../../features/media/useMediaUrl';
 import { useTheme } from '../../../features/theme/ThemeContext';
 import { blockUser, getUser, listBlockedUsers, reportUser, unblockUser, type UserResult } from '../../../features/users/api';
@@ -69,7 +70,12 @@ export default function ContactDetailsScreen() {
   function confirmClearChat() {
     Alert.alert(t('contactDetails.clearChatConfirmTitle'), t('contactDetails.clearChatConfirmBody'), [
       { text: t('common:cancel'), style: 'cancel' },
-      { text: t('contactDetails.clearChat'), style: 'destructive', onPress: () => clearConversationMessages(db, conversationId) },
+      {
+        text: t('contactDetails.clearChat'),
+        style: 'destructive',
+        onPress: () =>
+          clearConversationMessages(db, conversationId).then(() => DeviceEventEmitter.emit(MESSAGES_CLEARED_EVENT, conversationId)),
+      },
     ]);
   }
 
@@ -84,9 +90,13 @@ export default function ContactDetailsScreen() {
           text: isBlocked ? t('contactDetails.unblockButton') : t('common:block'),
           style: 'destructive',
           onPress: async () => {
-            if (isBlocked) await unblockUser(userId);
-            else await blockUser(userId);
-            setIsBlocked((v) => !v);
+            try {
+              if (isBlocked) await unblockUser(userId);
+              else await blockUser(userId);
+              setIsBlocked((v) => !v);
+            } catch {
+              Alert.alert(t('common:somethingWentWrong'), t('common:checkConnectionAndRetry'));
+            }
           },
         },
       ]
@@ -95,20 +105,15 @@ export default function ContactDetailsScreen() {
 
   function confirmReport() {
     const name = user?.displayName || t('contactDetails.defaultPersonName');
+    const submit = (reason: string) =>
+      reportUser(userId, reason)
+        .then(() => Alert.alert(t('contactDetails.reportedTitle'), t('contactDetails.reportedBody')))
+        .catch(() => Alert.alert(t('common:somethingWentWrong'), t('common:checkConnectionAndRetry')));
     Alert.alert(t('contactDetails.reportConfirmTitle', { name }), t('contactDetails.reportConfirmBody'), [
       { text: t('common:cancel'), style: 'cancel' },
-      {
-        text: t('contactDetails.reportSpam'),
-        onPress: () => reportUser(userId, 'Spam').then(() => Alert.alert(t('contactDetails.reportedTitle'), t('contactDetails.reportedBody'))),
-      },
-      {
-        text: t('contactDetails.reportInappropriate'),
-        onPress: () => reportUser(userId, 'Inappropriate content').then(() => Alert.alert(t('contactDetails.reportedTitle'), t('contactDetails.reportedBody'))),
-      },
-      {
-        text: t('contactDetails.reportOther'),
-        onPress: () => reportUser(userId, 'Other').then(() => Alert.alert(t('contactDetails.reportedTitle'), t('contactDetails.reportedBody'))),
-      },
+      { text: t('contactDetails.reportSpam'), onPress: () => submit('Spam') },
+      { text: t('contactDetails.reportInappropriate'), onPress: () => submit('Inappropriate content') },
+      { text: t('contactDetails.reportOther'), onPress: () => submit('Other') },
     ]);
   }
 

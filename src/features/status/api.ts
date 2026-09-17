@@ -10,6 +10,8 @@ export type StatusItem = {
   mediaObjectKey: string | null;
   textContent: string | null;
   backgroundColor: string | null;
+  /** Opaque JSON (see StatusOverlay in components/StatusOverlayView.tsx) — freehand drawing + an optional text label drawn on top of the media, composited client-side at view time. Always null for a TEXT status. */
+  overlayJson: string | null;
   createdAt: string;
   expiresAt: string;
   viewedByMe: boolean;
@@ -31,6 +33,7 @@ export type CreateStatusRequest = {
   mediaObjectKey?: string | null;
   textContent?: string | null;
   backgroundColor?: string | null;
+  overlayJson?: string | null;
 };
 
 export function createStatus(request: CreateStatusRequest): Promise<StatusItem> {

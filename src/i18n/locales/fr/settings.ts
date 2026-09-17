@@ -32,6 +32,8 @@ export default {
     phoneHint: 'Requis pour être trouvé(e) par vos contacts.',
     photoPermissionTitle: 'Autorisation requise',
     photoPermissionBody: 'Autorisez l’accès à la photothèque pour changer votre photo de profil.',
+    phoneInUseTitle: 'Numéro déjà utilisé',
+    phoneInUseBody: 'Un compte existe déjà avec ce numéro de téléphone. Veuillez en saisir un autre.',
   },
   account: {
     title: 'Compte',
@@ -45,6 +47,22 @@ export default {
     deleteConfirmMessage:
       "Cela supprime définitivement votre compte et votre profil. Vos messages existants resteront visibles pour les personnes avec qui vous avez discuté, mais vous ne serez plus joignable ni visible. Cette action est irréversible.",
     deleteError: 'Impossible de supprimer le compte',
+  },
+  deleteAccount: {
+    title: 'Supprimer votre compte ?',
+    subtitle: 'Cette action est irréversible. Voici ce qui se passe avant de continuer :',
+    reasons: {
+      dataLoss: 'Votre profil, votre nom affiché et votre photo sont supprimés définitivement.',
+      messages: "L'historique des messages reste visible pour les personnes avec qui vous avez discuté, mais disparaît de cet appareil.",
+      media: "Les photos, vidéos, messages vocaux et documents que vous avez envoyés ne seront plus accessibles via votre compte.",
+      groupsContacts: 'Vous quittez tous les groupes, et les noms locaux enregistrés pour vos contacts sont perdus.',
+      status: 'Tout statut actif est supprimé immédiatement.',
+    },
+    footnote: 'Vous ne serez plus joignable ni visible par numéro de téléphone ou email.',
+    understood: 'Compris, supprimer mon compte',
+    finalConfirmTitle: 'Êtes-vous absolument sûr(e) ?',
+    finalConfirmBody: 'Dernière chance d’annuler — la suppression de votre compte est irréversible.',
+    deleting: 'Suppression de votre compte…',
   },
   changeIdentifier: {
     titlePhone: 'Changer le numéro de téléphone',

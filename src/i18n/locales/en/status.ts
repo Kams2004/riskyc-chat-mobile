@@ -23,6 +23,11 @@ export default {
     postFailedTitle: 'Could not post status',
     postFailedBody: 'Please try again.',
     posting: 'Posting…',
+    textOverlayPlaceholder: 'Add text',
+    discardTitle: 'Discard items?',
+    discardBody: "You'll lose what you've added so far.",
+    keepEditing: 'Keep editing',
+    discard: 'Discard',
   },
   viewer: {
     viewedBy_one: '{{count}} view',

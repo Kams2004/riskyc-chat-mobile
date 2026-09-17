@@ -86,8 +86,8 @@ export default function StatusScreen() {
     router.push({ pathname: '/(tabs)/status/viewer', params: { userId: targetUserId } } as never);
   }
 
-  function openComposer() {
-    router.push('/(tabs)/status/new' as never);
+  function openComposer(mode?: 'camera' | 'text') {
+    router.push({ pathname: '/(tabs)/status/new', params: mode ? { mode } : {} } as never);
   }
 
   const unviewed = rows.filter((r) => r.hasUnviewed);
@@ -111,7 +111,6 @@ export default function StatusScreen() {
           <TouchableOpacity
             style={styles.row}
             onPress={() => (myStatuses ? openViewer(userId!) : openComposer())}
-            onLongPress={openComposer}
           >
             <View style={[styles.ring, myStatuses ? styles.ringNeutral : styles.ringNone]}>
               <Avatar localUri={null} objectKey={avatarObjectKey} label={displayName ?? '?'} size={52} />
@@ -120,13 +119,17 @@ export default function StatusScreen() {
               <Text style={styles.name} numberOfLines={1}>{t('feed.myStatus')}</Text>
               <Text style={styles.sub} numberOfLines={1}>{t('feed.addStatus')}</Text>
             </View>
-            {myStatuses && (
-              <TouchableOpacity style={styles.addButton} onPress={openComposer}>
-                <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={colors.brand600} strokeWidth={2.4} strokeLinecap="round">
-                  <Path d="M12 5v14M5 12h14" />
-                </Svg>
-              </TouchableOpacity>
-            )}
+            <TouchableOpacity style={styles.addButton} onPress={() => openComposer('camera')}>
+              <Svg width={17} height={17} viewBox="0 0 24 24" fill="none" stroke={colors.brand600} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <Path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                <Path d="M12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" />
+              </Svg>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.addButton} onPress={() => openComposer('text')}>
+              <Svg width={17} height={17} viewBox="0 0 24 24" fill="none" stroke={colors.brand600} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <Path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+              </Svg>
+            </TouchableOpacity>
           </TouchableOpacity>
 
           {rows.length === 0 ? (

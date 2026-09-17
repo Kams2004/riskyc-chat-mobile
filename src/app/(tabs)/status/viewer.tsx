@@ -1,12 +1,13 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Animated, FlatList, Image, Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, FlatList, Image, Modal, Pressable, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
 
 import { Avatar } from '../../../components/Avatar';
+import { StatusOverlayView, parseOverlay } from '../../../components/StatusOverlayView';
 import { getLocalContactName, useSQLiteContext } from '../../../data/db';
 import { useAuth } from '../../../features/auth/AuthContext';
 import { useMediaUrl } from '../../../features/media/useMediaUrl';
@@ -31,12 +32,13 @@ function timeAgo(iso: string): string {
   return `${Math.floor(minutes / 60)}h`;
 }
 
-function StatusMedia({ item }: { item: StatusItem }) {
+function StatusMedia({ item, width, height }: { item: StatusItem; width: number; height: number }) {
   const url = useMediaUrl(item.mediaType !== 'TEXT' ? item.mediaObjectKey : null);
   const videoPlayer = useVideoPlayer(item.mediaType === 'VIDEO' ? url ?? '' : '', (p) => {
     p.muted = false;
     p.play();
   });
+  const overlay = parseOverlay(item.overlayJson);
 
   if (item.mediaType === 'TEXT') {
     return (
@@ -52,15 +54,22 @@ function StatusMedia({ item }: { item: StatusItem }) {
       </View>
     );
   }
-  if (item.mediaType === 'VIDEO') {
-    return <VideoView player={videoPlayer} style={StyleSheet.absoluteFill} contentFit="contain" nativeControls={false} />;
-  }
-  return <Image source={{ uri: url }} style={StyleSheet.absoluteFill} resizeMode="contain" />;
+  return (
+    <>
+      {item.mediaType === 'VIDEO' ? (
+        <VideoView player={videoPlayer} style={StyleSheet.absoluteFill} contentFit="contain" nativeControls={false} />
+      ) : (
+        <Image source={{ uri: url }} style={StyleSheet.absoluteFill} resizeMode="contain" />
+      )}
+      <StatusOverlayView overlay={overlay} width={width} height={height} />
+    </>
+  );
 }
 
 export default function StatusViewerScreen() {
   const { userId: targetUserId } = useLocalSearchParams<{ userId: string }>();
   const insets = useSafeAreaInsets();
+  const { width, height } = useWindowDimensions();
   const db = useSQLiteContext();
   const { userId: myUserId, displayName: myDisplayName, avatarObjectKey: myAvatarObjectKey } = useAuth();
   const { t } = useTranslation('status');
@@ -198,7 +207,7 @@ export default function StatusViewerScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusMedia item={current} />
+      <StatusMedia item={current} width={width} height={height} />
 
       <Pressable
         style={StyleSheet.absoluteFill}

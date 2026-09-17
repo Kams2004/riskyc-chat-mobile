@@ -75,6 +75,9 @@ export default {
       cameraBody: 'Autorisez l’accès à l’appareil photo pour prendre une photo.',
     },
     sendFailedTitle: 'Envoi impossible',
+    blockedNotice: 'Vous avez bloqué {{name}}',
+    unblockFailed: 'Impossible de débloquer. Veuillez réessayer.',
+    blockFailed: 'Impossible de bloquer. Veuillez réessayer.',
     editedLabel: 'modifié',
     selection: {
       star: 'Étoiler',
@@ -114,6 +117,7 @@ export default {
       clearChatConfirmBody: 'Cela retire les messages de cet appareil uniquement.',
       clear: 'Effacer',
       blockContact: 'Bloquer {{name}}',
+      unblockContact: 'Débloquer {{name}}',
       blockConfirmTitle: 'Bloquer {{name}} ?',
       blockConfirmBody: 'Vous ne recevrez plus d’appels ni de messages de cette personne.',
       defaultContactName: 'ce contact',

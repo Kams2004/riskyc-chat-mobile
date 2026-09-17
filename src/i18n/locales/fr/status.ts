@@ -23,6 +23,11 @@ export default {
     postFailedTitle: 'Impossible de publier le statut',
     postFailedBody: 'Veuillez réessayer.',
     posting: 'Publication…',
+    textOverlayPlaceholder: 'Ajouter du texte',
+    discardTitle: 'Abandonner les éléments ?',
+    discardBody: 'Vous perdrez ce que vous avez ajouté jusqu’ici.',
+    keepEditing: 'Continuer',
+    discard: 'Abandonner',
   },
   viewer: {
     viewedBy_one: '{{count}} vue',
