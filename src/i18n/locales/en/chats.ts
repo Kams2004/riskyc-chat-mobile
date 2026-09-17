@@ -11,6 +11,15 @@ export default {
     nothingHere: 'Nothing here',
     tryDifferentFilter: 'Try a different filter.',
     newConversation: 'New conversation',
+    you: 'You',
+    photo: '📷 Photo',
+    video: '🎥 Video',
+    voiceMessage: '🎤 Voice message',
+    document: '📎 Document',
+    typing: 'typing',
+    tabChats: 'Chats',
+    tabArchived: 'Archived',
+    muted: 'Muted',
   },
   thread: {
     status: {
@@ -68,6 +77,9 @@ export default {
     sendFailedTitle: 'Could not send',
     editedLabel: 'edited',
     selection: {
+      star: 'Star',
+      unstar: 'Unstar',
+      react: 'React',
       info: 'Info',
       edit: 'Edit',
       reply: 'Reply',
@@ -115,6 +127,12 @@ export default {
     emptyNoMatch: 'No one in your contacts matches that search.',
     emptyNoContacts: "None of your contacts are on RiskyC Chat yet — try inviting one!",
     unnamedUser: 'Unnamed user',
+    onRiskyC: 'On RiskyC Chat',
+    notOnRiskyC: 'Not on RiskyC Chat',
+    invite: 'Invite',
+    inviteContactMessage: 'Hey {{name}}, join me on RiskyC Chat: {{url}}',
+    phoneSearchHint: 'on RiskyC Chat',
+    lookingUp: 'Looking up…',
   },
   search: {
     placeholder: 'Search in this conversation',

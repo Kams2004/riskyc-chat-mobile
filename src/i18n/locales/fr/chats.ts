@@ -11,6 +11,15 @@ export default {
     nothingHere: 'Rien ici',
     tryDifferentFilter: 'Essayez un autre filtre.',
     newConversation: 'Nouvelle conversation',
+    you: 'Vous',
+    photo: '📷 Photo',
+    video: '🎥 Vidéo',
+    voiceMessage: '🎤 Message vocal',
+    document: '📎 Document',
+    typing: 'écrit',
+    tabChats: 'Discussions',
+    tabArchived: 'Archivées',
+    muted: 'Silencieux',
   },
   thread: {
     status: {
@@ -68,6 +77,9 @@ export default {
     sendFailedTitle: 'Envoi impossible',
     editedLabel: 'modifié',
     selection: {
+      star: 'Étoiler',
+      unstar: 'Retirer l’étoile',
+      react: 'Réagir',
       info: 'Infos',
       edit: 'Modifier',
       reply: 'Répondre',
@@ -115,6 +127,12 @@ export default {
     emptyNoMatch: 'Aucun de vos contacts ne correspond à cette recherche.',
     emptyNoContacts: 'Aucun de vos contacts n’utilise encore RiskyC Chat — invitez-en un !',
     unnamedUser: 'Utilisateur sans nom',
+    onRiskyC: 'Sur RiskyC Chat',
+    notOnRiskyC: 'Pas sur RiskyC Chat',
+    invite: 'Inviter',
+    inviteContactMessage: 'Salut {{name}}, rejoins-moi sur RiskyC Chat : {{url}}',
+    phoneSearchHint: 'sur RiskyC Chat',
+    lookingUp: 'Recherche en cours…',
   },
   search: {
     placeholder: 'Rechercher dans cette conversation',

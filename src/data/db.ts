@@ -71,6 +71,11 @@ export type LocalConversation = {
   unread_count: number;
   is_group: number;
   is_favorite: number;
+  is_muted: number;
+  is_archived: number;
+  last_message_snippet: string | null;
+  last_message_type: string | null;
+  last_message_sender_id: string | null;
 };
 
 export type LocalGroupMember = {
@@ -203,14 +208,45 @@ export async function getUnreadMessageIds(db: SQLiteDatabase, conversationId: st
 
 export async function listConversations(db: SQLiteDatabase, myUserId: string): Promise<LocalConversation[]> {
   return db.getAllAsync<LocalConversation>(
-    // sender_id <> me (not recipient_id = me): a 1:1 message row's
-    // recipient_id is always "whichever of the two isn't the sender", so
-    // this is equivalent there, and it's the only version that also works
-    // for a group message, which has no single recipient_id to match on.
     `SELECT c.id, c.title, c.last_message_at, c.avatar_object_key, c.is_group, c.is_favorite,
+       COALESCE(c.is_muted, 0) AS is_muted,
+       COALESCE(c.is_archived, 0) AS is_archived,
        (SELECT COUNT(*) FROM messages m
-         WHERE m.conversation_id = c.id AND m.sender_id <> $myUserId AND m.status <> 'read') AS unread_count
+         WHERE m.conversation_id = c.id AND m.sender_id <> $myUserId AND m.status <> 'read') AS unread_count,
+       (SELECT m2.ciphertext FROM messages m2
+         WHERE m2.conversation_id = c.id AND m2.deleted = 0 AND m2.deleted_for_me = 0
+         ORDER BY m2.sent_at DESC LIMIT 1) AS last_message_snippet,
+       (SELECT m2.media_type FROM messages m2
+         WHERE m2.conversation_id = c.id AND m2.deleted = 0 AND m2.deleted_for_me = 0
+         ORDER BY m2.sent_at DESC LIMIT 1) AS last_message_type,
+       (SELECT m2.sender_id FROM messages m2
+         WHERE m2.conversation_id = c.id AND m2.deleted = 0 AND m2.deleted_for_me = 0
+         ORDER BY m2.sent_at DESC LIMIT 1) AS last_message_sender_id
      FROM conversations c
+     WHERE COALESCE(c.is_archived, 0) = 0
+     ORDER BY c.last_message_at DESC`,
+    { $myUserId: myUserId }
+  );
+}
+
+export async function listArchivedConversations(db: SQLiteDatabase, myUserId: string): Promise<LocalConversation[]> {
+  return db.getAllAsync<LocalConversation>(
+    `SELECT c.id, c.title, c.last_message_at, c.avatar_object_key, c.is_group, c.is_favorite,
+       COALESCE(c.is_muted, 0) AS is_muted,
+       COALESCE(c.is_archived, 0) AS is_archived,
+       (SELECT COUNT(*) FROM messages m
+         WHERE m.conversation_id = c.id AND m.sender_id <> $myUserId AND m.status <> 'read') AS unread_count,
+       (SELECT m2.ciphertext FROM messages m2
+         WHERE m2.conversation_id = c.id AND m2.deleted = 0 AND m2.deleted_for_me = 0
+         ORDER BY m2.sent_at DESC LIMIT 1) AS last_message_snippet,
+       (SELECT m2.media_type FROM messages m2
+         WHERE m2.conversation_id = c.id AND m2.deleted = 0 AND m2.deleted_for_me = 0
+         ORDER BY m2.sent_at DESC LIMIT 1) AS last_message_type,
+       (SELECT m2.sender_id FROM messages m2
+         WHERE m2.conversation_id = c.id AND m2.deleted = 0 AND m2.deleted_for_me = 0
+         ORDER BY m2.sent_at DESC LIMIT 1) AS last_message_sender_id
+     FROM conversations c
+     WHERE COALESCE(c.is_archived, 0) = 1
      ORDER BY c.last_message_at DESC`,
     { $myUserId: myUserId }
   );
@@ -255,6 +291,24 @@ export async function setFavorite(db: SQLiteDatabase, conversationIds: string[],
     params[`$id${i}`] = id;
   });
   await db.runAsync(`UPDATE conversations SET is_favorite = $favorite WHERE id IN (${placeholders})`, params);
+}
+
+/** Bulk-sets the muted flag for the given conversations. */
+export async function setMuted(db: SQLiteDatabase, conversationIds: string[], muted: boolean) {
+  if (conversationIds.length === 0) return;
+  const placeholders = conversationIds.map((_, i) => `$id${i}`).join(',');
+  const params: Record<string, string | number> = { $muted: muted ? 1 : 0 };
+  conversationIds.forEach((id, i) => { params[`$id${i}`] = id; });
+  await db.runAsync(`UPDATE conversations SET is_muted = $muted WHERE id IN (${placeholders})`, params);
+}
+
+/** Bulk-sets the archived flag for the given conversations. */
+export async function setArchived(db: SQLiteDatabase, conversationIds: string[], archived: boolean) {
+  if (conversationIds.length === 0) return;
+  const placeholders = conversationIds.map((_, i) => `$id${i}`).join(',');
+  const params: Record<string, string | number> = { $archived: archived ? 1 : 0 };
+  conversationIds.forEach((id, i) => { params[`$id${i}`] = id; });
+  await db.runAsync(`UPDATE conversations SET is_archived = $archived WHERE id IN (${placeholders})`, params);
 }
 
 /** Removes a conversation and its messages from this device only — the server keeps its own copy. */
@@ -358,6 +412,39 @@ export async function recomputeGroupMessageStatus(db: SQLiteDatabase, messageId:
     $status: aggregate,
     $messageId: messageId,
   });
+}
+
+// ---------------------------------------------------------------------------
+// Local contact name overrides (WhatsApp-style: your saved name wins)
+// ---------------------------------------------------------------------------
+
+export type LocalContact = {
+  user_id: string;
+  local_name: string;
+};
+
+/** Saves (or updates) the name this device's user has chosen for a given userId. */
+export async function upsertLocalContact(db: SQLiteDatabase, userId: string, localName: string) {
+  await db.runAsync(
+    `INSERT INTO local_contacts (user_id, local_name) VALUES ($userId, $localName)
+     ON CONFLICT(user_id) DO UPDATE SET local_name = excluded.local_name`,
+    { $userId: userId, $localName: localName }
+  );
+}
+
+/** Returns the locally-saved name for a userId, or null if none has been saved. */
+export async function getLocalContactName(db: SQLiteDatabase, userId: string): Promise<string | null> {
+  const row = await db.getFirstAsync<{ local_name: string }>(
+    'SELECT local_name FROM local_contacts WHERE user_id = $userId',
+    { $userId: userId }
+  );
+  return row?.local_name ?? null;
+}
+
+/** Bulk-fetches all local contact overrides as a Map<userId, localName>. */
+export async function getAllLocalContacts(db: SQLiteDatabase): Promise<Map<string, string>> {
+  const rows = await db.getAllAsync<LocalContact>('SELECT user_id, local_name FROM local_contacts');
+  return new Map(rows.map((r) => [r.user_id, r.local_name]));
 }
 
 /** Convenience re-export so feature modules only import from one place. */

@@ -6,7 +6,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
  * half of the "local-first sync" approach from the architecture proposal —
  * the UI always reads from SQLite, never waits on the network round trip.
  */
-const CURRENT_VERSION = 7;
+const CURRENT_VERSION = 9;
 
 export async function migrateDbIfNeeded(db: SQLiteDatabase) {
   const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
@@ -113,7 +113,28 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
     version = 7;
   }
 
-  // Future schema changes: `if (version === 7) { ...; version = 8; }` and so on.
+  if (version === 7) {
+    // Local contact name overrides — stores the name the current user saved
+    // for a given userId in their device contacts (or manually inside the
+    // app). This is purely local and never synced to the server, mirroring
+    // WhatsApp's behaviour where your saved name takes precedence over the
+    // name the other person registered with.
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS local_contacts (
+        user_id TEXT PRIMARY KEY NOT NULL,
+        local_name TEXT NOT NULL
+      );
+    `);
+    version = 8;
+  }
+
+  if (version === 8) {
+    await db.execAsync(`
+      ALTER TABLE conversations ADD COLUMN is_muted INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE conversations ADD COLUMN is_archived INTEGER NOT NULL DEFAULT 0;
+    `);
+    version = 9;
+  }
 
   await db.execAsync(`PRAGMA user_version = ${CURRENT_VERSION}`);
 }

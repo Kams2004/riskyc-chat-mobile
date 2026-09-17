@@ -1,3 +1,4 @@
+import * as Contacts from 'expo-contacts';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -6,14 +7,21 @@ import Svg, { Path } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
 
 import { Avatar } from '../../../components/Avatar';
-import { deleteConversation, useSQLiteContext } from '../../../data/db';
+import { deleteConversation, getAllLocalContacts, upsertLocalContact, useSQLiteContext } from '../../../data/db';
 import { useAuth } from '../../../features/auth/AuthContext';
 import { addMembers, changeMemberRole, getGroup, removeMember, renameGroup, type GroupResult } from '../../../features/groups/api';
 import { useTheme } from '../../../features/theme/ThemeContext';
-import { getUser, searchUsers, type UserResult } from '../../../features/users/api';
+import { getUser, matchContacts, type UserResult } from '../../../features/users/api';
 import { fonts, type Palette } from '../../../theme';
 
-type MemberRow = { userId: string; role: 'ADMIN' | 'MEMBER'; user: UserResult | null };
+type MemberRow = { userId: string; role: 'ADMIN' | 'MEMBER'; user: UserResult | null; localName?: string };
+type AddCandidate = UserResult & { localName?: string };
+
+function normalizePhone(raw: string): string {
+  const trimmed = raw.trim();
+  const plus = trimmed.startsWith('+') ? '+' : '';
+  return plus + trimmed.replace(/[^\d]/g, '');
+}
 
 export default function GroupInfoScreen() {
   const { colors } = useTheme();
@@ -29,31 +37,94 @@ export default function GroupInfoScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isAddingOpen, setIsAddingOpen] = useState(false);
   const [addQuery, setAddQuery] = useState('');
-  const [addResults, setAddResults] = useState<UserResult[]>([]);
+  // All of this device's contacts-with-an-account, loaded once when the add
+  // panel opens — same contacts-only source as new-group.tsx, filtered
+  // locally as the user types instead of hitting a system-wide search API.
+  const [addCandidates, setAddCandidates] = useState<AddCandidate[]>([]);
+  const [isLoadingCandidates, setIsLoadingCandidates] = useState(false);
 
   const isAdmin = members.find((m) => m.userId === userId)?.role === 'ADMIN';
 
   const load = useCallback(async () => {
     const result = await getGroup(groupId);
     setGroup(result);
+    const localNames = await getAllLocalContacts(db);
     const withUsers = await Promise.all(
-      result.members.map(async (m) => ({ userId: m.userId, role: m.role, user: await getUser(m.userId).catch(() => null) }))
+      result.members.map(async (m) => ({
+        userId: m.userId,
+        role: m.role,
+        user: await getUser(m.userId).catch(() => null),
+        localName: localNames.get(m.userId),
+      }))
     );
     setMembers(withUsers);
     setIsLoading(false);
-  }, [groupId]);
+  }, [groupId, db]);
 
   useEffect(() => {
     load();
   }, [load]);
 
+  // Contacts-only, same rule as everywhere else in the app: only people
+  // already in this device's contacts (and who have an account) can be
+  // picked here — not every account in the system.
   useEffect(() => {
-    if (!isAddingOpen) return;
-    const timer = setTimeout(() => {
-      searchUsers(addQuery).then((users) => setAddResults(users.filter((u) => !members.some((m) => m.userId === u.userId))));
-    }, 250);
-    return () => clearTimeout(timer);
-  }, [addQuery, isAddingOpen, members]);
+    if (!isAddingOpen || addCandidates.length > 0) return;
+    let cancelled = false;
+    setIsLoadingCandidates(true);
+    (async () => {
+      const permission = await Contacts.requestPermissionsAsync();
+      if (!permission.granted) {
+        if (!cancelled) setIsLoadingCandidates(false);
+        return;
+      }
+      const { data } = await Contacts.getContactsAsync({
+        fields: [Contacts.Fields.PhoneNumbers, Contacts.Fields.Emails, Contacts.Fields.Name],
+      });
+      const phoneNumbers = new Set<string>();
+      const emails = new Set<string>();
+      const phoneToName = new Map<string, string>();
+      for (const contact of data) {
+        const name = contact.name?.trim() || '';
+        for (const phone of contact.phoneNumbers ?? []) {
+          if (phone.number) {
+            const norm = normalizePhone(phone.number);
+            phoneNumbers.add(norm);
+            if (name) phoneToName.set(norm, name);
+          }
+        }
+        for (const email of contact.emails ?? []) {
+          if (email.email) emails.add(email.email.trim().toLowerCase());
+        }
+      }
+      const matched = await matchContacts([...phoneNumbers], [...emails]).catch(() => []);
+      for (const user of matched) {
+        if (user.phoneNumber) {
+          const deviceName = phoneToName.get(normalizePhone(user.phoneNumber));
+          if (deviceName) await upsertLocalContact(db, user.userId, deviceName);
+        }
+      }
+      const localNames = await getAllLocalContacts(db);
+      if (!cancelled) {
+        setAddCandidates(matched.map((u) => ({ ...u, localName: localNames.get(u.userId) })));
+        setIsLoadingCandidates(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isAddingOpen, addCandidates.length, db]);
+
+  const addResults = addCandidates.filter((u) => {
+    if (members.some((m) => m.userId === u.userId)) return false;
+    const q = addQuery.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      (u.localName ?? u.displayName ?? '').toLowerCase().includes(q) ||
+      (u.phoneNumber ?? '').toLowerCase().includes(q) ||
+      (u.email ?? '').toLowerCase().includes(q)
+    );
+  });
 
   async function handleAddMember(user: UserResult) {
     await addMembers(groupId, [user.userId]);
@@ -65,7 +136,7 @@ export default function GroupInfoScreen() {
   function confirmRemove(member: MemberRow) {
     Alert.alert(
       t('groupInfo.confirmRemove.title'),
-      t('groupInfo.confirmRemove.body', { name: member.user?.displayName ?? t('groupInfo.thisPerson') }),
+      t('groupInfo.confirmRemove.body', { name: member.localName ?? member.user?.displayName ?? t('groupInfo.thisPerson') }),
       [
         { text: t('common:cancel'), style: 'cancel' },
         {
@@ -91,7 +162,7 @@ export default function GroupInfoScreen() {
 
   function openMemberActions(member: MemberRow) {
     if (!isAdmin || member.userId === userId) return;
-    const name = member.user?.displayName ?? t('groupInfo.thisPerson');
+    const name = member.localName ?? member.user?.displayName ?? t('groupInfo.thisPerson');
     Alert.alert(name, undefined, [
       { text: t('common:cancel'), style: 'cancel' },
       { text: member.role === 'ADMIN' ? t('groupInfo.memberActions.dismissAsAdmin') : t('groupInfo.memberActions.makeGroupAdmin'), onPress: () => handleToggleAdmin(member) },
@@ -207,10 +278,11 @@ export default function GroupInfoScreen() {
             onChangeText={setAddQuery}
             autoFocus
           />
+          {isLoadingCandidates && <ActivityIndicator color={colors.brand500} style={{ marginVertical: 12 }} />}
           {addResults.map((user) => (
             <TouchableOpacity key={user.userId} style={styles.memberRow} onPress={() => handleAddMember(user)}>
-              <Avatar objectKey={user.avatarObjectKey} label={user.displayName || '?'} size={40} />
-              <Text style={styles.memberName}>{user.displayName || t('groupInfo.unnamedUser')}</Text>
+              <Avatar objectKey={user.avatarObjectKey} label={user.localName || user.displayName || '?'} size={40} />
+              <Text style={styles.memberName}>{user.localName || user.displayName || t('groupInfo.unnamedUser')}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -224,9 +296,9 @@ export default function GroupInfoScreen() {
             style={styles.memberRow}
             onLongPress={() => openMemberActions(item)}
           >
-            <Avatar objectKey={item.user?.avatarObjectKey} label={item.user?.displayName || '?'} size={40} />
+            <Avatar objectKey={item.user?.avatarObjectKey} label={item.localName || item.user?.displayName || '?'} size={40} />
             <View style={{ flex: 1 }}>
-              <Text style={styles.memberName}>{item.user?.displayName || t('groupInfo.unknownUser')}{item.userId === userId ? t('groupInfo.youSuffix') : ''}</Text>
+              <Text style={styles.memberName}>{item.localName || item.user?.displayName || t('groupInfo.unknownUser')}{item.userId === userId ? t('groupInfo.youSuffix') : ''}</Text>
             </View>
             {item.role === 'ADMIN' && <Text style={styles.roleLabel}>{t('groupInfo.roleAdmin')}</Text>}
           </TouchableOpacity>

@@ -1,5 +1,6 @@
-import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import * as Contacts from 'expo-contacts';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
@@ -10,9 +11,18 @@ import { KeyboardScreen } from '../../../components/KeyboardScreen';
 import { useAuth } from '../../../features/auth/AuthContext';
 import { createGroup } from '../../../features/groups/api';
 import { useTheme } from '../../../features/theme/ThemeContext';
-import { searchUsers, type UserResult } from '../../../features/users/api';
+import { matchContacts, type UserResult } from '../../../features/users/api';
+import { getAllLocalContacts, upsertLocalContact, useSQLiteContext } from '../../../data/db';
 import { fonts, gradients, type Palette } from '../../../theme';
 import { LinearGradient } from 'expo-linear-gradient';
+
+type EnrichedUser = UserResult & { localName?: string };
+
+function normalizePhone(raw: string): string {
+  const trimmed = raw.trim();
+  const plus = trimmed.startsWith('+') ? '+' : '';
+  return plus + trimmed.replace(/[^\d]/g, '');
+}
 
 export default function NewGroupScreen() {
   const { colors } = useTheme();
@@ -20,33 +30,93 @@ export default function NewGroupScreen() {
   const styles = makeStyles(colors);
   const { userId } = useAuth();
   const { t } = useTranslation('groups');
+  const db = useSQLiteContext();
 
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<UserResult[]>([]);
+  const [allUsers, setAllUsers] = useState<EnrichedUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [selected, setSelected] = useState<Map<string, UserResult>>(new Map());
+  const [selected, setSelected] = useState<Map<string, EnrichedUser>>(new Map());
   const [groupName, setGroupName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    setIsLoading(true);
-    const timer = setTimeout(() => {
-      searchUsers(query)
-        .then((users) => {
-          if (!cancelled) setResults(users);
-        })
-        .finally(() => {
-          if (!cancelled) setIsLoading(false);
-        });
-    }, 250);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [query]);
+  // Same contacts-only approach as new.tsx — only people in your device
+  // contacts who have an account are shown, not every user in the system.
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      setIsLoading(true);
 
-  function toggle(user: UserResult) {
+      (async () => {
+        try {
+          const permission = await Contacts.requestPermissionsAsync();
+          if (!permission.granted) {
+            if (!cancelled) setIsLoading(false);
+            return;
+          }
+
+          const { data } = await Contacts.getContactsAsync({
+            fields: [Contacts.Fields.PhoneNumbers, Contacts.Fields.Emails, Contacts.Fields.Name],
+          });
+
+          const phoneNumbers = new Set<string>();
+          const emails = new Set<string>();
+          const phoneToName = new Map<string, string>();
+
+          for (const contact of data) {
+            const name = contact.name?.trim() || '';
+            for (const phone of contact.phoneNumbers ?? []) {
+              if (phone.number) {
+                const norm = normalizePhone(phone.number);
+                phoneNumbers.add(norm);
+                if (name) phoneToName.set(norm, name);
+              }
+            }
+            for (const email of contact.emails ?? []) {
+              if (email.email) emails.add(email.email.trim().toLowerCase());
+            }
+          }
+
+          const matched = await matchContacts([...phoneNumbers], [...emails]);
+
+          for (const user of matched) {
+            if (user.phoneNumber) {
+              const norm = normalizePhone(user.phoneNumber);
+              const deviceName = phoneToName.get(norm);
+              if (deviceName) await upsertLocalContact(db, user.userId, deviceName);
+            }
+          }
+
+          const localNames = await getAllLocalContacts(db);
+          const enriched: EnrichedUser[] = matched.map((u) => ({
+            ...u,
+            localName: localNames.get(u.userId),
+          }));
+
+          if (!cancelled) {
+            setAllUsers(enriched);
+            setIsLoading(false);
+          }
+        } catch {
+          if (!cancelled) setIsLoading(false);
+        }
+      })();
+
+      return () => { cancelled = true; };
+    }, [db])
+  );
+
+  const results = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return allUsers;
+    return allUsers.filter(
+      (u) =>
+        (u.localName ?? u.displayName ?? '').toLowerCase().includes(q) ||
+        (u.phoneNumber ?? '').toLowerCase().includes(q) ||
+        (u.email ?? '').toLowerCase().includes(q)
+    );
+  }, [allUsers, query]);
+
+  function toggle(user: EnrichedUser) {
     setSelected((prev) => {
       const next = new Map(prev);
       if (next.has(user.userId)) {
@@ -126,11 +196,12 @@ export default function NewGroupScreen() {
           keyExtractor={(item) => item.userId}
           renderItem={({ item }) => {
             const isSelected = selected.has(item.userId);
+            const displayName = item.localName || item.displayName || '';
             return (
               <TouchableOpacity style={styles.row} onPress={() => toggle(item)}>
-                <Avatar objectKey={item.avatarObjectKey} label={item.displayName || item.email || '?'} size={44} />
+                <Avatar objectKey={item.avatarObjectKey} label={displayName || item.phoneNumber || ''} size={44} />
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.rowName}>{item.displayName || t('newGroup.unnamedUser')}</Text>
+                  <Text style={styles.rowName}>{displayName || t('newGroup.unnamedUser')}</Text>
                   <Text style={styles.rowSubtitle}>{item.email ?? item.phoneNumber}</Text>
                 </View>
                 <View style={[styles.checkbox, isSelected && { backgroundColor: colors.brand500, borderColor: colors.brand500 }]}>

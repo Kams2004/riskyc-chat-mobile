@@ -1,7 +1,16 @@
 import * as Contacts from 'expo-contacts';
-import { router } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  FlatList,
+  Share,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
@@ -12,17 +21,37 @@ import { useAuth } from '../../../features/auth/AuthContext';
 import { conversationIdFor } from '../../../features/messaging/conversationId';
 import { useTheme } from '../../../features/theme/ThemeContext';
 import { config } from '../../../lib/config';
-import { matchContacts, type UserResult } from '../../../features/users/api';
+import { lookupByPhone, matchContacts, type UserResult } from '../../../features/users/api';
+import { getAllLocalContacts, upsertLocalContact, useSQLiteContext } from '../../../data/db';
 import { fonts, type Palette } from '../../../theme';
 
 type LoadState = 'loading' | 'granted' | 'denied';
 
-/** Loose normalization (strip everything but leading + and digits) — good enough to match the app's own simple "+237..." storage format without pulling in a full libphonenumber dependency. */
+/** Strips everything but a leading + and digits. */
 function normalizePhone(raw: string): string {
   const trimmed = raw.trim();
   const plus = trimmed.startsWith('+') ? '+' : '';
   return plus + trimmed.replace(/[^\d]/g, '');
 }
+
+/** True when the string looks like a phone number the user typed (not a name). */
+function looksLikePhoneQuery(q: string): boolean {
+  return /^[+\d][\d\s\-().]{3,}$/.test(q.trim());
+}
+
+export type EnrichedUser = UserResult & { localName?: string };
+
+/** A device contact that has no RiskyC account — shown with an Invite button. */
+type UnregisteredContact = {
+  name: string;
+  phoneNumber: string;
+};
+
+type PhoneLookupState =
+  | { kind: 'idle' }
+  | { kind: 'loading' }
+  | { kind: 'found'; user: EnrichedUser }
+  | { kind: 'notFound'; deviceContact: UnregisteredContact | null };
 
 export default function NewConversationScreen() {
   const { colors } = useTheme();
@@ -30,88 +59,165 @@ export default function NewConversationScreen() {
   const styles = makeStyles(colors);
   const { userId } = useAuth();
   const { t } = useTranslation('chats');
+  const db = useSQLiteContext();
 
   const [query, setQuery] = useState('');
   const [loadState, setLoadState] = useState<LoadState>('loading');
-  const [contactUsers, setContactUsers] = useState<UserResult[]>([]);
+  const [contactUsers, setContactUsers] = useState<EnrichedUser[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [phoneLookup, setPhoneLookup] = useState<PhoneLookupState>({ kind: 'idle' });
 
-  // Contacts-only discovery: reads the device's own contacts ONCE, matches
-  // them against accounts server-side (see UserController#matchContacts),
-  // and every search below filters that already-matched set locally rather
-  // than ever hitting a free-text/global search — so a user can only find
-  // and start a chat with people they've already got in their phone or SIM
-  // contacts, not a stranger's account. Browsers have no contacts API, so
-  // this is mobile-only; web's global search is a documented platform gap,
-  // not something to fake here.
+  // phoneToName built from device contacts — used to show the saved name
+  // when a typed number belongs to a device contact with no account.
+  const phoneToNameRef = useRef<Map<string, string>>(new Map());
+
+  // Re-runs every time this screen comes into focus so newly-added device
+  // contacts (including SIM / other storage locations) are picked up.
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      setLoadState('loading');
+      setError(null);
+
+      (async () => {
+        const permission = await Contacts.requestPermissionsAsync();
+        if (!permission.granted) {
+          if (!cancelled) setLoadState('denied');
+          return;
+        }
+        try {
+          const { data } = await Contacts.getContactsAsync({
+            fields: [Contacts.Fields.PhoneNumbers, Contacts.Fields.Emails, Contacts.Fields.Name],
+          });
+
+          const phoneNumbers = new Set<string>();
+          const emails = new Set<string>();
+          const phoneToName = new Map<string, string>();
+
+          for (const contact of data) {
+            const name = contact.name?.trim() || '';
+            for (const phone of contact.phoneNumbers ?? []) {
+              if (phone.number) {
+                const norm = normalizePhone(phone.number);
+                phoneNumbers.add(norm);
+                if (name) phoneToName.set(norm, name);
+              }
+            }
+            for (const email of contact.emails ?? []) {
+              if (email.email) emails.add(email.email.trim().toLowerCase());
+            }
+          }
+
+          phoneToNameRef.current = phoneToName;
+
+          const matched = await matchContacts([...phoneNumbers], [...emails]);
+
+          for (const user of matched) {
+            if (user.phoneNumber) {
+              const deviceName = phoneToName.get(normalizePhone(user.phoneNumber));
+              if (deviceName) await upsertLocalContact(db, user.userId, deviceName);
+            }
+          }
+
+          const localNames = await getAllLocalContacts(db);
+          const enriched: EnrichedUser[] = matched.map((u) => ({
+            ...u,
+            localName: localNames.get(u.userId),
+          }));
+
+          if (!cancelled) {
+            setContactUsers(enriched);
+            setLoadState('granted');
+          }
+        } catch {
+          // Always the translated fallback, never the raw exception.
+          if (!cancelled) {
+            setError(t('newChat.loadErrorFallback'));
+            setLoadState('granted');
+          }
+        }
+      })();
+
+      return () => { cancelled = true; };
+    }, [db, t])
+  );
+
+  // When the query looks like a phone number, debounce a server lookup.
+  const lookupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const permission = await Contacts.requestPermissionsAsync();
-      if (!permission.granted) {
-        if (!cancelled) setLoadState('denied');
-        return;
-      }
+    const q = query.trim();
+    if (!looksLikePhoneQuery(q)) {
+      setPhoneLookup({ kind: 'idle' });
+      return;
+    }
+    const norm = normalizePhone(q);
+    setPhoneLookup({ kind: 'loading' });
+    if (lookupTimerRef.current) clearTimeout(lookupTimerRef.current);
+    lookupTimerRef.current = setTimeout(async () => {
       try {
-        const details = await Contacts.Contact.getAllDetails([Contacts.ContactField.PHONES, Contacts.ContactField.EMAILS]);
-        const phoneNumbers = new Set<string>();
-        const emails = new Set<string>();
-        for (const contact of details) {
-          for (const phone of contact.phones ?? []) {
-            if (phone.number) phoneNumbers.add(normalizePhone(phone.number));
-          }
-          for (const email of contact.emails ?? []) {
-            if (email.address) emails.add(email.address.trim().toLowerCase());
-          }
+        const user = await lookupByPhone(norm);
+        if (user) {
+          const localNames = await getAllLocalContacts(db);
+          setPhoneLookup({
+            kind: 'found',
+            user: { ...user, localName: localNames.get(user.userId) },
+          });
+        } else {
+          const deviceName = phoneToNameRef.current.get(norm);
+          setPhoneLookup({
+            kind: 'notFound',
+            deviceContact: deviceName ? { name: deviceName, phoneNumber: norm } : null,
+          });
         }
-        const matched = await matchContacts([...phoneNumbers], [...emails]);
-        if (!cancelled) {
-          setContactUsers(matched);
-          setLoadState('granted');
-        }
-      } catch (e) {
-        if (!cancelled) {
-          setError(e instanceof Error ? e.message : t('newChat.loadErrorFallback'));
-          setLoadState('granted');
-        }
+      } catch {
+        setPhoneLookup({ kind: 'idle' });
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    }, 400);
+    return () => { if (lookupTimerRef.current) clearTimeout(lookupTimerRef.current); };
+  }, [query, db]);
 
-  const results = useMemo(() => {
+  const isPhoneMode = looksLikePhoneQuery(query.trim());
+
+  const filteredContacts = useMemo(() => {
+    if (isPhoneMode) return [];
     const q = query.trim().toLowerCase();
     if (!q) return contactUsers;
     return contactUsers.filter(
       (u) =>
-        (u.displayName ?? '').toLowerCase().includes(q) ||
+        (u.localName ?? u.displayName ?? '').toLowerCase().includes(q) ||
         (u.phoneNumber ?? '').toLowerCase().includes(q) ||
         (u.email ?? '').toLowerCase().includes(q)
     );
-  }, [contactUsers, query]);
+  }, [contactUsers, query, isPhoneMode]);
 
-  function openConversationWith(user: UserResult) {
+  function openConversationWith(user: EnrichedUser) {
     if (!userId) return;
+    const displayName = user.localName || user.displayName || '';
     router.replace({
       pathname: '/(tabs)/chats/[conversationId]',
       params: {
         conversationId: conversationIdFor(userId, user.userId),
         recipientId: user.userId,
-        recipientName: user.displayName ?? '',
+        recipientName: displayName,
         recipientAvatarObjectKey: user.avatarObjectKey ?? '',
       },
     });
   }
 
-  async function inviteFriend() {
+  async function inviteNumber(phoneNumber: string, name?: string) {
     const url = `${config.webAppUrl}/invite`;
+    const message = name
+      ? t('newChat.inviteContactMessage', { name, url })
+      : t('newChat.inviteMessage', { url });
     try {
-      await Share.share({ message: t('newChat.inviteMessage', { url }), url });
+      await Share.share({ message, url });
     } catch {
-      // User dismissed the share sheet — nothing to do.
+      // dismissed
     }
+  }
+
+  async function inviteFriend() {
+    await inviteNumber('');
   }
 
   return (
@@ -171,53 +277,143 @@ export default function NewConversationScreen() {
           value={query}
           onChangeText={setQuery}
           autoCapitalize="none"
+          keyboardType="default"
         />
+        {query.length > 0 && (
+          <TouchableOpacity onPress={() => setQuery('')} hitSlop={8}>
+            <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={colors.textMuted} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <Path d="M18 6L6 18M6 6l12 12" />
+            </Svg>
+          </TouchableOpacity>
+        )}
       </View>
 
-      {loadState === 'loading' && (
-        <View style={styles.stateBox}>
-          <ActivityIndicator color={colors.brand500} />
-        </View>
-      )}
+      {/* ── Phone-number search results ── */}
+      {isPhoneMode && (
+        <View style={styles.phoneResultBox}>
+          {phoneLookup.kind === 'loading' && (
+            <View style={styles.phoneResultRow}>
+              <ActivityIndicator color={colors.brand500} size="small" />
+              <Text style={styles.phoneResultHint}>{t('newChat.lookingUp')}</Text>
+            </View>
+          )}
 
-      {loadState === 'denied' && (
-        <View style={styles.stateBox}>
-          <Text style={styles.emptyText}>{t('newChat.deniedBody')}</Text>
-        </View>
-      )}
-
-      {loadState === 'granted' && error && (
-        <View style={styles.stateBox}>
-          <Text style={styles.errorText}>{error}</Text>
-        </View>
-      )}
-
-      {loadState === 'granted' && !error && results.length === 0 && (
-        <View style={styles.stateBox}>
-          <Text style={styles.emptyText}>
-            {query ? t('newChat.emptyNoMatch') : t('newChat.emptyNoContacts')}
-          </Text>
-        </View>
-      )}
-
-      {loadState === 'granted' && !error && (
-        <FlatList
-          data={results}
-          keyExtractor={(item) => item.userId}
-          renderItem={({ item }) => (
-            <TouchableOpacity style={styles.row} onPress={() => openConversationWith(item)}>
+          {phoneLookup.kind === 'found' && (
+            <TouchableOpacity style={styles.row} onPress={() => openConversationWith(phoneLookup.user)}>
               <Avatar
-                objectKey={item.avatarObjectKey}
-                label={item.displayName || item.email || item.phoneNumber || '?'}
+                objectKey={phoneLookup.user.avatarObjectKey}
+                label={phoneLookup.user.localName || phoneLookup.user.displayName || ''}
                 size={48}
               />
               <View style={{ flex: 1 }}>
-                <Text style={styles.rowName}>{item.displayName || t('newChat.unnamedUser')}</Text>
-                <Text style={styles.rowSubtitle}>{item.email ?? item.phoneNumber}</Text>
+                <Text style={styles.rowName}>
+                  {phoneLookup.user.localName || phoneLookup.user.displayName || t('newChat.unnamedUser')}
+                </Text>
+                <Text style={styles.rowSubtitle}>{phoneLookup.user.phoneNumber}</Text>
+              </View>
+              {/* "On RiskyC Chat" badge */}
+              <View style={[styles.badge, { backgroundColor: colors.brand500 }]}>
+                <Svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                  <Path d="M20 6L9 17l-5-5" />
+                </Svg>
+                <Text style={styles.badgeLabel}>{t('newChat.onRiskyC')}</Text>
               </View>
             </TouchableOpacity>
           )}
-        />
+
+          {phoneLookup.kind === 'notFound' && phoneLookup.deviceContact && (
+            /* Number is in device contacts but has no account */
+            <View style={styles.row}>
+              <Avatar objectKey={null} label={phoneLookup.deviceContact.name} size={48} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.rowName}>{phoneLookup.deviceContact.name}</Text>
+                <Text style={styles.rowSubtitle}>{phoneLookup.deviceContact.phoneNumber}</Text>
+                <Text style={[styles.rowSubtitle, { color: colors.textMuted, marginTop: 1 }]}>
+                  {t('newChat.notOnRiskyC')}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.inviteButton, { borderColor: colors.brand500 }]}
+                onPress={() => inviteNumber(phoneLookup.deviceContact!.phoneNumber, phoneLookup.deviceContact!.name)}
+              >
+                <Text style={[styles.inviteButtonLabel, { color: colors.brand500 }]}>{t('newChat.invite')}</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {phoneLookup.kind === 'notFound' && !phoneLookup.deviceContact && (
+            /* Unknown number, not in contacts, no account */
+            <View style={styles.row}>
+              <Avatar objectKey={null} label="" size={48} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.rowName}>{query.trim()}</Text>
+                <Text style={[styles.rowSubtitle, { color: colors.textMuted }]}>
+                  {t('newChat.notOnRiskyC')}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.inviteButton, { borderColor: colors.brand500 }]}
+                onPress={() => inviteNumber(query.trim())}
+              >
+                <Text style={[styles.inviteButtonLabel, { color: colors.brand500 }]}>{t('newChat.invite')}</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      )}
+
+      {/* ── Contact list (name/email search mode) ── */}
+      {!isPhoneMode && (
+        <>
+          {loadState === 'loading' && (
+            <View style={styles.stateBox}>
+              <ActivityIndicator color={colors.brand500} />
+            </View>
+          )}
+
+          {loadState === 'denied' && (
+            <View style={styles.stateBox}>
+              <Text style={styles.emptyText}>{t('newChat.deniedBody')}</Text>
+            </View>
+          )}
+
+          {loadState === 'granted' && error && (
+            <View style={styles.stateBox}>
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          )}
+
+          {loadState === 'granted' && !error && filteredContacts.length === 0 && (
+            <View style={styles.stateBox}>
+              <Text style={styles.emptyText}>
+                {query ? t('newChat.emptyNoMatch') : t('newChat.emptyNoContacts')}
+              </Text>
+            </View>
+          )}
+
+          {loadState === 'granted' && !error && (
+            <FlatList
+              data={filteredContacts}
+              keyExtractor={(item) => item.userId}
+              renderItem={({ item }) => {
+                const displayName = item.localName || item.displayName || '';
+                return (
+                  <TouchableOpacity style={styles.row} onPress={() => openConversationWith(item)}>
+                    <Avatar
+                      objectKey={item.avatarObjectKey}
+                      label={displayName || item.phoneNumber || ''}
+                      size={48}
+                    />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.rowName}>{displayName || t('newChat.unnamedUser')}</Text>
+                      <Text style={styles.rowSubtitle}>{item.email ?? item.phoneNumber}</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              }}
+            />
+          )}
+        </>
       )}
     </KeyboardScreen>
   );
@@ -244,11 +440,30 @@ function makeStyles(colors: Palette) {
       marginBottom: 12,
     },
     searchInput: { flex: 1, fontFamily: fonts.sans, fontSize: 14.5, color: colors.textPrimary, paddingVertical: 10 },
+    phoneResultBox: { marginBottom: 8 },
+    phoneResultRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 14 },
+    phoneResultHint: { fontFamily: fonts.sans, fontSize: 13.5, color: colors.textMuted },
     stateBox: { alignItems: 'center', marginTop: 48, paddingHorizontal: 12 },
     errorText: { fontFamily: fonts.sans, color: colors.brand800, textAlign: 'center', paddingHorizontal: 24 },
     emptyText: { fontFamily: fonts.sans, color: colors.textMuted, textAlign: 'center', lineHeight: 19 },
     row: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.hairline },
     rowName: { fontFamily: fonts.sansSemiBold, fontSize: 15.5, color: colors.textPrimary },
     rowSubtitle: { fontFamily: fonts.sans, fontSize: 12.5, color: colors.textMuted, marginTop: 2 },
+    badge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 10,
+    },
+    badgeLabel: { fontFamily: fonts.sansSemiBold, fontSize: 11, color: '#ffffff' },
+    inviteButton: {
+      borderWidth: 1.5,
+      borderRadius: 16,
+      paddingHorizontal: 14,
+      paddingVertical: 6,
+    },
+    inviteButtonLabel: { fontFamily: fonts.sansSemiBold, fontSize: 13 },
   });
 }

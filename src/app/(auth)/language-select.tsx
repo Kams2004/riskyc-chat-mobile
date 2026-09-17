@@ -43,7 +43,7 @@ export default function LanguageSelectScreen() {
 
   async function handleContinue() {
     await setAppLanguage(selected);
-    router.replace('/(auth)/login');
+    router.replace('/(auth)/permissions' as never);
   }
 
   if (checkingExisting) return null;

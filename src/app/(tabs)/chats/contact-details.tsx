@@ -1,13 +1,13 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
 
 import { ActionRow } from '../../../components/ActionRow';
 import { Avatar } from '../../../components/Avatar';
-import { clearConversationMessages, setFavorite, useSQLiteContext } from '../../../data/db';
+import { clearConversationMessages, getLocalContactName, setFavorite, upsertLocalContact, useSQLiteContext } from '../../../data/db';
 import { useAuth } from '../../../features/auth/AuthContext';
 import { useCall } from '../../../features/calls/CallContext';
 import { getCommonGroups, type GroupResult } from '../../../features/groups/api';
@@ -37,24 +37,30 @@ export default function ContactDetailsScreen() {
   const { t } = useTranslation('chats');
 
   const [user, setUser] = useState<UserResult | null>(null);
+  const [localName, setLocalName] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState('');
   const [media, setMedia] = useState<MediaSummaryItem[]>([]);
   const [groups, setGroups] = useState<GroupResult[]>([]);
   const [isBlocked, setIsBlocked] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   const load = useCallback(async () => {
-    const [userResult, mediaResult, groupsResult, blockedResult] = await Promise.all([
+    const [userResult, mediaResult, groupsResult, blockedResult, savedName] = await Promise.all([
       getUser(userId),
       getMediaSummary(conversationId, 'IMAGE,VIDEO,FILE', 4).catch(() => []),
       getCommonGroups(userId).catch(() => []),
       listBlockedUsers().catch(() => []),
+      getLocalContactName(db, userId),
     ]);
     setUser(userResult);
+    setLocalName(savedName);
+    setNameInput(savedName || userResult.displayName || '');
     setMedia(mediaResult);
     setGroups(groupsResult);
     setIsBlocked(blockedResult.some((b) => b.userId === userId));
     setIsLoading(false);
-  }, [conversationId, userId]);
+  }, [conversationId, db, userId]);
 
   useEffect(() => {
     load();
@@ -114,7 +120,15 @@ export default function ContactDetailsScreen() {
     );
   }
 
-  const name = user.displayName || t('contactDetails.unnamedUser');
+  const name = localName || user.displayName || t('contactDetails.unnamedUser');
+
+  async function saveLocalName() {
+    const trimmed = nameInput.trim();
+    if (!trimmed) return;
+    await upsertLocalContact(db, userId, trimmed);
+    setLocalName(trimmed);
+    setEditingName(false);
+  }
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingTop: insets.top + 12, paddingBottom: insets.bottom + 30 }}>
@@ -129,7 +143,36 @@ export default function ContactDetailsScreen() {
 
       <View style={styles.profileHeader}>
         <Avatar objectKey={user.avatarObjectKey} label={name} size={92} />
-        <Text style={styles.name}>{name}</Text>
+        {editingName ? (
+          <View style={styles.nameEditRow}>
+            <TextInput
+              style={styles.nameInput}
+              value={nameInput}
+              onChangeText={setNameInput}
+              autoFocus
+              onSubmitEditing={saveLocalName}
+              returnKeyType="done"
+            />
+            <TouchableOpacity onPress={saveLocalName} style={styles.nameEditAction}>
+              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={colors.brand600} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                <Path d="M20 6L9 17l-5-5" />
+              </Svg>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setEditingName(false)} style={styles.nameEditAction}>
+              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={colors.textMuted} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <Path d="M18 6L6 18M6 6l12 12" />
+              </Svg>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity style={styles.nameRow} onPress={() => { setNameInput(localName || user.displayName || ''); setEditingName(true); }}>
+            <Text style={styles.name}>{name}</Text>
+            <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={colors.textMuted} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <Path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+              <Path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+            </Svg>
+          </TouchableOpacity>
+        )}
         {!!user.phoneNumber && <Text style={styles.phone}>{user.phoneNumber}</Text>}
       </View>
 
@@ -275,7 +318,19 @@ function makeStyles(colors: Palette) {
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
     iconTouchable: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
     profileHeader: { alignItems: 'center', gap: 6, paddingVertical: 12 },
-    name: { fontFamily: fonts.display, fontSize: 21, color: colors.textPrimary, marginTop: 8 },
+    nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
+    name: { fontFamily: fonts.display, fontSize: 21, color: colors.textPrimary },
+    nameEditRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
+    nameInput: {
+      fontFamily: fonts.display,
+      fontSize: 19,
+      color: colors.textPrimary,
+      borderBottomWidth: 1.5,
+      borderBottomColor: colors.brand500,
+      minWidth: 160,
+      paddingVertical: 2,
+    },
+    nameEditAction: { padding: 6 },
     phone: { fontFamily: fonts.sans, fontSize: 13, color: colors.textMuted },
     actionsRow: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: colors.hairline },
     circleAction: { alignItems: 'center', gap: 6 },

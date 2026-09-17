@@ -1,5 +1,5 @@
 import { config } from '../../lib/config';
-import { apiFetch } from '../../lib/httpClient';
+import { apiFetch, ApiError } from '../../lib/httpClient';
 
 export type UserResult = {
   userId: string;
@@ -18,7 +18,7 @@ export function getUser(userId: string): Promise<UserResult> {
   return apiFetch(`${config.authServiceUrl}/api/users/${userId}`);
 }
 
-export function updateMyProfile(fields: { displayName?: string; avatarObjectKey?: string }): Promise<UserResult> {
+export function updateMyProfile(fields: { displayName?: string; avatarObjectKey?: string; phoneNumber?: string }): Promise<UserResult> {
   return apiFetch(`${config.authServiceUrl}/api/users/me`, {
     method: 'PUT',
     body: JSON.stringify(fields),
@@ -79,4 +79,22 @@ export function matchContacts(phoneNumbers: string[], emails: string[] = []): Pr
     method: 'POST',
     body: JSON.stringify({ phoneNumbers, emails }),
   });
+}
+
+/**
+ * Looks up a single phone number that the caller typed manually (not in
+ * their device contacts). Returns the account if found, or null if the
+ * number has no account — the caller never learns anything about numbers
+ * they didn't type themselves.
+ */
+export async function lookupByPhone(phoneNumber: string): Promise<UserResult | null> {
+  try {
+    return await apiFetch<UserResult>(`${config.authServiceUrl}/api/users/lookup-by-phone`, {
+      method: 'POST',
+      body: JSON.stringify({ phoneNumber }),
+    });
+  } catch (e: unknown) {
+    if (e instanceof ApiError && e.status === 404) return null;
+    throw e;
+  }
 }

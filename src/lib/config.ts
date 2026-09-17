@@ -39,8 +39,15 @@ export const config = {
   turnServerUrl: process.env.EXPO_PUBLIC_TURN_SERVER_URL ?? 'turn:167.86.120.214:3478',
   turnUsername: process.env.EXPO_PUBLIC_TURN_USERNAME ?? 'riskyc',
   turnCredential: process.env.EXPO_PUBLIC_TURN_CREDENTIAL ?? 'riskyc-turn-secret',
-  /** The deployed web app (see web/README.md) — its /invite page is what "Invite a friend" shares a link to. */
-  webAppUrl: process.env.EXPO_PUBLIC_WEB_APP_URL ?? 'http://167.86.120.214:8085',
+  /**
+   * The deployed web app's public domain (see web/README.md) — its /invite
+   * page is what "Invite a friend" shares a link to. Deliberately the real
+   * domain, not the raw VPS IP:port every other URL in this file uses —
+   * an invite link is meant to be shared/clicked by someone who has never
+   * touched this app before, so it needs to look trustworthy and survive
+   * the VPS's IP ever changing.
+   */
+  webAppUrl: process.env.EXPO_PUBLIC_WEB_APP_URL ?? 'https://chat.riskycfashion.com',
   /** Group-calling SFU (backend/sfu-service) — separate service/port from messaging-service's 1:1 call signaling. */
   sfuServiceUrl: process.env.EXPO_PUBLIC_SFU_SERVICE_URL ?? 'http://167.86.120.214:8095',
 } as const;

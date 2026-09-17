@@ -1,12 +1,13 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 
 import { useAuth } from '../../features/auth/AuthContext';
 import * as authApi from '../../features/auth/api';
 import { ApiError } from '../../lib/httpClient';
+import { KeyboardScreen } from '../../components/KeyboardScreen';
 import { useTheme } from '../../features/theme/ThemeContext';
 import { fonts, type Palette } from '../../theme';
 
@@ -51,7 +52,12 @@ export default function VerifyScreen() {
     signInWithOtp({ type: identifierType, value: identifierValue }, code)
       .catch((e) => {
         if (cancelled) return;
-        setError(e instanceof Error ? e.message : t('verify.incorrectCode'));
+        // Never show raw network errors — a 401 really is a wrong/expired
+        // code, but anything else (dropped connection, server hiccup) gets
+        // the same friendly network message login.tsx uses, not a false
+        // claim that the code itself was wrong.
+        const status = (e as { status?: number })?.status;
+        setError(status === 401 ? t('verify.incorrectCode') : t('login.networkError'));
         setCode('');
       })
       .finally(() => {
@@ -79,7 +85,8 @@ export default function VerifyScreen() {
           setError(t('verify.tooManyRequests'));
         }
       } else {
-        setError(e instanceof Error ? e.message : t('verify.couldNotResend'));
+        // Suppress raw network errors — show a generic friendly message.
+        setError(t('verify.couldNotResend'));
       }
     } finally {
       setIsResending(false);
@@ -93,11 +100,21 @@ export default function VerifyScreen() {
   const digits = Array.from({ length: CODE_LENGTH }, (_, i) => code[i] ?? '');
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 20 }]}>
+    <KeyboardScreen style={{ flex: 1, backgroundColor: colors.surface }}>
+      <ScrollView
+        contentContainerStyle={[styles.container, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 20 }]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
       <Text style={styles.title}>{identifierType === 'phone' ? t('verify.titlePhone') : t('verify.titleEmail')}</Text>
       <Text style={styles.subtitle}>
         {t('verify.subtitlePrefix')}
         <Text style={styles.bold}>{identifierValue}</Text>
+        {identifierType === 'phone' && (
+          <Text style={[styles.bold, { color: colors.brand600 }]} onPress={() => router.replace('/(auth)/login')}>
+            {'  '}{t('verify.wrongNumber')}
+          </Text>
+        )}
       </Text>
 
       <View style={styles.boxesTouchable} onTouchEnd={() => inputRef.current?.focus()}>
@@ -139,7 +156,8 @@ export default function VerifyScreen() {
           </Text>
         </TouchableOpacity>
       )}
-    </View>
+      </ScrollView>
+    </KeyboardScreen>
   );
 }
 

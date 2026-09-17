@@ -7,6 +7,7 @@ import {
   applyMessageMutation,
   applyReceipt,
   getConversationTitle,
+  getLocalContactName,
   recomputeGroupMessageStatus,
   upsertConversation,
   upsertGroupMembers,
@@ -23,6 +24,7 @@ import { looksLikeUnresolvedName, UNRESOLVED_TITLE_PLACEHOLDER } from './convers
 import { ChatSocket } from './ws';
 
 export const CONVERSATIONS_CHANGED_EVENT = 'riskyc:conversationsChanged';
+export const TYPING_EVENT = 'riskyc:typing';
 
 /**
  * Backfills any conversation this device never saw live over STOMP — a
@@ -131,8 +133,16 @@ export function useInboxSocket() {
               await upsertGroupMembers(db, envelope.groupId, withNames);
             }
           } else {
-            const sender = await getUser(envelope.senderId).catch(() => null);
-            title = sender?.displayName || sender?.phoneNumber || UNRESOLVED_TITLE_PLACEHOLDER;
+            // Whatever name this device has saved for the sender always
+            // wins over their own registered displayName — same rule every
+            // other screen (new.tsx, contact-details.tsx, the thread
+            // header) already follows, see data/db.ts's local_contacts
+            // table doc comment.
+            const [sender, localName] = await Promise.all([
+              getUser(envelope.senderId).catch(() => null),
+              getLocalContactName(db, envelope.senderId),
+            ]);
+            title = localName || sender?.displayName || sender?.phoneNumber || UNRESOLVED_TITLE_PLACEHOLDER;
             avatarObjectKey = sender?.avatarObjectKey;
           }
         }
@@ -178,6 +188,13 @@ export function useInboxSocket() {
           await recomputeGroupMessageStatus(db, update.messageId, update.conversationId);
         }
         DeviceEventEmitter.emit(CONVERSATIONS_CHANGED_EVENT);
+      });
+
+      // Broadcast typing events globally so the chat list can show
+      // "typing..." in the conversation row without opening the thread.
+      socket.subscribeToUserTyping((update) => {
+        if (cancelled) return;
+        DeviceEventEmitter.emit(TYPING_EVENT, update);
       });
     });
 
