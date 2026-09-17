@@ -447,5 +447,112 @@ export async function getAllLocalContacts(db: SQLiteDatabase): Promise<Map<strin
   return new Map(rows.map((r) => [r.user_id, r.local_name]));
 }
 
+// ---------------------------------------------------------------------------
+// Starred messages (device-local only — WhatsApp's own star is private to
+// the starring device too, never visible to or synced with anyone else)
+// ---------------------------------------------------------------------------
+
+/** Persists a star so it survives an app restart — previously an in-memory useState Set that reset to empty every time the thread screen remounted. */
+export async function starMessage(db: SQLiteDatabase, messageId: string) {
+  await db.runAsync(
+    `INSERT INTO starred_message (message_id, starred_at) VALUES ($messageId, $starredAt)
+     ON CONFLICT(message_id) DO NOTHING`,
+    { $messageId: messageId, $starredAt: new Date().toISOString() }
+  );
+}
+
+export async function unstarMessage(db: SQLiteDatabase, messageId: string) {
+  await db.runAsync('DELETE FROM starred_message WHERE message_id = $messageId', { $messageId: messageId });
+}
+
+/** All starred messageIds for this conversation, loaded once when the thread screen opens. */
+export async function getStarredMessageIds(db: SQLiteDatabase, conversationId: string): Promise<Set<string>> {
+  const rows = await db.getAllAsync<{ message_id: string }>(
+    `SELECT sm.message_id FROM starred_message sm
+     JOIN messages m ON m.message_id = sm.message_id
+     WHERE m.conversation_id = $conversationId`,
+    { $conversationId: conversationId }
+  );
+  return new Set(rows.map((r) => r.message_id));
+}
+
+// ---------------------------------------------------------------------------
+// Message reactions (server-synced — see backend's ChatController#react and
+// MessageHistoryController#reactions; this is just this device's local
+// cache, refreshed on thread open and kept live via STOMP)
+// ---------------------------------------------------------------------------
+
+export type LocalReaction = { message_id: string; user_id: string; emoji: string };
+
+/** Replaces this device's whole reaction cache for a conversation with the server's current state — called once when a thread opens. */
+export async function replaceReactionsForConversation(db: SQLiteDatabase, conversationId: string, reactions: LocalReaction[]) {
+  const messageIds = await db.getAllAsync<{ message_id: string }>(
+    'SELECT message_id FROM messages WHERE conversation_id = $conversationId',
+    { $conversationId: conversationId }
+  );
+  const ids = messageIds.map((r) => r.message_id);
+  if (ids.length > 0) {
+    const placeholders = ids.map((_, i) => `$id${i}`).join(',');
+    const params: Record<string, string> = {};
+    ids.forEach((id, i) => { params[`$id${i}`] = id; });
+    await db.runAsync(`DELETE FROM message_reactions WHERE message_id IN (${placeholders})`, params);
+  }
+  for (const r of reactions) {
+    await db.runAsync(
+      `INSERT INTO message_reactions (message_id, user_id, emoji) VALUES ($messageId, $userId, $emoji)
+       ON CONFLICT(message_id, user_id) DO UPDATE SET emoji = excluded.emoji`,
+      { $messageId: r.message_id, $userId: r.user_id, $emoji: r.emoji }
+    );
+  }
+}
+
+/** Applies one live reaction update (see ChatController#react's broadcast) — emoji=null removes it. */
+export async function applyReactionUpdate(db: SQLiteDatabase, messageId: string, userId: string, emoji: string | null) {
+  if (emoji) {
+    await db.runAsync(
+      `INSERT INTO message_reactions (message_id, user_id, emoji) VALUES ($messageId, $userId, $emoji)
+       ON CONFLICT(message_id, user_id) DO UPDATE SET emoji = excluded.emoji`,
+      { $messageId: messageId, $userId: userId, $emoji: emoji }
+    );
+  } else {
+    await db.runAsync('DELETE FROM message_reactions WHERE message_id = $messageId AND user_id = $userId', {
+      $messageId: messageId,
+      $userId: userId,
+    });
+  }
+}
+
+/** Map<messageId, Map<userId, emoji>> for every reaction in this conversation. */
+export async function getReactionsForConversation(db: SQLiteDatabase, conversationId: string): Promise<Map<string, Map<string, string>>> {
+  const rows = await db.getAllAsync<LocalReaction>(
+    `SELECT r.message_id, r.user_id, r.emoji FROM message_reactions r
+     JOIN messages m ON m.message_id = r.message_id
+     WHERE m.conversation_id = $conversationId`,
+    { $conversationId: conversationId }
+  );
+  const byMessage = new Map<string, Map<string, string>>();
+  for (const r of rows) {
+    if (!byMessage.has(r.message_id)) byMessage.set(r.message_id, new Map());
+    byMessage.get(r.message_id)!.set(r.user_id, r.emoji);
+  }
+  return byMessage;
+}
+
+/** Local cache of this conversation's disappearing-messages duration, kept current from ConversationController's sync (server-authoritative — see ConversationSummary.disappearingMessageSeconds) and the live .settings STOMP topic. */
+export async function setDisappearingSeconds(db: SQLiteDatabase, conversationId: string, seconds: number | null) {
+  await db.runAsync('UPDATE conversations SET disappearing_message_seconds = $seconds WHERE id = $id', {
+    $seconds: seconds,
+    $id: conversationId,
+  });
+}
+
+export async function getDisappearingSeconds(db: SQLiteDatabase, conversationId: string): Promise<number | null> {
+  const row = await db.getFirstAsync<{ disappearing_message_seconds: number | null }>(
+    'SELECT disappearing_message_seconds FROM conversations WHERE id = $id',
+    { $id: conversationId }
+  );
+  return row?.disappearing_message_seconds ?? null;
+}
+
 /** Convenience re-export so feature modules only import from one place. */
 export { useSQLiteContext };

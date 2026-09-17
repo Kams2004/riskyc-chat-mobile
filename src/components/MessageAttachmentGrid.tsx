@@ -1,4 +1,5 @@
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import Svg, { Path } from 'react-native-svg';
 
 import { useMediaUrl } from '../features/media/useMediaUrl';
@@ -9,11 +10,27 @@ import type { AttachmentItem } from '../data/db';
 const GRID_SIZE = 220;
 const GAP = 3;
 
+/** A video tile's own first frame as its thumbnail — a raw video file URL can't be used as an <Image> source (that's what a plain Image-based tile silently failed to render before this). */
+function VideoTile({ objectKey, size }: { objectKey: string; size: number }) {
+  const url = useMediaUrl(objectKey);
+  const player = useVideoPlayer(url ?? '', (p) => {
+    p.muted = true;
+  });
+  if (!url) return <View style={[StyleSheet.absoluteFill, styles.placeholder]} />;
+  return <VideoView player={player} style={{ width: size, height: size }} contentFit="cover" nativeControls={false} />;
+}
+
 function Tile({ item, size, onPress, overlay }: { item: AttachmentItem; size: number; onPress: () => void; overlay?: React.ReactNode }) {
   const url = useMediaUrl(item.mediaObjectKey);
   return (
     <TouchableOpacity onPress={onPress} style={{ width: size, height: size }} activeOpacity={0.85}>
-      {url ? <Image source={{ uri: url }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : <View style={[StyleSheet.absoluteFill, styles.placeholder]} />}
+      {item.mediaType === 'VIDEO' ? (
+        <VideoTile objectKey={item.mediaObjectKey} size={size} />
+      ) : url ? (
+        <Image source={{ uri: url }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+      ) : (
+        <View style={[StyleSheet.absoluteFill, styles.placeholder]} />
+      )}
       {item.mediaType === 'VIDEO' && (
         <View style={styles.videoBadge}>
           <Svg width={22} height={22} viewBox="0 0 24 24" fill="#ffffff">

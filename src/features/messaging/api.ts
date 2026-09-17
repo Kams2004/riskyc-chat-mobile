@@ -34,6 +34,10 @@ export type MessageEnvelope = {
   replyToSnippet?: string | null;
   /** Shared, per-conversation pin — absent on the envelope the client builds to send (pin is a separate action, not part of send). */
   pinned?: boolean;
+  /** Set on the envelope the client builds to send (from AuthContext's own displayName) — used server-side only, for the push notification title. Absent on anything read back. */
+  senderDisplayName?: string | null;
+  /** Set only when the conversation had disappearing messages on at send time — see Message.java's own comment. */
+  expiresAt?: string | null;
 };
 
 export function fetchHistory(conversationId: string): Promise<MessageEnvelope[]> {
@@ -85,6 +89,8 @@ export type ConversationSummary = {
   otherUserId: string | null;
   groupId: string | null;
   lastMessageAt: string;
+  muted: boolean;
+  disappearingMessageSeconds: number | null;
 };
 
 /**
@@ -95,4 +101,40 @@ export type ConversationSummary = {
  */
 export function listConversationSummaries(): Promise<ConversationSummary[]> {
   return apiFetch(`${config.messagingServiceUrl}/api/conversations`);
+}
+
+export type ConversationSettingsResult = { muted: boolean; disappearingMessageSeconds: number | null };
+
+/** The thread screen's own initial fetch for mute/disappearing state, rather than searching listConversationSummaries() for one entry. */
+export function fetchConversationSettings(conversationId: string): Promise<ConversationSettingsResult> {
+  return apiFetch(`${config.messagingServiceUrl}/api/conversations/${conversationId}/settings`);
+}
+
+/** Server-side (not just a local flag) so ChatController#send can skip this user's push before it's ever sent — see MutedConversation's own doc comment on the backend. */
+export function setConversationMuted(conversationId: string, muted: boolean): Promise<void> {
+  return apiFetch(`${config.messagingServiceUrl}/api/conversations/${conversationId}/mute`, {
+    method: 'PUT',
+    body: JSON.stringify({ muted }),
+  });
+}
+
+/** seconds=null turns disappearing messages off. Applies only to messages sent from now on. */
+export function setDisappearingMessages(conversationId: string, seconds: number | null): Promise<void> {
+  return apiFetch(`${config.messagingServiceUrl}/api/conversations/${conversationId}/disappearing`, {
+    method: 'PUT',
+    body: JSON.stringify({ seconds }),
+  });
+}
+
+export type ReactionRow = { messageId: string; userId: string; emoji: string };
+
+/** Bulk, one call per thread open — feeds initial reaction state; live updates arrive over the .reactions STOMP topic afterward. */
+export function fetchReactions(conversationId: string): Promise<ReactionRow[]> {
+  return apiFetch(`${config.messagingServiceUrl}/api/messages/${conversationId}/reactions`);
+}
+
+export type LinkPreview = { url: string; title: string | null; description: string | null; imageUrl: string | null; siteName: string | null };
+
+export function fetchLinkPreview(url: string): Promise<LinkPreview> {
+  return apiFetch(`${config.messagingServiceUrl}/api/link-preview?url=${encodeURIComponent(url)}`);
 }

@@ -23,6 +23,7 @@ import {
   View,
 } from 'react-native';
 import { PanGestureHandler } from 'react-native-gesture-handler';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path, Rect } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
@@ -55,13 +56,17 @@ import { usePresence } from '../../../features/presence/usePresence';
 import { useTheme } from '../../../features/theme/ThemeContext';
 import { blockUser, getUser, reportUser } from '../../../features/users/api';
 import { getLocalContactName } from '../../../data/db';
+import { firstUrlIn, LinkPreviewCard } from '../../../components/LinkPreviewCard';
 import { TypingDots } from '../../../components/TypingDots';
 import { fonts, gradients, type Palette } from '../../../theme';
 import {
   clearConversationMessages,
   getReceiptsForMessage,
+  getStarredMessageIds,
   listGroupMembers,
   parseAttachments,
+  starMessage,
+  unstarMessage,
   upsertGroupMembers,
   useSQLiteContext,
   type AttachmentItem,
@@ -206,6 +211,56 @@ function MessageImage({ objectKey, onPress }: { objectKey: string | null; onPres
 const imageStyles = StyleSheet.create({
   placeholder: { width: 220, height: 220, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.15)' },
   image: { width: 220, height: 220, borderRadius: 12 },
+});
+
+/**
+ * A single (non-gallery) video message — same 220x220 footprint as
+ * MessageImage. The paused VideoView itself renders the video's own first
+ * frame as a real thumbnail (no separate thumbnail-extraction pipeline
+ * needed); tapping opens the same MediaViewer a gallery video uses for
+ * actual playback, so there's only one video-playback implementation.
+ */
+function MessageVideo({ objectKey, durationMs, onPress }: { objectKey: string | null; durationMs: number | null; onPress?: () => void }) {
+  const url = useMediaUrl(objectKey);
+  const player = useVideoPlayer(url ?? '', (p) => {
+    p.muted = true;
+  });
+
+  if (!url) {
+    return (
+      <View style={imageStyles.placeholder}>
+        <ActivityIndicator color="#ffffff" />
+      </View>
+    );
+  }
+
+  const seconds = durationMs ? Math.round(durationMs / 1000) : 0;
+  const durationLabel = seconds > 0 ? `${Math.floor(seconds / 60)}:${(seconds % 60).toString().padStart(2, '0')}` : null;
+
+  return (
+    <TouchableOpacity onPress={onPress} disabled={!onPress} activeOpacity={0.9} style={imageStyles.image}>
+      <VideoView player={player} style={imageStyles.image} contentFit="cover" nativeControls={false} />
+      <View style={videoStyles.playOverlay} pointerEvents="none">
+        <View style={videoStyles.playCircle}>
+          <Svg width={20} height={20} viewBox="0 0 24 24" fill="#ffffff">
+            <Path d="M8 5v14l11-7z" />
+          </Svg>
+        </View>
+      </View>
+      {!!durationLabel && (
+        <View style={videoStyles.durationBadge} pointerEvents="none">
+          <Text style={videoStyles.durationText}>{durationLabel}</Text>
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+}
+
+const videoStyles = StyleSheet.create({
+  playOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
+  playCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center' },
+  durationBadge: { position: 'absolute', right: 8, bottom: 8, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
+  durationText: { color: '#ffffff', fontFamily: fonts.sansMedium, fontSize: 11 },
 });
 
 function MessageFile({ fileName, objectKey, tintColor, labelColor }: { fileName: string | null; objectKey: string | null; tintColor: string; labelColor: string }) {
@@ -475,7 +530,21 @@ export default function ChatThreadScreen() {
 
   const { startCall } = useCall();
   const { startGroupCall } = useGroupCall();
-  const { messages, sendMessage, editMessage, deleteMessage, pinMessage, typingUserIds, notifyTyping } = useConversation({
+  const {
+    messages,
+    sendMessage,
+    editMessage,
+    deleteMessage,
+    pinMessage,
+    typingUserIds,
+    notifyTyping,
+    reactions: reactionsByMessage,
+    sendReaction,
+    disappearingSeconds,
+    setDisappearing,
+    muted,
+    setMuted,
+  } = useConversation({
     conversationId,
     recipientId,
     groupId,
@@ -498,13 +567,22 @@ export default function ChatThreadScreen() {
   const [moreMenuMessage, setMoreMenuMessage] = useState<LocalMessage | null>(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   const [reactionTargetId, setReactionTargetId] = useState<string | null>(null);
-  // messageId → emoji (local-only reactions for now)
-  const [reactions, setReactions] = useState<Map<string, string>>(new Map());
-  // Set of starred messageIds (local-only)
+  // Starred is device-local only, never synced (see db.ts's starMessage doc comment) — loaded once below, persisted on every toggle.
   const [starredIds, setStarredIds] = useState<Set<string>>(new Set());
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const didConsumeReplyParamsRef = useRef(false);
   const didConsumeScrollParamRef = useRef(false);
+
+  useEffect(() => {
+    getStarredMessageIds(db, conversationId).then(setStarredIds).catch(() => {});
+  }, [db, conversationId]);
+
+  /** Distinct emojis on a message, joined — e.g. two people reacting ❤️ each show once, not twice. */
+  function reactionSummaryFor(messageId: string): string | null {
+    const byUser = reactionsByMessage.get(messageId);
+    if (!byUser || byUser.size === 0) return null;
+    return Array.from(new Set(byUser.values())).join(' ');
+  }
 
   function memberName(userId2: string): string {
     if (userId2 === userId) return t('common:you');
@@ -600,10 +678,16 @@ export default function ChatThreadScreen() {
     await pinMessage(message.message_id, !message.pinned);
   }
 
-  function toggleStar(messageId: string) {
+  async function toggleStar(messageId: string) {
+    const isStarred = starredIds.has(messageId);
+    if (isStarred) {
+      await unstarMessage(db, messageId);
+    } else {
+      await starMessage(db, messageId);
+    }
     setStarredIds((prev) => {
       const next = new Set(prev);
-      if (next.has(messageId)) next.delete(messageId);
+      if (isStarred) next.delete(messageId);
       else next.add(messageId);
       return next;
     });
@@ -1166,6 +1250,31 @@ export default function ChatThreadScreen() {
                   />
                 </View>
               )}
+              {item.media_type === 'VIDEO' && (
+                <View style={styles.mediaWrap}>
+                  <MessageVideo
+                    objectKey={item.media_object_key}
+                    durationMs={item.media_duration_ms}
+                    onPress={
+                      item.media_object_key
+                        ? () =>
+                            setViewer({
+                              items: [
+                                {
+                                  position: 0,
+                                  mediaType: 'VIDEO',
+                                  mediaObjectKey: item.media_object_key!,
+                                  mediaFileName: item.media_file_name,
+                                  mediaDurationMs: item.media_duration_ms,
+                                },
+                              ],
+                              index: 0,
+                            })
+                        : undefined
+                    }
+                  />
+                </View>
+              )}
               {item.media_type === 'FILE' && (
                 <View style={styles.mediaWrap}>
                   <MessageFile
@@ -1190,6 +1299,9 @@ export default function ChatThreadScreen() {
               {!!item.ciphertext && (
                 <Text style={isMine ? styles.outgoingText : styles.incomingText}>{item.ciphertext}</Text>
               )}
+              {!!item.ciphertext && !!firstUrlIn(item.ciphertext) && (
+                <LinkPreviewCard url={firstUrlIn(item.ciphertext)!} tintColor={isMine ? '#ffffff' : colors.brand600} isMine={isMine} />
+              )}
               <View style={isMine ? styles.metaRow : styles.metaRowIncoming}>
                 {!!item.edited && <Text style={isMine ? styles.editedLabel : styles.editedLabelIncoming}>{t('thread.editedLabel')}</Text>}
                 <Text style={isMine ? styles.outgoingTime : styles.incomingTime}>{formatTime(item.sent_at)}</Text>
@@ -1204,9 +1316,9 @@ export default function ChatThreadScreen() {
                 <SwipeableMessage onReply={() => startReply(item)}>
                   {bubble}
                 </SwipeableMessage>
-                {reactions.get(item.message_id) && (
+                {!!reactionSummaryFor(item.message_id) && (
                   <View style={[styles.reactionBadge, { alignSelf: 'flex-start', marginLeft: 24 }]}>
-                    <Text style={styles.reactionEmoji}>{reactions.get(item.message_id)}</Text>
+                    <Text style={styles.reactionEmoji}>{reactionSummaryFor(item.message_id)}</Text>
                   </View>
                 )}
                 {starredIds.has(item.message_id) && (
@@ -1218,9 +1330,9 @@ export default function ChatThreadScreen() {
           return (
             <View>
               {bubble}
-              {reactions.get(item.message_id) && (
+              {!!reactionSummaryFor(item.message_id) && (
                 <View style={[styles.reactionBadge, { alignSelf: 'flex-end', marginRight: 24 }]}>
-                  <Text style={styles.reactionEmoji}>{reactions.get(item.message_id)}</Text>
+                  <Text style={styles.reactionEmoji}>{reactionSummaryFor(item.message_id)}</Text>
                 </View>
               )}
               {starredIds.has(item.message_id) && (
@@ -1342,7 +1454,7 @@ export default function ChatThreadScreen() {
         visible={reactionTargetId !== null}
         onPick={(emoji) => {
           if (reactionTargetId) {
-            setReactions((prev) => new Map(prev).set(reactionTargetId, emoji));
+            void sendReaction(reactionTargetId, emoji);
             setReactionTargetId(null);
           }
         }}
@@ -1386,7 +1498,18 @@ export default function ChatThreadScreen() {
           },
           { label: t('thread.menu.search'), onPress: () => router.push({ pathname: '/(tabs)/chats/search', params: { conversationId } }) },
           { label: t('thread.menu.mediaLinksDocs'), onPress: () => router.push({ pathname: '/(tabs)/chats/media-links-docs', params: { conversationId } }) },
-          { label: t('thread.menu.muteNotifications'), onPress: () => Alert.alert(t('thread.menu.comingSoonTitle'), t('thread.menu.muteComingSoonBody')) },
+          { label: muted ? t('thread.menu.unmuteNotifications') : t('thread.menu.muteNotifications'), onPress: () => void setMuted(!muted) },
+          {
+            label: t('thread.menu.disappearingMessages'),
+            onPress: () =>
+              Alert.alert(t('thread.menu.disappearingMessages'), t('thread.menu.disappearingMessagesHint'), [
+                { text: t('thread.menu.disappearingOff'), onPress: () => void setDisappearing(null) },
+                { text: t('thread.menu.disappearing24h'), onPress: () => void setDisappearing(86400) },
+                { text: t('thread.menu.disappearing7d'), onPress: () => void setDisappearing(604800) },
+                { text: t('thread.menu.disappearing90d'), onPress: () => void setDisappearing(7776000) },
+                { text: t('common:cancel'), style: 'cancel' },
+              ]),
+          },
           {
             label: t('thread.menu.clearChat'),
             danger: true,

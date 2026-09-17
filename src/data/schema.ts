@@ -6,7 +6,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
  * half of the "local-first sync" approach from the architecture proposal —
  * the UI always reads from SQLite, never waits on the network round trip.
  */
-const CURRENT_VERSION = 9;
+const CURRENT_VERSION = 10;
 
 export async function migrateDbIfNeeded(db: SQLiteDatabase) {
   const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
@@ -134,6 +134,32 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
       ALTER TABLE conversations ADD COLUMN is_archived INTEGER NOT NULL DEFAULT 0;
     `);
     version = 9;
+  }
+
+  if (version === 9) {
+    // Starred: device-local only, never synced (see db.ts's starMessage doc
+    // comment). Reactions: server-synced and broadcast live, this table is
+    // just this device's cache of the last-known state, refreshed on thread
+    // open and kept current by the live STOMP subscription. expires_at /
+    // disappearing_message_seconds mirror the server's own Message.expiresAt
+    // and ConversationSummary.disappearingMessageSeconds.
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS starred_message (
+        message_id TEXT PRIMARY KEY NOT NULL,
+        starred_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS message_reactions (
+        message_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        emoji TEXT NOT NULL,
+        PRIMARY KEY (message_id, user_id)
+      );
+
+      ALTER TABLE messages ADD COLUMN expires_at TEXT;
+      ALTER TABLE conversations ADD COLUMN disappearing_message_seconds INTEGER;
+    `);
+    version = 10;
   }
 
   await db.execAsync(`PRAGMA user_version = ${CURRENT_VERSION}`);

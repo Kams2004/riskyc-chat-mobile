@@ -14,6 +14,11 @@ import type {
   TypingUpdate,
 } from './api';
 
+export type ReactionRequest = { messageId: string; conversationId: string; emoji: string };
+/** emoji=null means userId removed their reaction (see ChatController#react). */
+export type ReactionUpdate = { messageId: string; userId: string; emoji: string | null };
+export type DisappearingChanged = { conversationId: string; seconds: number | null; changedBy: string };
+
 /**
  * Thin wrapper around a STOMP client talking to messaging-service's
  * /ws endpoint. One instance per active chat screen; the underlying
@@ -106,6 +111,20 @@ export class ChatSocket {
     });
   }
 
+  /** Live reaction add/remove for whoever has this thread open (see ChatController#react). */
+  subscribeToReactions(conversationId: string, onReaction: (update: ReactionUpdate) => void) {
+    return this.client.subscribe(`/topic/conversation.${conversationId}.reactions`, (frame: IMessage) => {
+      onReaction(JSON.parse(frame.body) as ReactionUpdate);
+    });
+  }
+
+  /** Disappearing-messages duration changed for this conversation (see ConversationController#setDisappearing). */
+  subscribeToSettings(conversationId: string, onChanged: (update: DisappearingChanged) => void) {
+    return this.client.subscribe(`/topic/conversation.${conversationId}.settings`, (frame: IMessage) => {
+      onChanged(JSON.parse(frame.body) as DisappearingChanged);
+    });
+  }
+
   /**
    * Every message addressed to this user, across every conversation,
    * regardless of whether its thread is currently open — routed by the
@@ -164,6 +183,10 @@ export class ChatSocket {
 
   sendPin(request: MessagePinRequest) {
     this.enqueue({ destination: '/app/chat.pin', body: JSON.stringify(request) });
+  }
+
+  sendReaction(request: ReactionRequest) {
+    this.enqueue({ destination: '/app/chat.react', body: JSON.stringify(request) });
   }
 
   /** Group counterpart to sendAck — see ChatController#ackGroup for why it's a separate endpoint. */

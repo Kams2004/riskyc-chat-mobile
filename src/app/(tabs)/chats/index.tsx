@@ -31,6 +31,7 @@ import {
 } from '../../../data/db';
 import { useAuth } from '../../../features/auth/AuthContext';
 import { getGroup } from '../../../features/groups/api';
+import { setConversationMuted } from '../../../features/messaging/api';
 import { looksLikeUnresolvedName, otherPartyFrom } from '../../../features/messaging/conversationId';
 import {
   CONVERSATIONS_CHANGED_EVENT,
@@ -224,9 +225,14 @@ export default function ChatListScreen() {
   }
 
   async function handleToggleMute() {
-    await setMuted(db, selectedIds, !allSelectedAreMuted);
+    const next = !allSelectedAreMuted;
+    await setMuted(db, selectedIds, next);
     setSelectedIds([]);
     reloadConversations();
+    // Server-side too — see MutedConversation's own doc comment on why a
+    // local-only flag can't suppress a push notification the server
+    // already decided to send.
+    await Promise.all(selectedIds.map((id) => setConversationMuted(id, next).catch(() => {})));
   }
 
   async function handleArchiveSelected() {

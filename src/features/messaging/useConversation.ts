@@ -4,9 +4,14 @@ import { randomUUID } from 'expo-crypto';
 import {
   advanceMessagesStatus,
   applyMessageMutation,
+  applyReactionUpdate,
   applyReceipt,
+  getReactionsForConversation,
   markDeletedForMe,
   recomputeGroupMessageStatus,
+  replaceReactionsForConversation,
+  setDisappearingSeconds,
+  setMuted as setMutedLocally,
   setPinnedLocally,
   useSQLiteContext,
   listMessages,
@@ -117,7 +122,7 @@ export function useConversation({
   recipientAvatarObjectKey,
 }: UseConversationParams) {
   const db = useSQLiteContext();
-  const { userId, accessToken } = useAuth();
+  const { userId, accessToken, displayName } = useAuth();
   const [messages, setMessages] = useState<LocalMessage[]>([]);
   const socketRef = useRef<ChatSocket | null>(null);
   const isGroup = !!groupId;
@@ -125,6 +130,13 @@ export function useConversation({
   titleRef.current = recipientName || UNRESOLVED_TITLE_PLACEHOLDER;
   const avatarRef = useRef<string | null | undefined>(recipientAvatarObjectKey);
   avatarRef.current = recipientAvatarObjectKey;
+
+  // messageId -> (userId -> emoji), refreshed from the server once per
+  // thread open (fetchReactions) and kept live via the .reactions topic —
+  // see ChatController#react on the backend.
+  const [reactions, setReactions] = useState<Map<string, Map<string, string>>>(new Map());
+  const [disappearingSeconds, setDisappearingSecondsState] = useState<number | null>(null);
+  const [muted, setMutedState] = useState(false);
 
   const [typingUserIds, setTypingUserIds] = useState<string[]>([]);
   // Safety net for the receiving side: if a "stopped typing" update is ever
@@ -184,6 +196,31 @@ export function useConversation({
       console.warn('[useConversation] fetchHistory failed', e);
     });
 
+    messagingApi.fetchConversationSettings(conversationId).then(async (s) => {
+      await setDisappearingSeconds(db, conversationId, s.disappearingMessageSeconds);
+      await setMutedLocally(db, [conversationId], s.muted);
+      if (!cancelled) {
+        setDisappearingSecondsState(s.disappearingMessageSeconds);
+        setMutedState(s.muted);
+      }
+    }).catch((e) => {
+      console.warn('[useConversation] fetchConversationSettings failed', e);
+    });
+
+    // Seeds this device's reaction cache with the server's current state —
+    // a fresh install, or a thread this device hasn't opened before, has
+    // nothing locally until this runs once.
+    messagingApi.fetchReactions(conversationId).then(async (rows) => {
+      await replaceReactionsForConversation(
+        db,
+        conversationId,
+        rows.map((r) => ({ message_id: r.messageId, user_id: r.userId, emoji: r.emoji }))
+      );
+      if (!cancelled) setReactions(await getReactionsForConversation(db, conversationId));
+    }).catch((e) => {
+      console.warn('[useConversation] fetchReactions failed', e);
+    });
+
     const socket = new ChatSocket(accessToken);
     socketRef.current = socket;
     socket.connect(() => {
@@ -192,6 +229,16 @@ export function useConversation({
         ackIfNotMine(envelope.messageId, envelope.senderId, envelope.recipientId);
         await upsertConversation(db, conversationId, titleRef.current, envelope.sentAt, avatarRef.current, isGroup);
         if (!cancelled) await reload();
+      });
+
+      socket.subscribeToReactions(conversationId, async (update) => {
+        await applyReactionUpdate(db, update.messageId, update.userId, update.emoji);
+        if (!cancelled) setReactions(await getReactionsForConversation(db, conversationId));
+      });
+
+      socket.subscribeToSettings(conversationId, async (update) => {
+        await setDisappearingSeconds(db, conversationId, update.seconds);
+        if (!cancelled) setDisappearingSecondsState(update.seconds);
       });
 
       socket.subscribeToMutations(conversationId, async (mutation) => {
@@ -309,6 +356,7 @@ export function useConversation({
         replyToConversationId: replyTo?.conversationId ?? null,
         replyToSenderId: replyTo?.senderId ?? null,
         replyToSnippet: replyTo?.snippet ?? null,
+        senderDisplayName: displayName,
       };
       await upsertMessage(db, {
         message_id: envelope.messageId,
@@ -351,6 +399,45 @@ export function useConversation({
     [conversationId, db, reload]
   );
 
+  /** Same emoji already reacted with → removes it; a different one → replaces it — see ChatController#react. Optimistic local update, server is the actual source of truth once its broadcast comes back. */
+  const sendReaction = useCallback(
+    async (messageId: string, emoji: string) => {
+      if (!userId) return;
+      const current = reactions.get(messageId)?.get(userId);
+      const next = current === emoji ? null : emoji;
+      await applyReactionUpdate(db, messageId, userId, next);
+      setReactions(await getReactionsForConversation(db, conversationId));
+      socketRef.current?.sendReaction({ messageId, conversationId, emoji });
+    },
+    [conversationId, db, reactions, userId]
+  );
+
+  /** seconds=null turns disappearing messages off — applies only to messages sent from now on. */
+  const setDisappearing = useCallback(
+    async (seconds: number | null) => {
+      await setDisappearingSeconds(db, conversationId, seconds);
+      setDisappearingSecondsState(seconds);
+      await messagingApi.setDisappearingMessages(conversationId, seconds);
+    },
+    [conversationId, db]
+  );
+
+  /**
+   * Server-side, not just local — see MutedConversation's own doc comment
+   * on why (push suppression) — but ALSO mirrored into the local
+   * conversations.is_muted column so the chat list's own mute icon (see
+   * chats/index.tsx's bulk-select mute action) reflects a mute toggled from
+   * inside a thread too, and vice versa.
+   */
+  const setMuted = useCallback(
+    async (nextMuted: boolean) => {
+      setMutedState(nextMuted);
+      await setMutedLocally(db, [conversationId], nextMuted);
+      await messagingApi.setConversationMuted(conversationId, nextMuted);
+    },
+    [conversationId, db]
+  );
+
   const editMessage = useCallback(
     async (messageId: string, newText: string) => {
       await applyMessageMutation(db, messageId, { ciphertext: newText, edited: true, deleted: false });
@@ -382,5 +469,19 @@ export function useConversation({
     [conversationId, db, reload]
   );
 
-  return { messages, sendMessage, editMessage, deleteMessage, pinMessage, typingUserIds, notifyTyping };
+  return {
+    messages,
+    sendMessage,
+    editMessage,
+    deleteMessage,
+    pinMessage,
+    typingUserIds,
+    notifyTyping,
+    reactions,
+    sendReaction,
+    disappearingSeconds,
+    setDisappearing,
+    muted,
+    setMuted,
+  };
 }
