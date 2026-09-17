@@ -50,7 +50,8 @@ export default function ForwardScreen() {
       });
       router.back();
     } catch (e) {
-      Alert.alert(t('forward.failedTitle'), e instanceof Error ? e.message : t('forward.failedBody'));
+      // Always the translated fallback body, never the raw exception.
+      Alert.alert(t('forward.failedTitle'), t('forward.failedBody'));
     } finally {
       setSendingTo(null);
     }

@@ -59,7 +59,10 @@ export default function ChangeIdentifierScreen() {
         return t('changeIdentifier.tooManyRequests');
       }
     }
-    return e instanceof Error ? e.message : t('changeIdentifier.genericError');
+    // Never surface the raw exception (e.g. a bare "fetch failed:
+    // java.net.ConnectException…" when the network drops) — always a
+    // translated, user-appropriate message instead.
+    return t('changeIdentifier.genericError');
   }
 
   async function handleSendCode() {

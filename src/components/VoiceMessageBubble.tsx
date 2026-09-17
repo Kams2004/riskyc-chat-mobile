@@ -1,12 +1,16 @@
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
-import { useMemo } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { PanGestureHandler } from 'react-native-gesture-handler';
+import type { PanGestureHandlerGestureEvent } from 'react-native-gesture-handler';
 import Svg, { Path, Rect } from 'react-native-svg';
 
 import { useMediaUrl } from '../features/media/useMediaUrl';
 import { fonts } from '../theme';
 
 const BAR_COUNT = 28;
+const SPEEDS = [1, 1.5, 2] as const;
+type Speed = (typeof SPEEDS)[number];
 
 function formatSeconds(totalSeconds: number): string {
   const seconds = Math.max(0, Math.floor(totalSeconds));
@@ -14,12 +18,6 @@ function formatSeconds(totalSeconds: number): string {
   return `${minutes}:${(seconds % 60).toString().padStart(2, '0')}`;
 }
 
-/**
- * We don't have the real recorded amplitude profile (the server only stores
- * duration, not a waveform), so this generates a stable, deterministic
- * pseudo-waveform per message — seeded from its own objectKey, so it looks
- * the same every time this message renders instead of jittering randomly.
- */
 function pseudoWaveform(seed: string): number[] {
   let h = 0;
   for (let i = 0; i < seed.length; i++) {
@@ -46,11 +44,33 @@ export function VoiceMessageBubble({ objectKey, durationMs, tintColor, trackColo
   const player = useAudioPlayer(url ?? undefined);
   const status = useAudioPlayerStatus(player);
   const bars = useMemo(() => pseudoWaveform(objectKey), [objectKey]);
+  const [speed, setSpeed] = useState<Speed>(1);
+  const waveformWidthRef = useRef<number>(0);
 
   const duration = status.duration || (durationMs ? durationMs / 1000 : 0);
   const progress = duration > 0 ? Math.min(1, status.currentTime / duration) : 0;
   const remaining = status.playing ? duration - status.currentTime : duration;
   const playedBars = Math.round(progress * BAR_COUNT);
+
+  function cycleSpeed() {
+    const nextIndex = (SPEEDS.indexOf(speed) + 1) % SPEEDS.length;
+    const next = SPEEDS[nextIndex];
+    setSpeed(next);
+    player.playbackRate = next;
+  }
+
+  function seekToProgress(ratio: number) {
+    if (duration <= 0) return;
+    const clamped = Math.max(0, Math.min(1, ratio));
+    player.seekTo(clamped * duration);
+  }
+
+  const onGestureEvent = (event: PanGestureHandlerGestureEvent) => {
+    const { x } = event.nativeEvent;
+    if (waveformWidthRef.current > 0) {
+      seekToProgress(x / waveformWidthRef.current);
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -70,19 +90,30 @@ export function VoiceMessageBubble({ objectKey, durationMs, tintColor, trackColo
           )}
         </Svg>
       </TouchableOpacity>
+
       <View style={styles.trackWrap}>
-        <View style={styles.waveform}>
-          {bars.map((height, i) => (
-            <View
-              key={i}
-              style={[
-                styles.bar,
-                { height: 4 + height * 16, backgroundColor: i < playedBars ? tintColor : trackColor },
-              ]}
-            />
-          ))}
+        <PanGestureHandler onGestureEvent={onGestureEvent}>
+          <View
+            style={styles.waveform}
+            onLayout={(e) => { waveformWidthRef.current = e.nativeEvent.layout.width; }}
+          >
+            {bars.map((height, i) => (
+              <View
+                key={i}
+                style={[
+                  styles.bar,
+                  { height: 4 + height * 16, backgroundColor: i < playedBars ? tintColor : trackColor },
+                ]}
+              />
+            ))}
+          </View>
+        </PanGestureHandler>
+        <View style={styles.metaRow}>
+          <Text style={[styles.time, { color: tintColor }]}>{formatSeconds(remaining)}</Text>
+          <TouchableOpacity onPress={cycleSpeed} hitSlop={8}>
+            <Text style={[styles.speedLabel, { color: tintColor }]}>x{speed}</Text>
+          </TouchableOpacity>
         </View>
-        <Text style={[styles.time, { color: tintColor }]}>{formatSeconds(remaining)}</Text>
       </View>
     </View>
   );
@@ -92,7 +123,9 @@ const styles = StyleSheet.create({
   container: { flexDirection: 'row', alignItems: 'center', gap: 10, minWidth: 190 },
   playButton: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
   trackWrap: { flex: 1, gap: 4 },
-  waveform: { flexDirection: 'row', alignItems: 'center', gap: 2, height: 20 },
+  waveform: { flexDirection: 'row', alignItems: 'center', gap: 2, height: 24 },
   bar: { flex: 1, borderRadius: 1.5, minWidth: 2 },
+  metaRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   time: { fontFamily: fonts.sans, fontSize: 11 },
+  speedLabel: { fontFamily: fonts.sansSemiBold, fontSize: 11 },
 });

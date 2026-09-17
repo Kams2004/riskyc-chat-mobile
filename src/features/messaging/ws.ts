@@ -139,6 +139,13 @@ export class ChatSocket {
     });
   }
 
+  /** Global typing events routed to this user's personal queue — used by the inbox socket to update the chat list. */
+  subscribeToUserTyping(onTyping: (update: TypingUpdate) => void) {
+    return this.client.subscribe('/user/queue/typing', (frame: IMessage) => {
+      onTyping(JSON.parse(frame.body) as TypingUpdate);
+    });
+  }
+
   send(envelope: MessageEnvelope) {
     this.enqueue({ destination: '/app/chat.send', body: JSON.stringify(envelope) });
   }

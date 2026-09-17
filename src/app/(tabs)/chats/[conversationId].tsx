@@ -7,12 +7,14 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   FlatList,
   Image,
   KeyboardAvoidingView,
   Linking,
   Modal,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -20,6 +22,7 @@ import {
   TouchableWithoutFeedback,
   View,
 } from 'react-native';
+import { PanGestureHandler } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path, Rect } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
@@ -51,6 +54,8 @@ import { useConversation, type ReplyToDraft } from '../../../features/messaging/
 import { usePresence } from '../../../features/presence/usePresence';
 import { useTheme } from '../../../features/theme/ThemeContext';
 import { blockUser, getUser, reportUser } from '../../../features/users/api';
+import { getLocalContactName } from '../../../data/db';
+import { TypingDots } from '../../../components/TypingDots';
 import { fonts, gradients, type Palette } from '../../../theme';
 import {
   clearConversationMessages,
@@ -65,6 +70,85 @@ import {
 } from '../../../data/db';
 
 const READ_BLUE = '#34b7f1';
+const SWIPE_THRESHOLD = 60;
+const REACTION_EMOJIS = ['❤️', '😂', '😮', '😢', '🙏', '👍'];
+
+/** Emoji reaction picker — floats above a long-pressed bubble. */
+function ReactionPicker({
+  visible,
+  onPick,
+  onClose,
+  colors,
+  insets,
+}: {
+  visible: boolean;
+  onPick: (emoji: string) => void;
+  onClose: () => void;
+  colors: Palette;
+  insets: { bottom: number };
+}) {
+  if (!visible) return null;
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <TouchableWithoutFeedback onPress={onClose}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)' }} />
+      </TouchableWithoutFeedback>
+      <View style={[
+        reactionStyles.bar,
+        { backgroundColor: colors.surface, paddingBottom: insets.bottom + 16 },
+      ]}>
+        <View style={reactionStyles.handle} />
+        <View style={reactionStyles.row}>
+          {REACTION_EMOJIS.map((emoji) => (
+            <TouchableOpacity key={emoji} style={reactionStyles.emojiBtn} onPress={() => { onPick(emoji); onClose(); }}>
+              <Text style={reactionStyles.emoji}>{emoji}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const reactionStyles = StyleSheet.create({
+  bar: { borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingTop: 12, paddingHorizontal: 16 },
+  handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: '#ccc', alignSelf: 'center', marginBottom: 16 },
+  row: { flexDirection: 'row', justifyContent: 'space-around', paddingBottom: 8 },
+  emojiBtn: { padding: 10 },
+  emoji: { fontSize: 32 },
+});
+
+/** Wraps a received message bubble with a right-swipe gesture to trigger reply. */
+function SwipeableMessage({ onReply, children }: { onReply: () => void; children: React.ReactNode }) {
+  const translateX = useRef(new Animated.Value(0)).current;
+  const triggered = useRef(false);
+
+  return (
+    <PanGestureHandler
+      activeOffsetX={[10, 9999]}
+      failOffsetY={[-10, 10]}
+      onGestureEvent={({ nativeEvent }) => {
+        const x = Math.max(0, nativeEvent.translationX);
+        translateX.setValue(Math.min(x, SWIPE_THRESHOLD + 20));
+        if (x >= SWIPE_THRESHOLD && !triggered.current) {
+          triggered.current = true;
+          onReply();
+        }
+      }}
+      onHandlerStateChange={({ nativeEvent }) => {
+        // state 5 = END
+        if (nativeEvent.state === 5) {
+          triggered.current = false;
+          Animated.spring(translateX, { toValue: 0, useNativeDriver: true, speed: 20, bounciness: 6 }).start();
+        }
+      }}
+    >
+      <Animated.View style={{ transform: [{ translateX }] }}>
+        {children}
+      </Animated.View>
+    </PanGestureHandler>
+  );
+}
 
 function formatTime(iso: string) {
   const d = new Date(iso);
@@ -234,11 +318,13 @@ function MessageInfoModal({
   onClose,
   rows,
   colors,
+  insets,
 }: {
   visible: boolean;
   onClose: () => void;
   rows: ReceiptRow[];
   colors: Palette;
+  insets: { bottom: number };
 }) {
   const styles = infoModalStyles(colors);
   const { t } = useTranslation('chats');
@@ -247,7 +333,7 @@ function MessageInfoModal({
       <TouchableWithoutFeedback onPress={onClose}>
         <View style={styles.backdrop} />
       </TouchableWithoutFeedback>
-      <View style={styles.sheet}>
+      <View style={[styles.sheet, { paddingBottom: insets.bottom + 20 }]}>
         <Text style={styles.title}>{t('thread.messageInfo.title')}</Text>
         {rows.length === 0 && <Text style={styles.empty}>{t('thread.messageInfo.empty')}</Text>}
         {rows.map((row) => (
@@ -349,12 +435,6 @@ export default function ChatThreadScreen() {
   const [onlyAdminsCanMessage, setOnlyAdminsCanMessage] = useState(false);
   const isGroupAdmin = groupMembers.find((m) => m.user_id === userId)?.role === 'ADMIN';
 
-  // Self-heals a conversation whose stored title is just the other side's
-  // raw id (e.g. opened before name resolution existed, or via a route that
-  // never had a name to pass) — resolves it once and useConversation persists it.
-  // For a group, this instead (re)loads the member list, which the message
-  // bubbles need to show each sender's name and "message info" needs for the
-  // read-by breakdown.
   useEffect(() => {
     if (isGroup) {
       getGroup(groupId).then(async (group) => {
@@ -372,12 +452,22 @@ export default function ChatThreadScreen() {
       }).catch(() => {});
       return;
     }
-    if (resolvedName && resolvedAvatarKey !== undefined) return;
     if (!recipientId) return;
-    getUser(recipientId)
-      .then((user) => {
-        if (user.displayName) setResolvedName(user.displayName);
-        setResolvedAvatarKey(user.avatarObjectKey);
+    // Always check for a local name override first — it takes priority over
+    // both the passed-in recipientName and the server-registered displayName.
+    getLocalContactName(db, recipientId)
+      .then(async (localName) => {
+        if (localName) {
+          setResolvedName(localName);
+          // Still fetch the avatar even if we have a local name.
+          const user = await getUser(recipientId).catch(() => null);
+          if (user?.avatarObjectKey) setResolvedAvatarKey(user.avatarObjectKey);
+          return;
+        }
+        if (resolvedName && resolvedAvatarKey !== undefined) return;
+        const user = await getUser(recipientId).catch(() => null);
+        if (user?.displayName) setResolvedName(user.displayName);
+        setResolvedAvatarKey(user?.avatarObjectKey ?? null);
       })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -407,6 +497,11 @@ export default function ChatThreadScreen() {
   const [replyDraft, setReplyDraft] = useState<ReplyToDraft | null>(null);
   const [moreMenuMessage, setMoreMenuMessage] = useState<LocalMessage | null>(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+  const [reactionTargetId, setReactionTargetId] = useState<string | null>(null);
+  // messageId → emoji (local-only reactions for now)
+  const [reactions, setReactions] = useState<Map<string, string>>(new Map());
+  // Set of starred messageIds (local-only)
+  const [starredIds, setStarredIds] = useState<Set<string>>(new Set());
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const didConsumeReplyParamsRef = useRef(false);
   const didConsumeScrollParamRef = useRef(false);
@@ -503,6 +598,16 @@ export default function ChatThreadScreen() {
     setSelectedMessageId(null);
     setMoreMenuMessage(null);
     await pinMessage(message.message_id, !message.pinned);
+  }
+
+  function toggleStar(messageId: string) {
+    setStarredIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(messageId)) next.delete(messageId);
+      else next.add(messageId);
+      return next;
+    });
+    setSelectedMessageId(null);
   }
 
   function confirmReportSender(message: LocalMessage) {
@@ -801,7 +906,10 @@ export default function ChatThreadScreen() {
           <View style={{ flex: 1 }}>
             <Text style={styles.headerName} numberOfLines={1}>{displayName}</Text>
             {typingLabel ? (
-              <Text style={[styles.statusLabel, styles.typingLabel]} numberOfLines={1}>{typingLabel}</Text>
+              <View style={styles.statusRow}>
+                <Text style={[styles.statusLabel, styles.typingLabel]} numberOfLines={1}>{typingLabel}</Text>
+                <TypingDots color={colors.brand600} />
+              </View>
             ) : isGroup ? (
               <Text style={styles.statusLabel}>{t('thread.membersCount', { count: groupMembers.length })}</Text>
             ) : (
@@ -873,6 +981,12 @@ export default function ChatThreadScreen() {
             <TouchableOpacity style={styles.selectionAction} onPress={() => startReply(selected)}>
               <Text style={styles.selectionActionLabel}>{t('thread.selection.reply')}</Text>
             </TouchableOpacity>
+            <TouchableOpacity style={styles.selectionAction} onPress={() => toggleStar(selected.message_id)}>
+              <Text style={styles.selectionActionLabel}>{starredIds.has(selected.message_id) ? t('thread.selection.unstar') : t('thread.selection.star')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.selectionAction} onPress={() => { setSelectedMessageId(null); setReactionTargetId(selected.message_id); }}>
+              <Text style={styles.selectionActionLabel}>{t('thread.selection.react')}</Text>
+            </TouchableOpacity>
             {!isGroup && (
               <TouchableOpacity style={styles.selectionAction} onPress={() => togglePin(selected)}>
                 <Text style={styles.selectionActionLabel}>{selected.pinned ? t('thread.selection.unpin') : t('thread.selection.pin')}</Text>
@@ -933,6 +1047,18 @@ export default function ChatThreadScreen() {
         keyExtractor={(item) => item.message_id}
         contentContainerStyle={styles.listContent}
         style={styles.listInner}
+        // A real bubble, not just header text — mimics an about-to-arrive
+        // message the same way WhatsApp's typing indicator does, appearing
+        // at the very end of the list (this FlatList isn't inverted, so
+        // the footer naturally lands at the bottom, right below the
+        // newest message).
+        ListFooterComponent={
+          typingLabel ? (
+            <View style={[styles.bubble, styles.incoming, styles.typingBubble]}>
+              <TypingDots color={colors.textMuted} />
+            </View>
+          ) : null
+        }
         onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
         onScrollToIndexFailed={(info) => {
           listRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
@@ -977,7 +1103,7 @@ export default function ChatThreadScreen() {
             );
           }
 
-          return (
+          const bubble = (
             <TouchableOpacity
               activeOpacity={canSelect ? 0.7 : 1}
               onLongPress={() => canSelect && setSelectedMessageId(item.message_id)}
@@ -1070,6 +1196,37 @@ export default function ChatThreadScreen() {
                 {isMine && <MessageTicks status={item.status} />}
               </View>
             </TouchableOpacity>
+          );
+
+          if (!isMine && canSelect) {
+            return (
+              <View>
+                <SwipeableMessage onReply={() => startReply(item)}>
+                  {bubble}
+                </SwipeableMessage>
+                {reactions.get(item.message_id) && (
+                  <View style={[styles.reactionBadge, { alignSelf: 'flex-start', marginLeft: 24 }]}>
+                    <Text style={styles.reactionEmoji}>{reactions.get(item.message_id)}</Text>
+                  </View>
+                )}
+                {starredIds.has(item.message_id) && (
+                  <Text style={[styles.starBadge, { alignSelf: 'flex-start', marginLeft: 24 }]}>⭐</Text>
+                )}
+              </View>
+            );
+          }
+          return (
+            <View>
+              {bubble}
+              {reactions.get(item.message_id) && (
+                <View style={[styles.reactionBadge, { alignSelf: 'flex-end', marginRight: 24 }]}>
+                  <Text style={styles.reactionEmoji}>{reactions.get(item.message_id)}</Text>
+                </View>
+              )}
+              {starredIds.has(item.message_id) && (
+                <Text style={[styles.starBadge, { alignSelf: 'flex-end', marginRight: 24 }]}>⭐</Text>
+              )}
+            </View>
           );
         }}
       />
@@ -1178,6 +1335,20 @@ export default function ChatThreadScreen() {
         onClose={() => setMessageInfoRows(null)}
         rows={messageInfoRows ?? []}
         colors={colors}
+        insets={insets}
+      />
+
+      <ReactionPicker
+        visible={reactionTargetId !== null}
+        onPick={(emoji) => {
+          if (reactionTargetId) {
+            setReactions((prev) => new Map(prev).set(reactionTargetId, emoji));
+            setReactionTargetId(null);
+          }
+        }}
+        onClose={() => setReactionTargetId(null)}
+        colors={colors}
+        insets={insets}
       />
 
       {viewer && <MediaViewer items={viewer.items} initialIndex={viewer.index} onClose={() => setViewer(null)} />}
@@ -1277,6 +1448,7 @@ function makeStyles(colors: Palette) {
     listInner: { flex: 1, backgroundColor: 'transparent' },
     listContent: { flexGrow: 1, paddingVertical: 8 },
     bubble: { borderRadius: 16, padding: 10, maxWidth: '78%', marginVertical: 4, marginHorizontal: 16, overflow: 'hidden' },
+    typingBubble: { paddingHorizontal: 16, paddingVertical: 12, width: 52 },
     bubbleSelected: { opacity: 0.6 },
     bubbleHighlighted: { borderWidth: 2, borderColor: colors.gold500 },
     outgoing: { alignSelf: 'flex-end', borderBottomRightRadius: 4 },
@@ -1322,5 +1494,8 @@ function makeStyles(colors: Palette) {
       borderBottomColor: colors.hairline,
     },
     pinBannerText: { flex: 1, fontFamily: fonts.sans, fontSize: 12.5, color: colors.textPrimary },
+    reactionBadge: { backgroundColor: colors.tint1, borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3, marginTop: -4, marginBottom: 4 },
+    reactionEmoji: { fontSize: 16 },
+    starBadge: { fontSize: 12, marginTop: -4, marginBottom: 4 },
   });
 }

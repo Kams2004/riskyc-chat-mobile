@@ -1,4 +1,5 @@
 import { Modal, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useTheme } from '../features/theme/ThemeContext';
 import { fonts, type Palette } from '../theme';
@@ -18,6 +19,7 @@ type ChatOverflowMenuProps = {
 /** Vertical bottom-sheet action list — the chat header's ⋮ menu, same modal shape as AttachmentSheet but a list instead of a horizontal row (too many items to fit that way). */
 export function ChatOverflowMenu({ visible, onClose, items }: ChatOverflowMenuProps) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = makeStyles(colors);
 
   function choose(action: () => void) {
@@ -30,7 +32,7 @@ export function ChatOverflowMenu({ visible, onClose, items }: ChatOverflowMenuPr
       <TouchableWithoutFeedback onPress={onClose}>
         <View style={styles.backdrop} />
       </TouchableWithoutFeedback>
-      <View style={styles.sheet}>
+      <View style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}>
         {items.map((item, i) => (
           <TouchableOpacity key={i} style={styles.row} onPress={() => choose(item.onPress)}>
             <Text style={[styles.label, item.danger && { color: colors.brand700 }]}>{item.label}</Text>
@@ -50,7 +52,6 @@ function makeStyles(colors: Palette) {
       borderTopRightRadius: 20,
       paddingVertical: 8,
       paddingHorizontal: 8,
-      paddingBottom: 24,
     },
     row: { paddingVertical: 14, paddingHorizontal: 16 },
     label: { fontFamily: fonts.sansMedium, fontSize: 15.5, color: colors.textPrimary },

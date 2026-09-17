@@ -1,4 +1,5 @@
 import { Modal, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path, Rect } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
 
@@ -16,6 +17,7 @@ type AttachmentSheetProps = {
 /** The `+` composer button's menu — a plain bottom-sheet modal, no library needed. */
 export function AttachmentSheet({ visible, onClose, onPickPhotos, onPickCamera, onPickDocument }: AttachmentSheetProps) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = makeStyles(colors);
   const { t } = useTranslation('media');
 
@@ -29,7 +31,7 @@ export function AttachmentSheet({ visible, onClose, onPickPhotos, onPickCamera, 
       <TouchableWithoutFeedback onPress={onClose}>
         <View style={styles.backdrop} />
       </TouchableWithoutFeedback>
-      <View style={styles.sheet}>
+      <View style={[styles.sheet, { paddingBottom: insets.bottom + 24 }]}>
         <View style={styles.row}>
           <SheetOption
             label={t('attachmentSheet.photos')}
@@ -94,7 +96,7 @@ function makeStyles(colors: Palette) {
       backgroundColor: colors.surface,
       borderTopLeftRadius: 20,
       borderTopRightRadius: 20,
-      paddingVertical: 24,
+      paddingTop: 24,
       paddingHorizontal: 20,
     },
     row: { flexDirection: 'row', justifyContent: 'space-around' },
