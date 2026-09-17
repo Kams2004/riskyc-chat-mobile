@@ -6,7 +6,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
  * half of the "local-first sync" approach from the architecture proposal —
  * the UI always reads from SQLite, never waits on the network round trip.
  */
-const CURRENT_VERSION = 11;
+const CURRENT_VERSION = 12;
 
 export async function migrateDbIfNeeded(db: SQLiteDatabase) {
   const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
@@ -175,6 +175,21 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
       );
     `);
     version = 11;
+  }
+
+  if (version === 11) {
+    // is_system: a group event log line ("X joined the group"), rendered
+    // centered rather than as a normal left/right bubble — see the server's
+    // Message.isSystem doc comment. reply_to_status_*: set only when this
+    // message is a reply to someone's status (see StatusReplyBar), mirroring
+    // the existing reply_to_message_* columns' "denormalized, not
+    // server-derived" convention.
+    await db.execAsync(`
+      ALTER TABLE messages ADD COLUMN is_system INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE messages ADD COLUMN reply_to_status_id TEXT;
+      ALTER TABLE messages ADD COLUMN reply_to_status_owner_id TEXT;
+    `);
+    version = 12;
   }
 
   await db.execAsync(`PRAGMA user_version = ${CURRENT_VERSION}`);

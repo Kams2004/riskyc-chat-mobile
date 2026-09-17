@@ -30,7 +30,8 @@ import {
   type LocalConversation,
 } from '../../../data/db';
 import { useAuth } from '../../../features/auth/AuthContext';
-import { getGroup } from '../../../features/groups/api';
+import { fetchMyGroupInvitations, getGroup } from '../../../features/groups/api';
+import { getSystemAccountInfo } from '../../../features/systemAccount/api';
 import { setConversationMuted } from '../../../features/messaging/api';
 import { looksLikeUnresolvedName, otherPartyFrom } from '../../../features/messaging/conversationId';
 import {
@@ -89,6 +90,23 @@ export default function ChatListScreen() {
   // conversationId → Set<userId> of who is currently typing
   const [typingMap, setTypingMap] = useState<TypingMap>(new Map());
   const typingTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const [pendingInvitationCount, setPendingInvitationCount] = useState(0);
+  const [isSystemAccount, setIsSystemAccount] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchMyGroupInvitations()
+        .then((invitations) => setPendingInvitationCount(invitations.length))
+        .catch(() => {});
+    }, [])
+  );
+
+  useEffect(() => {
+    if (!userId) return;
+    getSystemAccountInfo()
+      .then((info) => setIsSystemAccount(!!info && info.userId === userId))
+      .catch(() => {});
+  }, [userId]);
 
   const reloadConversations = useCallback(() => {
     if (userId) {
@@ -349,6 +367,21 @@ export default function ChatListScreen() {
               </TouchableOpacity>
             )}
           </View>
+          {pendingInvitationCount > 0 && (
+            <TouchableOpacity style={styles.invitationBanner} onPress={() => router.push('/(tabs)/chats/group-invitations' as never)}>
+              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={colors.brand600} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <Path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                <Path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" />
+                <Path d="M19 8v6M22 11h-6" />
+              </Svg>
+              <Text style={styles.invitationBannerText}>
+                {t('list.pendingGroupInvitations', { count: pendingInvitationCount })}
+              </Text>
+              <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={colors.brand600} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <Path d="M9 18l6-6-6-6" />
+              </Svg>
+            </TouchableOpacity>
+          )}
           <View style={styles.tabRow}>
             <TouchableOpacity style={[styles.tabChip, tab === 'chats' && { backgroundColor: colors.brand500 }]} onPress={() => setTab('chats')}>
               <Text style={[styles.tabChipLabel, tab === 'chats' && { color: '#ffffff' }]}>{t('list.tabChats')}</Text>
@@ -464,11 +497,24 @@ export default function ChatListScreen() {
           colors={gradients.gold}
           style={[styles.fab, conversations.length === 0 ? styles.fabExpanded : styles.fabCollapsed, { bottom: fabBottomOffset(insets.bottom) }]}
         >
-          <TouchableOpacity style={styles.fabTouchable} onPress={() => router.push('/(tabs)/chats/new' as never)}>
-            <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
-              <Path d="M12 5v14M5 12h14" />
-            </Svg>
-            {conversations.length === 0 && <Text style={styles.fabLabel}>{t('list.newConversation')}</Text>}
+          <TouchableOpacity
+            style={styles.fabTouchable}
+            onPress={() => router.push((isSystemAccount ? '/(tabs)/chats/broadcast' : '/(tabs)/chats/new') as never)}
+          >
+            {isSystemAccount ? (
+              <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+                <Path d="M4 11a9 9 0 0 1 9 9" />
+                <Path d="M4 4a16 16 0 0 1 16 16" />
+                <Path d="M5 19a1 1 0 1 0 0-2 1 1 0 0 0 0 2z" />
+              </Svg>
+            ) : (
+              <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+                <Path d="M12 5v14M5 12h14" />
+              </Svg>
+            )}
+            {conversations.length === 0 && (
+              <Text style={styles.fabLabel}>{isSystemAccount ? t('list.newBroadcast') : t('list.newConversation')}</Text>
+            )}
           </TouchableOpacity>
         </LinearGradient>
       )}
@@ -488,6 +534,17 @@ function makeStyles(colors: Palette) {
     filterChipLabel: { fontFamily: fonts.sansMedium, fontSize: 12.5, color: colors.textPrimary },
     searchBar: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.tint1, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 11, marginBottom: 8 },
     searchInput: { flex: 1, fontFamily: fonts.sans, fontSize: 14.5, color: colors.textPrimary },
+    invitationBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      backgroundColor: colors.tint1,
+      borderRadius: 12,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      marginBottom: 10,
+    },
+    invitationBannerText: { flex: 1, fontFamily: fonts.sansSemiBold, fontSize: 13.5, color: colors.textPrimary },
     tabRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
     tabChip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 16, backgroundColor: colors.tint1 },
     tabChipLabel: { fontFamily: fonts.sansMedium, fontSize: 12.5, color: colors.textPrimary },

@@ -11,6 +11,7 @@ export default {
     nothingHere: 'Nothing here',
     tryDifferentFilter: 'Try a different filter.',
     newConversation: 'New conversation',
+    newBroadcast: 'New broadcast',
     you: 'You',
     photo: '📷 Photo',
     video: '🎥 Video',
@@ -20,6 +21,8 @@ export default {
     tabChats: 'Chats',
     tabArchived: 'Archived',
     muted: 'Muted',
+    pendingGroupInvitations_one: '{{count}} group invitation',
+    pendingGroupInvitations_other: '{{count}} group invitations',
   },
   thread: {
     status: {
@@ -75,6 +78,11 @@ export default {
       cameraBody: 'Allow camera access to take a picture.',
     },
     sendFailedTitle: 'Could not send',
+    systemMessage: {
+      joined: '{{name}} joined the group',
+    },
+    statusReplyLabel: 'Status',
+    systemAccountReadOnly: 'This is an official account. You can’t reply here.',
     blockedNotice: 'You blocked {{name}}',
     unblockFailed: 'Could not unblock. Please try again.',
     blockFailed: 'Could not block. Please try again.',
@@ -172,6 +180,7 @@ export default {
     reportedTitle: 'Reported',
     reportedBody: 'Thanks — we received your report.',
     unnamedUser: 'Unnamed user',
+    officialAccountInfo: 'About this official account',
     voice: 'Voice',
     video: 'Video',
     search: 'Search',
@@ -201,6 +210,15 @@ export default {
     emptyLinks: 'No links shared yet.',
     emptyDocs: 'No documents shared yet.',
     document: 'Document',
+  },
+  broadcast: {
+    title: 'Broadcast',
+    hint: 'This message will be sent to every RiskyC Chat user. It cannot be undone.',
+    placeholder: 'Write a broadcast message',
+    send: 'Send',
+    confirmTitle: 'Send to everyone?',
+    confirmBody: 'This will be delivered to every user on RiskyC Chat.',
+    failedTitle: 'Could not send broadcast',
   },
   qr: {
     headerTitle: 'QR code',

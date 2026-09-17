@@ -76,6 +76,9 @@ export async function forwardMessage(
     reply_to_sender_id: null,
     reply_to_snippet: null,
     pinned: 0,
+    is_system: 0,
+    reply_to_status_id: null,
+    reply_to_status_owner_id: null,
   });
   await upsertConversation(db, target.conversationId, target.title, sentAt, target.avatarObjectKey, !!target.groupId);
   DeviceEventEmitter.emit(CONVERSATIONS_CHANGED_EVENT);

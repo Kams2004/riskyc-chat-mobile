@@ -66,7 +66,7 @@ async function ensureAndroidChannels() {
 }
 
 type NotificationData = {
-  type?: 'message' | 'call';
+  type?: 'message' | 'call' | 'group-invitation';
   conversationId?: string;
   groupId?: string;
   senderId?: string;
@@ -147,6 +147,11 @@ export function usePushNotifications() {
             ...(data.groupId ? { groupId: data.groupId } : { recipientId: data.senderId }),
           },
         });
+        return;
+      }
+
+      if (data.type === 'group-invitation') {
+        router.push('/(tabs)/chats/group-invitations' as never);
       }
     },
     [acceptIncoming, declineIncoming, seedIncomingCallFromNotification]

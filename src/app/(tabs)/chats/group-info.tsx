@@ -34,6 +34,7 @@ export default function GroupInfoScreen() {
 
   const [group, setGroup] = useState<GroupResult | null>(null);
   const [members, setMembers] = useState<MemberRow[]>([]);
+  const [pendingInvitees, setPendingInvitees] = useState<{ userId: string; user: UserResult | null; localName?: string }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAddingOpen, setIsAddingOpen] = useState(false);
   const [addQuery, setAddQuery] = useState('');
@@ -58,6 +59,14 @@ export default function GroupInfoScreen() {
       }))
     );
     setMembers(withUsers);
+    const withPendingUsers = await Promise.all(
+      result.pendingInviteeIds.map(async (id) => ({
+        userId: id,
+        user: await getUser(id).catch(() => null),
+        localName: localNames.get(id),
+      }))
+    );
+    setPendingInvitees(withPendingUsers);
     setIsLoading(false);
   }, [groupId, db]);
 
@@ -117,6 +126,7 @@ export default function GroupInfoScreen() {
 
   const addResults = addCandidates.filter((u) => {
     if (members.some((m) => m.userId === u.userId)) return false;
+    if (pendingInvitees.some((p) => p.userId === u.userId)) return false;
     const q = addQuery.trim().toLowerCase();
     if (!q) return true;
     return (
@@ -126,11 +136,12 @@ export default function GroupInfoScreen() {
     );
   });
 
-  async function handleAddMember(user: UserResult) {
+  async function handleAddMember(user: AddCandidate) {
     await addMembers(groupId, [user.userId]);
     setIsAddingOpen(false);
     setAddQuery('');
     await load();
+    Alert.alert(t('groupInfo.invitationSentTitle'), t('groupInfo.invitationSentBody', { name: user.localName || user.displayName || t('groupInfo.unnamedUser') }));
   }
 
   function confirmRemove(member: MemberRow) {
@@ -303,6 +314,22 @@ export default function GroupInfoScreen() {
             {item.role === 'ADMIN' && <Text style={styles.roleLabel}>{t('groupInfo.roleAdmin')}</Text>}
           </TouchableOpacity>
         )}
+        ListFooterComponent={
+          pendingInvitees.length > 0 ? (
+            <View>
+              <Text style={styles.pendingSectionLabel}>{t('groupInfo.pendingInvitations')}</Text>
+              {pendingInvitees.map((item) => (
+                <View key={item.userId} style={styles.memberRow}>
+                  <Avatar objectKey={item.user?.avatarObjectKey} label={item.localName || item.user?.displayName || '?'} size={40} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.memberName}>{item.localName || item.user?.displayName || t('groupInfo.unknownUser')}</Text>
+                  </View>
+                  <Text style={styles.pendingLabel}>{t('groupInfo.pendingBadge')}</Text>
+                </View>
+              ))}
+            </View>
+          ) : null
+        }
       />
 
       <TouchableOpacity style={styles.leaveButton} onPress={confirmLeave}>
@@ -345,6 +372,8 @@ function makeStyles(colors: Palette) {
     memberRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.hairline },
     memberName: { fontFamily: fonts.sansMedium, fontSize: 14.5, color: colors.textPrimary },
     roleLabel: { fontFamily: fonts.sans, fontSize: 11.5, color: colors.textMuted },
+    pendingSectionLabel: { fontFamily: fonts.sansSemiBold, fontSize: 12, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 12, marginBottom: 4 },
+    pendingLabel: { fontFamily: fonts.sans, fontSize: 11.5, color: colors.brand600 },
     leaveButton: { paddingVertical: 14, alignItems: 'center' },
     leaveLabel: { fontFamily: fonts.sansSemiBold, fontSize: 15, color: colors.brand700 },
     leaveHint: { fontFamily: fonts.sans, fontSize: 11.5, color: colors.textMuted, textAlign: 'center', paddingBottom: 12 },

@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, DeviceEventEmitter, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, DeviceEventEmitter, Image, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
@@ -13,6 +13,7 @@ import { useCall } from '../../../features/calls/CallContext';
 import { getCommonGroups, type GroupResult } from '../../../features/groups/api';
 import { getMediaSummary, type MediaSummaryItem } from '../../../features/messaging/api';
 import { MESSAGES_CLEARED_EVENT } from '../../../features/messaging/inboxSocket';
+import { getSystemAccountInfo, type SystemAccountInfo } from '../../../features/systemAccount/api';
 import { useMediaUrl } from '../../../features/media/useMediaUrl';
 import { useTheme } from '../../../features/theme/ThemeContext';
 import { blockUser, getUser, listBlockedUsers, reportUser, unblockUser, type UserResult } from '../../../features/users/api';
@@ -44,15 +45,17 @@ export default function ContactDetailsScreen() {
   const [media, setMedia] = useState<MediaSummaryItem[]>([]);
   const [groups, setGroups] = useState<GroupResult[]>([]);
   const [isBlocked, setIsBlocked] = useState(false);
+  const [systemInfo, setSystemInfo] = useState<SystemAccountInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const load = useCallback(async () => {
-    const [userResult, mediaResult, groupsResult, blockedResult, savedName] = await Promise.all([
+    const [userResult, mediaResult, groupsResult, blockedResult, savedName, systemAccountInfo] = await Promise.all([
       getUser(userId),
       getMediaSummary(conversationId, 'IMAGE,VIDEO,FILE', 4).catch(() => []),
       getCommonGroups(userId).catch(() => []),
       listBlockedUsers().catch(() => []),
       getLocalContactName(db, userId),
+      getSystemAccountInfo().catch(() => null),
     ]);
     setUser(userResult);
     setLocalName(savedName);
@@ -60,6 +63,7 @@ export default function ContactDetailsScreen() {
     setMedia(mediaResult);
     setGroups(groupsResult);
     setIsBlocked(blockedResult.some((b) => b.userId === userId));
+    setSystemInfo(systemAccountInfo && systemAccountInfo.userId === userId ? systemAccountInfo : null);
     setIsLoading(false);
   }, [conversationId, db, userId]);
 
@@ -180,6 +184,18 @@ export default function ContactDetailsScreen() {
         )}
         {!!user.phoneNumber && <Text style={styles.phone}>{user.phoneNumber}</Text>}
       </View>
+
+      {systemInfo && (systemInfo.description || systemInfo.websiteUrl) && (
+        <View style={styles.systemInfoCard}>
+          <Text style={styles.systemInfoLabel}>{t('contactDetails.officialAccountInfo')}</Text>
+          {!!systemInfo.description && <Text style={styles.systemInfoDescription}>{systemInfo.description}</Text>}
+          {!!systemInfo.websiteUrl && (
+            <TouchableOpacity onPress={() => Linking.openURL(systemInfo.websiteUrl)}>
+              <Text style={styles.systemInfoWebsite}>{systemInfo.websiteUrl}</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
 
       <View style={styles.actionsRow}>
         <TouchableOpacity style={styles.circleAction} onPress={() => startCall(userId, name, 'AUDIO')}>
@@ -337,6 +353,10 @@ function makeStyles(colors: Palette) {
     },
     nameEditAction: { padding: 6 },
     phone: { fontFamily: fonts.sans, fontSize: 13, color: colors.textMuted },
+    systemInfoCard: { backgroundColor: colors.tint1, borderRadius: 12, padding: 16, marginHorizontal: 20, marginBottom: 16, gap: 8 },
+    systemInfoLabel: { fontFamily: fonts.sansSemiBold, fontSize: 11, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
+    systemInfoDescription: { fontFamily: fonts.sans, fontSize: 14, color: colors.textPrimary, lineHeight: 20 },
+    systemInfoWebsite: { fontFamily: fonts.sansSemiBold, fontSize: 14, color: colors.brand600 },
     actionsRow: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: colors.hairline },
     circleAction: { alignItems: 'center', gap: 6 },
     circleActionLabel: { fontFamily: fonts.sans, fontSize: 11.5, color: colors.brand600 },

@@ -116,6 +116,9 @@ export function useInboxSocket() {
           reply_to_sender_id: envelope.replyToSenderId ?? null,
           reply_to_snippet: envelope.replyToSnippet ?? null,
           pinned: envelope.pinned ? 1 : 0,
+          is_system: envelope.system ? 1 : 0,
+          reply_to_status_id: envelope.replyToStatusId ?? null,
+          reply_to_status_owner_id: envelope.replyToStatusOwnerId ?? null,
         });
         playNotificationSound();
 

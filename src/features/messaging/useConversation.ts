@@ -78,6 +78,9 @@ function envelopeToLocalMessage(envelope: messagingApi.MessageEnvelope): LocalMe
     reply_to_sender_id: envelope.replyToSenderId ?? null,
     reply_to_snippet: envelope.replyToSnippet ?? null,
     pinned: envelope.pinned ? 1 : 0,
+    is_system: envelope.system ? 1 : 0,
+    reply_to_status_id: envelope.replyToStatusId ?? null,
+    reply_to_status_owner_id: envelope.replyToStatusOwnerId ?? null,
   };
 }
 
@@ -338,7 +341,13 @@ export function useConversation({
   }, [conversationId]);
 
   const sendMessage = useCallback(
-    async (plaintext: string, media?: OutgoingMedia, attachments?: OutgoingMedia[], replyTo?: ReplyToDraft) => {
+    async (
+      plaintext: string,
+      media?: OutgoingMedia,
+      attachments?: OutgoingMedia[],
+      replyTo?: ReplyToDraft,
+      replyToStatus?: { statusId: string; ownerId: string }
+    ) => {
       if (!userId) throw new Error('Cannot send a message while signed out');
       const attachmentDtos =
         attachments && attachments.length > 0
@@ -369,6 +378,8 @@ export function useConversation({
         replyToConversationId: replyTo?.conversationId ?? null,
         replyToSenderId: replyTo?.senderId ?? null,
         replyToSnippet: replyTo?.snippet ?? null,
+        replyToStatusId: replyToStatus?.statusId ?? null,
+        replyToStatusOwnerId: replyToStatus?.ownerId ?? null,
         senderDisplayName: displayName,
       };
       await upsertMessage(db, {
@@ -393,6 +404,9 @@ export function useConversation({
         reply_to_sender_id: envelope.replyToSenderId,
         reply_to_snippet: envelope.replyToSnippet,
         pinned: 0,
+        is_system: 0,
+        reply_to_status_id: envelope.replyToStatusId,
+        reply_to_status_owner_id: envelope.replyToStatusOwnerId,
       });
       await upsertConversation(db, conversationId, titleRef.current, envelope.sentAt, avatarRef.current, isGroup);
       await reload();

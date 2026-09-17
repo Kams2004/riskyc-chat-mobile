@@ -10,6 +10,20 @@ export type GroupResult = {
   createdBy: string;
   onlyAdminsCanMessage: boolean;
   members: GroupMemberResult[];
+  /** Invited but not yet accepted — see GroupController's invitation flow. */
+  pendingInviteeIds: string[];
+};
+
+/** Sentinel Message.ciphertext for a system "X joined the group" log line — must match GroupController.SYSTEM_MEMBER_JOINED exactly. */
+export const SYSTEM_MEMBER_JOINED = '__SYSTEM_GROUP_JOINED__';
+
+export type GroupInvitationResult = {
+  invitationId: number;
+  groupId: string;
+  groupName: string | null;
+  groupAvatarObjectKey: string | null;
+  inviterId: string;
+  createdAt: string;
 };
 
 export function createGroup(name: string, memberIds: string[], avatarObjectKey?: string | null): Promise<GroupResult> {
@@ -57,4 +71,17 @@ export function changeMemberRole(groupId: string, userId: string, role: 'ADMIN' 
     method: 'PATCH',
     body: JSON.stringify({ role }),
   });
+}
+
+/** My own outstanding invitations, across every group — feeds a pending-invites badge/list. */
+export function fetchMyGroupInvitations(): Promise<GroupInvitationResult[]> {
+  return apiFetch(`${config.messagingServiceUrl}/api/groups/invitations`);
+}
+
+export function acceptGroupInvitation(invitationId: number): Promise<GroupResult> {
+  return apiFetch(`${config.messagingServiceUrl}/api/groups/invitations/${invitationId}/accept`, { method: 'POST' });
+}
+
+export function declineGroupInvitation(invitationId: number): Promise<void> {
+  return apiFetch(`${config.messagingServiceUrl}/api/groups/invitations/${invitationId}/decline`, { method: 'POST' });
 }

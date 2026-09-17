@@ -11,6 +11,7 @@ export default {
     nothingHere: 'Rien ici',
     tryDifferentFilter: 'Essayez un autre filtre.',
     newConversation: 'Nouvelle conversation',
+    newBroadcast: 'Nouvelle diffusion',
     you: 'Vous',
     photo: '📷 Photo',
     video: '🎥 Vidéo',
@@ -20,6 +21,8 @@ export default {
     tabChats: 'Discussions',
     tabArchived: 'Archivées',
     muted: 'Silencieux',
+    pendingGroupInvitations_one: '{{count}} invitation de groupe',
+    pendingGroupInvitations_other: '{{count}} invitations de groupe',
   },
   thread: {
     status: {
@@ -75,6 +78,11 @@ export default {
       cameraBody: 'Autorisez l’accès à l’appareil photo pour prendre une photo.',
     },
     sendFailedTitle: 'Envoi impossible',
+    systemMessage: {
+      joined: '{{name}} a rejoint le groupe',
+    },
+    statusReplyLabel: 'Statut',
+    systemAccountReadOnly: 'Ceci est un compte officiel. Vous ne pouvez pas y répondre.',
     blockedNotice: 'Vous avez bloqué {{name}}',
     unblockFailed: 'Impossible de débloquer. Veuillez réessayer.',
     blockFailed: 'Impossible de bloquer. Veuillez réessayer.',
@@ -172,6 +180,7 @@ export default {
     reportedTitle: 'Signalé',
     reportedBody: 'Merci — votre signalement a bien été reçu.',
     unnamedUser: 'Utilisateur sans nom',
+    officialAccountInfo: 'À propos de ce compte officiel',
     voice: 'Vocal',
     video: 'Vidéo',
     search: 'Rechercher',
@@ -201,6 +210,15 @@ export default {
     emptyLinks: 'Aucun lien partagé pour l’instant.',
     emptyDocs: 'Aucun document partagé pour l’instant.',
     document: 'Document',
+  },
+  broadcast: {
+    title: 'Diffusion',
+    hint: 'Ce message sera envoyé à tous les utilisateurs de RiskyC Chat. Cette action est irréversible.',
+    placeholder: 'Rédigez un message de diffusion',
+    send: 'Envoyer',
+    confirmTitle: 'Envoyer à tout le monde ?',
+    confirmBody: 'Ce message sera livré à tous les utilisateurs de RiskyC Chat.',
+    failedTitle: 'Impossible d’envoyer la diffusion',
   },
   qr: {
     headerTitle: 'Code QR',

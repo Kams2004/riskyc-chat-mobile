@@ -50,6 +50,13 @@ export type LocalMessage = {
   reply_to_snippet: string | null;
   // Shared, per-conversation pin (see Message.java's own comment) — 0|1.
   pinned: number;
+  // A group event log line ("X joined the group"), not something a person
+  // typed — see Message.java's own isSystem doc comment. 0|1.
+  is_system: number;
+  // Both null unless this message is a reply to a status — see
+  // StatusReplyBar and Message.java's own field comment.
+  reply_to_status_id: string | null;
+  reply_to_status_owner_id: string | null;
 };
 
 /** Never throws on malformed/missing JSON — a display concern, not worth crashing the message list over. */
@@ -90,10 +97,12 @@ export async function upsertMessage(db: SQLiteDatabase, message: LocalMessage) {
   await db.runAsync(
     `INSERT INTO messages (message_id, conversation_id, sender_id, recipient_id, ciphertext, sent_at, status,
        media_type, media_object_key, media_file_name, media_duration_ms, edited, deleted, forwarded, attachments_json,
-       reply_to_message_id, reply_to_conversation_id, reply_to_sender_id, reply_to_snippet, pinned)
+       reply_to_message_id, reply_to_conversation_id, reply_to_sender_id, reply_to_snippet, pinned,
+       is_system, reply_to_status_id, reply_to_status_owner_id)
      VALUES ($messageId, $conversationId, $senderId, $recipientId, $ciphertext, $sentAt, $status,
        $mediaType, $mediaObjectKey, $mediaFileName, $mediaDurationMs, $edited, $deleted, $forwarded, $attachmentsJson,
-       $replyToMessageId, $replyToConversationId, $replyToSenderId, $replyToSnippet, $pinned)
+       $replyToMessageId, $replyToConversationId, $replyToSenderId, $replyToSnippet, $pinned,
+       $isSystem, $replyToStatusId, $replyToStatusOwnerId)
      ON CONFLICT(message_id) DO UPDATE SET status = excluded.status`,
     {
       $messageId: message.message_id,
@@ -116,6 +125,9 @@ export async function upsertMessage(db: SQLiteDatabase, message: LocalMessage) {
       $replyToSenderId: message.reply_to_sender_id,
       $replyToSnippet: message.reply_to_snippet,
       $pinned: message.pinned,
+      $isSystem: message.is_system,
+      $replyToStatusId: message.reply_to_status_id,
+      $replyToStatusOwnerId: message.reply_to_status_owner_id,
     }
   );
 }
@@ -214,13 +226,13 @@ export async function listConversations(db: SQLiteDatabase, myUserId: string): P
        (SELECT COUNT(*) FROM messages m
          WHERE m.conversation_id = c.id AND m.sender_id <> $myUserId AND m.status <> 'read') AS unread_count,
        (SELECT m2.ciphertext FROM messages m2
-         WHERE m2.conversation_id = c.id AND m2.deleted = 0 AND m2.deleted_for_me = 0
+         WHERE m2.conversation_id = c.id AND m2.deleted = 0 AND m2.deleted_for_me = 0 AND m2.is_system = 0
          ORDER BY m2.sent_at DESC LIMIT 1) AS last_message_snippet,
        (SELECT m2.media_type FROM messages m2
-         WHERE m2.conversation_id = c.id AND m2.deleted = 0 AND m2.deleted_for_me = 0
+         WHERE m2.conversation_id = c.id AND m2.deleted = 0 AND m2.deleted_for_me = 0 AND m2.is_system = 0
          ORDER BY m2.sent_at DESC LIMIT 1) AS last_message_type,
        (SELECT m2.sender_id FROM messages m2
-         WHERE m2.conversation_id = c.id AND m2.deleted = 0 AND m2.deleted_for_me = 0
+         WHERE m2.conversation_id = c.id AND m2.deleted = 0 AND m2.deleted_for_me = 0 AND m2.is_system = 0
          ORDER BY m2.sent_at DESC LIMIT 1) AS last_message_sender_id
      FROM conversations c
      WHERE COALESCE(c.is_archived, 0) = 0
@@ -237,13 +249,13 @@ export async function listArchivedConversations(db: SQLiteDatabase, myUserId: st
        (SELECT COUNT(*) FROM messages m
          WHERE m.conversation_id = c.id AND m.sender_id <> $myUserId AND m.status <> 'read') AS unread_count,
        (SELECT m2.ciphertext FROM messages m2
-         WHERE m2.conversation_id = c.id AND m2.deleted = 0 AND m2.deleted_for_me = 0
+         WHERE m2.conversation_id = c.id AND m2.deleted = 0 AND m2.deleted_for_me = 0 AND m2.is_system = 0
          ORDER BY m2.sent_at DESC LIMIT 1) AS last_message_snippet,
        (SELECT m2.media_type FROM messages m2
-         WHERE m2.conversation_id = c.id AND m2.deleted = 0 AND m2.deleted_for_me = 0
+         WHERE m2.conversation_id = c.id AND m2.deleted = 0 AND m2.deleted_for_me = 0 AND m2.is_system = 0
          ORDER BY m2.sent_at DESC LIMIT 1) AS last_message_type,
        (SELECT m2.sender_id FROM messages m2
-         WHERE m2.conversation_id = c.id AND m2.deleted = 0 AND m2.deleted_for_me = 0
+         WHERE m2.conversation_id = c.id AND m2.deleted = 0 AND m2.deleted_for_me = 0 AND m2.is_system = 0
          ORDER BY m2.sent_at DESC LIMIT 1) AS last_message_sender_id
      FROM conversations c
      WHERE COALESCE(c.is_archived, 0) = 1

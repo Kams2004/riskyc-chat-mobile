@@ -1,7 +1,23 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Animated, FlatList, Image, Modal, Pressable, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  Animated,
+  FlatList,
+  Image,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
@@ -19,6 +35,7 @@ import {
   type StatusItem,
   type ViewerRow,
 } from '../../../features/status/api';
+import { sendStatusReply } from '../../../features/status/reply';
 import { getUser } from '../../../features/users/api';
 import { fonts } from '../../../theme';
 
@@ -67,11 +84,11 @@ function StatusMedia({ item, width, height }: { item: StatusItem; width: number;
 }
 
 export default function StatusViewerScreen() {
-  const { userId: targetUserId } = useLocalSearchParams<{ userId: string }>();
+  const { userId: targetUserId, statusId: initialStatusId } = useLocalSearchParams<{ userId: string; statusId?: string }>();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const db = useSQLiteContext();
-  const { userId: myUserId, displayName: myDisplayName, avatarObjectKey: myAvatarObjectKey } = useAuth();
+  const { userId: myUserId, displayName: myDisplayName, avatarObjectKey: myAvatarObjectKey, accessToken } = useAuth();
   const { t } = useTranslation('status');
 
   const [items, setItems] = useState<StatusItem[]>([]);
@@ -83,6 +100,8 @@ export default function StatusViewerScreen() {
   const [viewersOpen, setViewersOpen] = useState(false);
   const [viewers, setViewers] = useState<ViewerRow[] | null>(null);
   const [viewCount, setViewCount] = useState(0);
+  const [replyText, setReplyText] = useState('');
+  const [sendingReply, setSendingReply] = useState(false);
   const viewedRef = useRef<Set<string>>(new Set());
   const progressAnim = useRef(new Animated.Value(0)).current;
 
@@ -100,6 +119,14 @@ export default function StatusViewerScreen() {
       ]);
       if (cancelled) return;
       setItems(statuses);
+      // Jumps straight to the specific status a "Status" reply quote was
+      // pointing at, when the reply came from a tap on that quote — falls
+      // back to the first active item (index 0's default) if that status
+      // has since expired/been deleted, same graceful degrade as WhatsApp.
+      if (initialStatusId) {
+        const seekIndex = statuses.findIndex((s) => s.statusId === initialStatusId);
+        if (seekIndex >= 0) setIndex(seekIndex);
+      }
       setName(isMine ? myDisplayName ?? '' : localName || user?.displayName || user?.phoneNumber || targetUserId);
       setAvatarObjectKey(isMine ? myAvatarObjectKey ?? null : user?.avatarObjectKey ?? null);
       setLoading(false);
@@ -197,6 +224,20 @@ export default function StatusViewerScreen() {
     ]);
   }
 
+  async function sendReply() {
+    if (!current || !replyText.trim() || !myUserId || sendingReply) return;
+    setSendingReply(true);
+    try {
+      await sendStatusReply(db, accessToken, myUserId, myDisplayName, current, replyText.trim());
+      setReplyText('');
+    } catch (e) {
+      console.warn('[StatusViewerScreen] sendReply failed', e);
+      Alert.alert(t('viewer.replyFailedTitle'), t('viewer.replyFailedBody'));
+    } finally {
+      setSendingReply(false);
+    }
+  }
+
   if (loading || !current) {
     return (
       <View style={[styles.container, styles.center]}>
@@ -258,7 +299,7 @@ export default function StatusViewerScreen() {
       </View>
 
       {!!current.textContent && current.mediaType !== 'TEXT' && (
-        <View style={[styles.captionBar, { bottom: insets.bottom + (isMine ? 60 : 16) }]}>
+        <View style={[styles.captionBar, { bottom: insets.bottom + (isMine ? 60 : 80) }]}>
           <Text style={styles.captionText}>{current.textContent}</Text>
         </View>
       )}
@@ -271,6 +312,33 @@ export default function StatusViewerScreen() {
           </Svg>
           <Text style={styles.viewersText}>{t('viewer.viewedBy', { count: viewCount })}</Text>
         </TouchableOpacity>
+      )}
+
+      {!isMine && (
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={[styles.replyBar, { paddingBottom: insets.bottom + 16 }]}
+        >
+          <TextInput
+            style={styles.replyInput}
+            placeholder={t('viewer.replyPlaceholder', { name })}
+            placeholderTextColor="rgba(255,255,255,0.6)"
+            value={replyText}
+            onChangeText={setReplyText}
+            onFocus={() => setPaused(true)}
+            onBlur={() => setPaused(false)}
+            multiline
+          />
+          {!!replyText.trim() && (
+            <TouchableOpacity style={styles.replySendButton} onPress={sendReply} disabled={sendingReply}>
+              {sendingReply ? <ActivityIndicator color="#ffffff" /> : (
+                <Svg width={18} height={18} viewBox="0 0 24 24" fill="#ffffff">
+                  <Path d="M2 21l21-9L2 3v7l15 2-15 2z" />
+                </Svg>
+              )}
+            </TouchableOpacity>
+          )}
+        </KeyboardAvoidingView>
       )}
 
       <Modal visible={viewersOpen} animationType="slide" transparent onRequestClose={() => setViewersOpen(false)}>
@@ -350,6 +418,21 @@ const styles = StyleSheet.create({
   },
   viewersBar: { position: 'absolute', left: 16, flexDirection: 'row', alignItems: 'center', gap: 6 },
   viewersText: { fontFamily: fonts.sansSemiBold, fontSize: 13, color: '#ffffff' },
+  replyBar: { position: 'absolute', left: 16, right: 16, bottom: 0, flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
+  replyInput: {
+    flex: 1,
+    maxHeight: 100,
+    color: '#ffffff',
+    fontFamily: fonts.sans,
+    fontSize: 15,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.4)',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  replySendButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#e6004a', alignItems: 'center', justifyContent: 'center' },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalSheet: { backgroundColor: '#1f1317', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20 },
   modalTitle: { fontFamily: fonts.sansBold, fontSize: 17, color: '#ffffff', marginBottom: 12 },

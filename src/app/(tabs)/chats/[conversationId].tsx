@@ -41,7 +41,7 @@ import { VoiceRecorder } from '../../../components/VoiceRecorder';
 import { useAuth } from '../../../features/auth/AuthContext';
 import { useCall } from '../../../features/calls/CallContext';
 import { useGroupCall } from '../../../features/calls/GroupCallContext';
-import { getGroup } from '../../../features/groups/api';
+import { getGroup, SYSTEM_MEMBER_JOINED } from '../../../features/groups/api';
 import { uploadMedia } from '../../../features/media/api';
 import { useMediaUrl } from '../../../features/media/useMediaUrl';
 import {
@@ -54,6 +54,7 @@ import {
 import { useConversation, type ReplyToDraft } from '../../../features/messaging/useConversation';
 import { usePresence } from '../../../features/presence/usePresence';
 import { useTheme } from '../../../features/theme/ThemeContext';
+import { getSystemAccountInfo } from '../../../features/systemAccount/api';
 import { blockUser, getUser, listBlockedUsers, reportUser, unblockUser } from '../../../features/users/api';
 import { getLocalContactName } from '../../../data/db';
 import { firstUrlIn, LinkPreviewCard } from '../../../components/LinkPreviewCard';
@@ -489,6 +490,7 @@ export default function ChatThreadScreen() {
   const [groupMembers, setGroupMembers] = useState<LocalGroupMember[]>([]);
   const [onlyAdminsCanMessage, setOnlyAdminsCanMessage] = useState(false);
   const [isBlocked, setIsBlocked] = useState(false);
+  const [isSystemAccountThread, setIsSystemAccountThread] = useState(false);
   const isGroupAdmin = groupMembers.find((m) => m.user_id === userId)?.role === 'ADMIN';
 
   useEffect(() => {
@@ -511,6 +513,9 @@ export default function ChatThreadScreen() {
     if (!recipientId) return;
     listBlockedUsers()
       .then((blocked) => setIsBlocked(blocked.some((b) => b.userId === recipientId)))
+      .catch(() => {});
+    getSystemAccountInfo()
+      .then((info) => setIsSystemAccountThread(!!info && info.userId === recipientId))
       .catch(() => {});
     // Always check for a local name override first — it takes priority over
     // both the passed-in recipientName and the server-registered displayName.
@@ -1160,7 +1165,19 @@ export default function ChatThreadScreen() {
           // Both own and received messages are selectable now — a received
           // message just gets a smaller action set (delete-for-me, forward)
           // in the selection bar above, rather than being excluded entirely.
-          const canSelect = !item.deleted && item.media_type !== 'CALL';
+          const canSelect = !item.deleted && item.media_type !== 'CALL' && !item.is_system;
+
+          if (item.is_system) {
+            const label =
+              item.ciphertext === SYSTEM_MEMBER_JOINED
+                ? t('thread.systemMessage.joined', { name: memberName(item.sender_id) })
+                : item.ciphertext;
+            return (
+              <View style={styles.systemMessageRow}>
+                <Text style={styles.systemMessageText}>{label}</Text>
+              </View>
+            );
+          }
 
           if (item.deleted) {
             return (
@@ -1212,6 +1229,21 @@ export default function ChatThreadScreen() {
                   senderLabel={memberName(item.reply_to_sender_id || '')}
                   snippet={item.reply_to_snippet || ''}
                   onPress={() => navigateToMessage(item.reply_to_conversation_id!, item.reply_to_message_id!)}
+                  tint={isMine ? 'rgba(255,255,255,0.18)' : colors.tint1}
+                  textColor={isMine ? 'rgba(255,255,255,0.85)' : colors.textMuted}
+                  labelColor={isMine ? '#ffffff' : colors.brand600}
+                />
+              )}
+              {!!item.reply_to_status_id && (
+                <QuotedBlock
+                  senderLabel={t('thread.statusReplyLabel')}
+                  snippet={memberName(item.reply_to_status_owner_id || '')}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/(tabs)/status/viewer',
+                      params: { userId: item.reply_to_status_owner_id!, statusId: item.reply_to_status_id! },
+                    } as never)
+                  }
                   tint={isMine ? 'rgba(255,255,255,0.18)' : colors.tint1}
                   textColor={isMine ? 'rgba(255,255,255,0.85)' : colors.textMuted}
                   labelColor={isMine ? '#ffffff' : colors.brand600}
@@ -1373,7 +1405,11 @@ export default function ChatThreadScreen() {
         </View>
       )}
 
-      {isBlocked ? (
+      {isSystemAccountThread ? (
+        <View style={[styles.composer, styles.composerDisabledNotice, { paddingBottom: insets.bottom + 10 }]}>
+          <Text style={styles.composerDisabledText}>{t('thread.systemAccountReadOnly')}</Text>
+        </View>
+      ) : isBlocked ? (
         <View style={[styles.composer, styles.composerDisabledNotice, { paddingBottom: insets.bottom + 10 }]}>
           <Text style={styles.composerDisabledText}>{t('thread.blockedNotice', { name: resolvedName || t('thread.menu.defaultContactName') })}</Text>
           <TouchableOpacity
@@ -1622,6 +1658,8 @@ function makeStyles(colors: Palette) {
     incoming: { alignSelf: 'flex-start', backgroundColor: colors.tint2, borderBottomLeftRadius: 4 },
     deletedBubble: { backgroundColor: colors.tint1 },
     deletedText: { fontFamily: fonts.sans, fontStyle: 'italic', fontSize: 13.5, color: colors.textMuted },
+    systemMessageRow: { alignSelf: 'center', marginVertical: 6, paddingHorizontal: 14, paddingVertical: 6, borderRadius: 10, backgroundColor: colors.tint1, maxWidth: '80%' },
+    systemMessageText: { fontFamily: fonts.sansMedium, fontSize: 12.5, color: colors.textMuted, textAlign: 'center' },
     mediaWrap: { marginBottom: 6 },
     outgoingText: { fontFamily: fonts.sans, fontSize: 14.5, lineHeight: 20, color: '#ffffff' },
     incomingText: { fontFamily: fonts.sans, fontSize: 14.5, lineHeight: 20, color: colors.textPrimary },

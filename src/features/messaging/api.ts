@@ -38,6 +38,11 @@ export type MessageEnvelope = {
   senderDisplayName?: string | null;
   /** Set only when the conversation had disappearing messages on at send time — see Message.java's own comment. */
   expiresAt?: string | null;
+  /** True for a group event log line ("X joined the group"), never something a person typed — see Message.java's own isSystem comment. */
+  system?: boolean;
+  /** Both null/absent unless this message is a reply to a status — see Message.java's own comment. */
+  replyToStatusId?: string | null;
+  replyToStatusOwnerId?: string | null;
 };
 
 export function fetchHistory(conversationId: string): Promise<MessageEnvelope[]> {

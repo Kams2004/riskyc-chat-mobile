@@ -38,5 +38,8 @@ export default {
     deleteConfirmBody: 'Il sera supprimé pour tous ceux qui peuvent le voir.',
     delete: 'Supprimer',
     cancel: 'Annuler',
+    replyPlaceholder: 'Répondre à {{name}}',
+    replyFailedTitle: 'Impossible d’envoyer la réponse',
+    replyFailedBody: 'Veuillez réessayer.',
   },
 };
