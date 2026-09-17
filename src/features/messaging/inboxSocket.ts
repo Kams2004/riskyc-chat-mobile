@@ -25,6 +25,7 @@ import { ChatSocket } from './ws';
 
 export const CONVERSATIONS_CHANGED_EVENT = 'riskyc:conversationsChanged';
 export const TYPING_EVENT = 'riskyc:typing';
+export const STATUS_UPDATED_EVENT = 'riskyc:statusUpdated';
 
 /**
  * Backfills any conversation this device never saw live over STOMP — a
@@ -195,6 +196,15 @@ export function useInboxSocket() {
       socket.subscribeToUserTyping((update) => {
         if (cancelled) return;
         DeviceEventEmitter.emit(TYPING_EVENT, update);
+      });
+
+      // A contact posted a new status — just a refresh nudge for whichever
+      // screen has the Status tab mounted, not a local-DB write (status
+      // content isn't part of the local-first sync model, see
+      // features/status/api.ts's own doc comment).
+      socket.subscribeToUserStatus(() => {
+        if (cancelled) return;
+        DeviceEventEmitter.emit(STATUS_UPDATED_EVENT);
       });
     });
 

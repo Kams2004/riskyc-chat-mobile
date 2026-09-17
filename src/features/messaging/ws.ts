@@ -13,6 +13,7 @@ import type {
   TypingIndicator,
   TypingUpdate,
 } from './api';
+import type { StatusItem } from '../status/api';
 
 export type ReactionRequest = { messageId: string; conversationId: string; emoji: string };
 /** emoji=null means userId removed their reaction (see ChatController#react). */
@@ -162,6 +163,13 @@ export class ChatSocket {
   subscribeToUserTyping(onTyping: (update: TypingUpdate) => void) {
     return this.client.subscribe('/user/queue/typing', (frame: IMessage) => {
       onTyping(JSON.parse(frame.body) as TypingUpdate);
+    });
+  }
+
+  /** A contact just posted a new status (see StatusController#create's per-contact convertAndSendToUser fanout) — used by the inbox socket to nudge the Status tab to refresh. */
+  subscribeToUserStatus(onStatus: (item: StatusItem) => void) {
+    return this.client.subscribe('/user/queue/status', (frame: IMessage) => {
+      onStatus(JSON.parse(frame.body) as StatusItem);
     });
   }
 

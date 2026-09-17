@@ -138,6 +138,8 @@ export default {
     inviteContactMessage: 'Hey {{name}}, join me on RiskyC Chat: {{url}}',
     phoneSearchHint: 'on RiskyC Chat',
     lookingUp: 'Looking up…',
+    contactJoinedTitle: '{{name}} is now on RiskyC Chat',
+    contactJoinedBody: 'Say hi!',
   },
   search: {
     placeholder: 'Search in this conversation',

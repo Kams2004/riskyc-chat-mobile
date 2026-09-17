@@ -554,5 +554,25 @@ export async function getDisappearingSeconds(db: SQLiteDatabase, conversationId:
   return row?.disappearing_message_seconds ?? null;
 }
 
+// ---------------------------------------------------------------------------
+// Known-matched-contacts tracking (feeds the "X is now on RiskyC Chat"
+// join notification — see features/contacts/sync.ts)
+// ---------------------------------------------------------------------------
+
+export async function getKnownMatchedContactIds(db: SQLiteDatabase): Promise<Set<string>> {
+  const rows = await db.getAllAsync<{ user_id: string }>('SELECT user_id FROM known_matched_contacts');
+  return new Set(rows.map((r) => r.user_id));
+}
+
+export async function markContactsAsKnown(db: SQLiteDatabase, userIds: string[]) {
+  const now = new Date().toISOString();
+  for (const userId of userIds) {
+    await db.runAsync(
+      'INSERT INTO known_matched_contacts (user_id, matched_at) VALUES ($userId, $matchedAt) ON CONFLICT(user_id) DO NOTHING',
+      { $userId: userId, $matchedAt: now }
+    );
+  }
+}
+
 /** Convenience re-export so feature modules only import from one place. */
 export { useSQLiteContext };

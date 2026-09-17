@@ -19,6 +19,7 @@ import { AuthProvider, useAuth } from '../features/auth/AuthContext';
 import { initI18n } from '../i18n';
 import { CallProvider } from '../features/calls/CallContext';
 import { GroupCallProvider } from '../features/calls/GroupCallContext';
+import { useContactsSync } from '../features/contacts/useContactsSync';
 import { useInboxSocket } from '../features/messaging/inboxSocket';
 import { usePushNotifications } from '../features/notifications/usePushNotifications';
 import { usePresenceHeartbeat } from '../features/presence/usePresenceHeartbeat';
@@ -88,6 +89,7 @@ function Root() {
   useInboxSocket();
   usePresenceHeartbeat();
   usePushNotifications();
+  useContactsSync();
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>

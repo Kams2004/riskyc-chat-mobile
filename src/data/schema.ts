@@ -6,7 +6,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
  * half of the "local-first sync" approach from the architecture proposal —
  * the UI always reads from SQLite, never waits on the network round trip.
  */
-const CURRENT_VERSION = 10;
+const CURRENT_VERSION = 11;
 
 export async function migrateDbIfNeeded(db: SQLiteDatabase) {
   const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
@@ -160,6 +160,21 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
       ALTER TABLE conversations ADD COLUMN disappearing_message_seconds INTEGER;
     `);
     version = 10;
+  }
+
+  if (version === 10) {
+    // Tracks every contact this device has EVER seen matched to an account —
+    // independent of local_contacts (which only has an entry when a device
+    // name exists) — purely so a background sync can tell "matched before"
+    // apart from "just joined" and fire a one-time notification for the
+    // latter (see features/contacts/sync.ts).
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS known_matched_contacts (
+        user_id TEXT PRIMARY KEY NOT NULL,
+        matched_at TEXT NOT NULL
+      );
+    `);
+    version = 11;
   }
 
   await db.execAsync(`PRAGMA user_version = ${CURRENT_VERSION}`);

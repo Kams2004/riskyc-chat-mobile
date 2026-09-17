@@ -138,6 +138,8 @@ export default {
     inviteContactMessage: 'Salut {{name}}, rejoins-moi sur RiskyC Chat : {{url}}',
     phoneSearchHint: 'sur RiskyC Chat',
     lookingUp: 'Recherche en cours…',
+    contactJoinedTitle: '{{name}} utilise maintenant RiskyC Chat',
+    contactJoinedBody: 'Dites bonjour !',
   },
   search: {
     placeholder: 'Rechercher dans cette conversation',

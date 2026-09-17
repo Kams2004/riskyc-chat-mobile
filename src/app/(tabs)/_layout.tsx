@@ -36,6 +36,17 @@ function ChatsIcon({ color, focused, colors }: { color: import('react-native').C
   );
 }
 
+function StatusIcon({ color, focused, colors }: { color: import('react-native').ColorValue; focused: boolean; colors: Palette }) {
+  return (
+    <TabPill focused={focused} colors={colors}>
+      <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+        <Path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" strokeDasharray="3 3" />
+        <Path d="M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" />
+      </Svg>
+    </TabPill>
+  );
+}
+
 function CallsIcon({ color, focused, colors }: { color: import('react-native').ColorValue; focused: boolean; colors: Palette }) {
   return (
     <TabPill focused={focused} colors={colors}>
@@ -119,6 +130,13 @@ export default function TabsLayout() {
         options={{
           title: t('chats:list.title'),
           tabBarIcon: ({ color, focused }) => <ChatsIcon color={color} focused={focused} colors={colors} />,
+        }}
+      />
+      <Tabs.Screen
+        name="status"
+        options={{
+          title: t('status:tab.title'),
+          tabBarIcon: ({ color, focused }) => <StatusIcon color={color} focused={focused} colors={colors} />,
         }}
       />
       <Tabs.Screen

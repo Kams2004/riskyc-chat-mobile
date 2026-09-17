@@ -1,0 +1,37 @@
+export default {
+  tab: {
+    title: 'Status',
+  },
+  feed: {
+    myStatus: 'My status',
+    addStatus: 'Tap to add a status update',
+    recentUpdates: 'Recent updates',
+    viewedUpdates: 'Viewed updates',
+    noUpdatesTitle: 'No recent updates',
+    noUpdatesBody: 'Status updates from your contacts will show up here.',
+  },
+  composer: {
+    headerTitle: 'New status',
+    textTab: 'Text',
+    cameraTab: 'Camera',
+    galleryTab: 'Gallery',
+    textPlaceholder: 'Type a status',
+    send: 'Send',
+    permissionNeededTitle: 'Permission needed',
+    cameraPermissionBody: 'Allow camera access to take a photo or video for your status.',
+    galleryPermissionBody: 'Allow photo library access to choose a status update.',
+    postFailedTitle: 'Could not post status',
+    postFailedBody: 'Please try again.',
+    posting: 'Posting…',
+  },
+  viewer: {
+    viewedBy_one: '{{count}} view',
+    viewedBy_other: '{{count}} views',
+    viewersTitle: 'Viewed by',
+    noViewersYet: 'No views yet',
+    deleteConfirmTitle: 'Delete this status?',
+    deleteConfirmBody: 'This will remove it for everyone who can see it.',
+    delete: 'Delete',
+    cancel: 'Cancel',
+  },
+};

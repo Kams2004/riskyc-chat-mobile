@@ -1,0 +1,37 @@
+export default {
+  tab: {
+    title: 'Statuts',
+  },
+  feed: {
+    myStatus: 'Mon statut',
+    addStatus: 'Touchez pour ajouter un statut',
+    recentUpdates: 'Mises à jour récentes',
+    viewedUpdates: 'Mises à jour vues',
+    noUpdatesTitle: 'Aucune mise à jour récente',
+    noUpdatesBody: 'Les statuts de vos contacts apparaîtront ici.',
+  },
+  composer: {
+    headerTitle: 'Nouveau statut',
+    textTab: 'Texte',
+    cameraTab: 'Appareil photo',
+    galleryTab: 'Galerie',
+    textPlaceholder: 'Écrivez un statut',
+    send: 'Envoyer',
+    permissionNeededTitle: 'Autorisation requise',
+    cameraPermissionBody: "Autorisez l'accès à l'appareil photo pour prendre une photo ou une vidéo pour votre statut.",
+    galleryPermissionBody: "Autorisez l'accès à la photothèque pour choisir un statut.",
+    postFailedTitle: 'Impossible de publier le statut',
+    postFailedBody: 'Veuillez réessayer.',
+    posting: 'Publication…',
+  },
+  viewer: {
+    viewedBy_one: '{{count}} vue',
+    viewedBy_other: '{{count}} vues',
+    viewersTitle: 'Vu par',
+    noViewersYet: 'Aucune vue pour le moment',
+    deleteConfirmTitle: 'Supprimer ce statut ?',
+    deleteConfirmBody: 'Il sera supprimé pour tous ceux qui peuvent le voir.',
+    delete: 'Supprimer',
+    cancel: 'Annuler',
+  },
+};

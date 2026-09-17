@@ -10,6 +10,7 @@ import enGroups from './locales/en/groups';
 import enSettings from './locales/en/settings';
 import enCalls from './locales/en/calls';
 import enMedia from './locales/en/media';
+import enStatus from './locales/en/status';
 import frCommon from './locales/fr/common';
 import frAuth from './locales/fr/auth';
 import frChats from './locales/fr/chats';
@@ -17,6 +18,7 @@ import frGroups from './locales/fr/groups';
 import frSettings from './locales/fr/settings';
 import frCalls from './locales/fr/calls';
 import frMedia from './locales/fr/media';
+import frStatus from './locales/fr/status';
 
 export const SUPPORTED_LANGUAGES = ['en', 'fr'] as const;
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
@@ -24,8 +26,8 @@ export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
 const LANGUAGE_KEY = 'riskyc.pref.language';
 
 const resources = {
-  en: { common: enCommon, auth: enAuth, chats: enChats, groups: enGroups, settings: enSettings, calls: enCalls, media: enMedia },
-  fr: { common: frCommon, auth: frAuth, chats: frChats, groups: frGroups, settings: frSettings, calls: frCalls, media: frMedia },
+  en: { common: enCommon, auth: enAuth, chats: enChats, groups: enGroups, settings: enSettings, calls: enCalls, media: enMedia, status: enStatus },
+  fr: { common: frCommon, auth: frAuth, chats: frChats, groups: frGroups, settings: frSettings, calls: frCalls, media: frMedia, status: frStatus },
 };
 
 function isSupported(value: string | null | undefined): value is SupportedLanguage {
@@ -54,7 +56,7 @@ export async function initI18n(): Promise<void> {
     lng: language,
     fallbackLng: 'en',
     defaultNS: 'common',
-    ns: ['common', 'auth', 'chats', 'groups', 'settings', 'calls', 'media'],
+    ns: ['common', 'auth', 'chats', 'groups', 'settings', 'calls', 'media', 'status'],
     interpolation: { escapeValue: false },
     compatibilityJSON: 'v4',
   });
