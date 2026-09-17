@@ -7,29 +7,38 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
 
-import { Avatar } from '../../../components/Avatar';
-import { Button } from '../../../components/Button';
-import { KeyboardScreen } from '../../../components/KeyboardScreen';
-import { useAuth } from '../../../features/auth/AuthContext';
-import { uploadImage } from '../../../features/media/api';
-import { useTheme } from '../../../features/theme/ThemeContext';
-import { updateMyProfile } from '../../../features/users/api';
-import { fonts, gradients, type Palette } from '../../../theme';
+import { Avatar } from '../../components/Avatar';
+import { Button } from '../../components/Button';
+import { KeyboardScreen } from '../../components/KeyboardScreen';
+import { useAuth } from '../../features/auth/AuthContext';
+import { uploadImage } from '../../features/media/api';
+import { useTheme } from '../../features/theme/ThemeContext';
+import { updateMyProfile } from '../../features/users/api';
+import { fonts, gradients, type Palette } from '../../theme';
 
 /**
- * In-app editing only — a brand-new account's initial name/photo setup
- * happens on the separate (auth)/profile-setup screen instead (see that
- * file's doc comment for why), so this screen can assume displayName is
- * already set and never needs an onboarding mode of its own.
+ * A brand-new account's final onboarding step — set a name (and, for an
+ * email-verified account, a phone number) before ever seeing the chat list.
+ * Deliberately its own (auth)-stack screen, a sibling of language-select and
+ * permissions, rather than a parameterized mode of Settings' edit-profile —
+ * routing this through the Settings tab (as an earlier version of this
+ * onboarding step did) left that tab's own navigation stack permanently
+ * rooted on the profile editor on some devices, so every later tap of
+ * Settings re-opened this screen instead of the real Settings list. A
+ * screen that never touches the Settings stack at all can't have that bug,
+ * by construction — see app/_layout.tsx's onboarding redirect, which now
+ * sends brand-new accounts here instead.
  */
-export default function EditProfileScreen() {
+export default function ProfileSetupScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = makeStyles(colors);
 
-  const { displayName, avatarObjectKey, updateProfile } = useAuth();
+  const { email, updateProfile } = useAuth();
   const { t } = useTranslation('settings');
-  const [name, setName] = useState(displayName ?? '');
+  const needsPhone = !!email;
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
   const [freshLocalUri, setFreshLocalUri] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -54,19 +63,16 @@ export default function EditProfileScreen() {
     setIsSaving(true);
     try {
       const newAvatarObjectKey = freshLocalUri ? await uploadImage(freshLocalUri) : undefined;
-      const fields: { displayName: string; avatarObjectKey?: string } = {
+      const fields: { displayName: string; avatarObjectKey?: string; phoneNumber?: string } = {
         displayName: name,
         ...(newAvatarObjectKey ? { avatarObjectKey: newAvatarObjectKey } : {}),
+        ...(needsPhone && phone.trim() ? { phoneNumber: phone.trim() } : {}),
       };
       await updateMyProfile(fields);
-      await updateProfile(fields);
-      if (router.canGoBack()) {
-        router.back();
-      } else {
-        router.replace('/(tabs)/chats');
-      }
+      await updateProfile({ displayName: name, ...(newAvatarObjectKey ? { avatarObjectKey: newAvatarObjectKey } : {}) });
+      router.replace('/(tabs)/chats');
     } catch (e) {
-      console.warn('[EditProfile] save failed', e);
+      console.warn('[ProfileSetup] save failed', e);
       Alert.alert(t('editProfile.saveError'), t('common:checkConnectionAndRetry'));
     } finally {
       setIsSaving(false);
@@ -74,27 +80,11 @@ export default function EditProfileScreen() {
   }
 
   return (
-    <KeyboardScreen style={[styles.container, { paddingTop: insets.top + 12 }]}>
+    <KeyboardScreen style={[styles.container, { paddingTop: insets.top + 24 }]}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backTouchable} onPress={() => router.back()}>
-          <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={colors.textPrimary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-            <Path d="M15 18l-6-6 6-6" />
-          </Svg>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>{t('editProfile.titleEdit')}</Text>
+        <Text style={styles.headerTitle}>{t('editProfile.titleSetup')}</Text>
       </View>
 
-      {/*
-        A ScrollView instead of a flex:1 spacer pushing the button to the
-        bottom: that spacer collapses to ~0 once the keyboard eats enough
-        height that content no longer fits, leaving the button jammed
-        directly under the input (or, on some devices, clipped by the nav
-        bar in the resting state) — reported twice now. Scrolling instead
-        guarantees the button is always reachable regardless of keyboard
-        height or device size, and keyboardShouldPersistTaps lets the Save
-        button itself be tapped without first needing a second tap to
-        dismiss the keyboard.
-      */}
       <ScrollView
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 32 }]}
         keyboardShouldPersistTaps="handled"
@@ -104,8 +94,6 @@ export default function EditProfileScreen() {
           <View style={styles.avatar}>
             {freshLocalUri ? (
               <Image source={{ uri: freshLocalUri }} style={styles.avatarImage} />
-            ) : avatarObjectKey ? (
-              <Avatar objectKey={avatarObjectKey} label={name || displayName || ''} size={96} />
             ) : (
               <View style={[styles.avatar, { backgroundColor: 'transparent' }]}>
                 {name.trim() ? (
@@ -146,10 +134,29 @@ export default function EditProfileScreen() {
           />
         </View>
 
+        {needsPhone && (
+          <View style={[styles.field, { marginTop: 24 }]}>
+            <Text style={styles.label}>
+              {t('editProfile.phoneLabel')}
+              <Text style={{ color: colors.brand700 }}> *</Text>
+            </Text>
+            <TextInput
+              style={styles.input}
+              placeholder={t('editProfile.phonePlaceholder')}
+              placeholderTextColor={colors.textMuted}
+              keyboardType="phone-pad"
+              autoComplete="tel"
+              value={phone}
+              onChangeText={setPhone}
+            />
+            <Text style={styles.phoneHint}>{t('editProfile.phoneHint')}</Text>
+          </View>
+        )}
+
         <Button
           onPress={handleSave}
           loading={isSaving}
-          disabled={!name.trim()}
+          disabled={!name.trim() || (needsPhone && !phone.trim())}
           style={styles.saveButton}
         >
           {t('common:save')}
@@ -163,9 +170,8 @@ function makeStyles(colors: Palette) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.surface },
     scrollContent: { alignItems: 'center', paddingHorizontal: 28, flexGrow: 1 },
-    header: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'stretch', paddingHorizontal: 28, marginBottom: 32 },
-    backTouchable: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-    headerTitle: { fontFamily: fonts.sansSemiBold, fontSize: 17, color: colors.textPrimary },
+    header: { alignSelf: 'stretch', paddingHorizontal: 28, marginBottom: 32 },
+    headerTitle: { fontFamily: fonts.display, fontSize: 25, color: colors.textPrimary },
     avatarWrap: { width: 132, height: 132, marginBottom: 40 },
     avatar: {
       width: '100%',
@@ -198,5 +204,6 @@ function makeStyles(colors: Palette) {
       fontSize: 17,
       color: colors.textPrimary,
     },
+    phoneHint: { fontFamily: fonts.sans, fontSize: 12, color: colors.textMuted, marginTop: 4 },
   });
 }

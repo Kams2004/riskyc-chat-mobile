@@ -10,6 +10,7 @@ import { SQLiteProvider } from 'expo-sqlite';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { DATABASE_NAME } from '../data/db';
@@ -59,19 +60,26 @@ export default function RootLayout() {
   }
 
   return (
-    <SQLiteProvider databaseName={DATABASE_NAME} onInit={migrateDbIfNeeded}>
-      <SafeAreaProvider>
-        <ThemeProvider>
-          <AuthProvider>
-            <CallProvider>
-              <GroupCallProvider>
-                <Root />
-              </GroupCallProvider>
-            </CallProvider>
-          </AuthProvider>
-        </ThemeProvider>
-      </SafeAreaProvider>
-    </SQLiteProvider>
+    // react-native-gesture-handler requires this at the true root — without
+    // it, PanGestureHandler-based gestures (voice-message scrubbing, the
+    // swipe-to-reply gesture on message bubbles) can fail silently or throw
+    // on Android. Needs to wrap everything, including SQLiteProvider, since
+    // it establishes the native gesture event surface for the whole tree.
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SQLiteProvider databaseName={DATABASE_NAME} onInit={migrateDbIfNeeded}>
+        <SafeAreaProvider>
+          <ThemeProvider>
+            <AuthProvider>
+              <CallProvider>
+                <GroupCallProvider>
+                  <Root />
+                </GroupCallProvider>
+              </CallProvider>
+            </AuthProvider>
+          </ThemeProvider>
+        </SafeAreaProvider>
+      </SQLiteProvider>
+    </GestureHandlerRootView>
   );
 }
 
@@ -95,45 +103,34 @@ function Root() {
 
 function RootNavigator() {
   const { userId, isLoading, displayName } = useAuth();
-  // Tracks a sign-in happening *during this app session* (not one already
-  // signed in when the app launched) — a brand-new account has no
-  // displayName yet, so this sends them straight to Edit profile instead of
-  // dropping them on an empty-named chat list. An already-signed-in user
-  // whose name is somehow still blank is deliberately NOT redirected here:
-  // only the live transition below fires this, so they're never trapped
-  // going back out of Edit profile with the name left empty.
-  //
-  // Two-step navigation (replace into Settings' own index, THEN push
-  // edit-profile) rather than replacing straight into edit-profile: a
-  // direct replace leaves the Settings tab's nested stack rooted on
-  // edit-profile with no index underneath it (imperative router.replace
-  // doesn't rehydrate intermediate route history the way a cold-start deep
-  // link does), and since tab navigators preserve their state across
-  // focus changes, every later visit to Settings re-lands on edit-profile
-  // instead of its own list. Pushing on top of index gives edit-profile's
-  // own save handler a real router.back() target and leaves the stack
-  // correctly rooted for all future Settings visits.
+  // A signed-in account with no displayName yet hasn't finished onboarding
+  // — keeps the (auth) stack itself in charge of getting them to
+  // profile-setup, rather than ever letting (tabs) render at all. Earlier
+  // this sent them into (tabs)/settings/edit-profile instead (a
+  // parameterized mode of the normal in-app editor), which left that tab's
+  // own nested stack permanently rooted on the editor on some devices —
+  // any later tap of Settings just restored that same stuck state instead
+  // of showing the real Settings list. A screen the Settings tab's
+  // navigator never even mounts can't have that bug, so profile-setup is
+  // now a plain sibling of language-select/permissions in (auth) instead.
+  const needsOnboarding = !!userId && !displayName;
+
   const previousUserId = useRef<string | null>(null);
   useEffect(() => {
     const justSignedIn = !previousUserId.current && !!userId;
     previousUserId.current = userId;
     if (justSignedIn && !displayName) {
-      router.replace('/(tabs)/settings' as never);
-      // The onboarding=1 param (not canGoBack(), which this same push now
-      // makes true) is what edit-profile.tsx checks to decide Save should
-      // land on the chat list, not back on the Settings screen it was only
-      // ever pushed on top of to keep that tab's stack correctly rooted.
-      router.push({ pathname: '/(tabs)/settings/edit-profile', params: { onboarding: '1' } } as never);
+      router.replace('/(auth)/profile-setup' as never);
     }
   }, [userId, displayName]);
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Protected guard={!userId && !isLoading}>
+      <Stack.Protected guard={(!userId && !isLoading) || needsOnboarding}>
         <Stack.Screen name="(auth)" />
       </Stack.Protected>
 
-      <Stack.Protected guard={!!userId}>
+      <Stack.Protected guard={!!userId && !needsOnboarding}>
         <Stack.Screen name="(tabs)" />
       </Stack.Protected>
     </Stack>

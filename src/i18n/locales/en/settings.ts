@@ -27,6 +27,11 @@ export default {
     nameLabel: 'Name',
     namePlaceholder: 'Your name',
     saveError: 'Could not save',
+    phoneLabel: 'Phone number',
+    phonePlaceholder: '+237 6XX XXX XXX',
+    phoneHint: 'Required to be discoverable by your contacts.',
+    photoPermissionTitle: 'Permission needed',
+    photoPermissionBody: 'Allow photo library access to change your profile picture.',
   },
   account: {
     title: 'Account',
