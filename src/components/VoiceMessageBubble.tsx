@@ -1,5 +1,5 @@
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { PanGestureHandler } from 'react-native-gesture-handler';
 import type { PanGestureHandlerGestureEvent } from 'react-native-gesture-handler';
@@ -41,7 +41,14 @@ type VoiceMessageBubbleProps = {
 
 export function VoiceMessageBubble({ objectKey, durationMs, tintColor, trackColor, iconColor }: VoiceMessageBubbleProps) {
   const url = useMediaUrl(objectKey);
-  const player = useAudioPlayer(url ?? undefined);
+  const player = useAudioPlayer(undefined);
+  const loadedUrlRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (url && url !== loadedUrlRef.current) {
+      loadedUrlRef.current = url;
+      player.replace({ uri: url });
+    }
+  }, [url, player]);
   const status = useAudioPlayerStatus(player);
   const bars = useMemo(() => pseudoWaveform(objectKey), [objectKey]);
   const [speed, setSpeed] = useState<Speed>(1);
