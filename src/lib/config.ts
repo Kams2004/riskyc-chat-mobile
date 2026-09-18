@@ -1,32 +1,29 @@
 /**
  * Base URLs for the backend services (see /backend). Each is a separate
- * Spring Boot service behind its own port; put a single gateway/reverse-proxy
- * in front of them and collapse this to one host before shipping past the
- * MVP phase.
+ * Spring Boot service, reached through chat.riskycfashion.com's nginx —
+ * see backend/nginx-chat.riskycfashion.com.conf's own path table
+ * (/auth/, /messaging/, /media/, /presence/, /sfu/), which strips each
+ * prefix and forwards the rest to that service's own root, exactly
+ * matching the absolute /api/... paths every call site here already uses.
  *
- * Defaults point at the deployed VPS (167.86.120.214) so a fresh clone works
- * against the real backend without any setup. For local backend development,
- * copy .env.example to .env.local and point these at localhost instead —
+ * Real HTTPS/WSS now that the domain's cert is fixed — this used to point
+ * straight at the VPS's raw IP:port over plain HTTP/WS (no TLS-terminating
+ * proxy in front), which needed Android's cleartext-traffic block worked
+ * around via app.json's usesCleartextTraffic stopgap. That flag is now
+ * only there for MinIO's own file-serving endpoint (RISKYC_MINIO_PUBLIC_ENDPOINT
+ * on the VPS — deliberately NOT proxied here, see that nginx conf's own
+ * comment), not for anything in this file — drop it too once that's HTTPS.
+ *
  * EXPO_PUBLIC_* vars are inlined at build time by Metro and are visible in
- * the shipped app bundle, so never put secrets here, only base URLs.
- *
- * Plain HTTP/WS, not HTTPS/WSS: the VPS docker-compose exposes the Spring
- * Boot services directly with no TLS-terminating reverse proxy in front yet.
- * Traffic (including JWTs) is unencrypted on the wire until that's added.
- * Android additionally blocks cleartext HTTP by default (API 28+) — app.json
- * sets usesCleartextTraffic via expo-build-properties to allow it, which is
- * a stopgap for this pre-TLS deploy stage, not something to keep once a
- * reverse proxy with a real cert is in front of these services.
- *
- * Ports are 8091/8092 (not the "usual" 8081/8082) because the VPS already
- * runs other stacks (riskyc-backend, nguon-app, jitsi) on those — see
- * backend/docker-compose.yml's port defaults, which these must match.
+ * the shipped app bundle, so never put secrets here, only base URLs. For
+ * local backend development, copy .env.example to .env.local and point
+ * these at localhost instead.
  */
 export const config = {
-  authServiceUrl: process.env.EXPO_PUBLIC_AUTH_SERVICE_URL ?? 'http://167.86.120.214:8091',
-  messagingServiceUrl: process.env.EXPO_PUBLIC_MESSAGING_SERVICE_URL ?? 'http://167.86.120.214:8092',
-  mediaServiceUrl: process.env.EXPO_PUBLIC_MEDIA_SERVICE_URL ?? 'http://167.86.120.214:8083',
-  presenceServiceUrl: process.env.EXPO_PUBLIC_PRESENCE_SERVICE_URL ?? 'http://167.86.120.214:8084',
+  authServiceUrl: process.env.EXPO_PUBLIC_AUTH_SERVICE_URL ?? 'https://chat.riskycfashion.com/auth',
+  messagingServiceUrl: process.env.EXPO_PUBLIC_MESSAGING_SERVICE_URL ?? 'https://chat.riskycfashion.com/messaging',
+  mediaServiceUrl: process.env.EXPO_PUBLIC_MEDIA_SERVICE_URL ?? 'https://chat.riskycfashion.com/media',
+  presenceServiceUrl: process.env.EXPO_PUBLIC_PRESENCE_SERVICE_URL ?? 'https://chat.riskycfashion.com/presence',
   /**
    * Self-hosted TURN relay (see backend/docker-compose.yml's coturn
    * service) — public STUN alone frequently can't find a working P2P media
@@ -49,7 +46,7 @@ export const config = {
    */
   webAppUrl: process.env.EXPO_PUBLIC_WEB_APP_URL ?? 'https://chat.riskycfashion.com',
   /** Group-calling SFU (backend/sfu-service) — separate service/port from messaging-service's 1:1 call signaling. */
-  sfuServiceUrl: process.env.EXPO_PUBLIC_SFU_SERVICE_URL ?? 'http://167.86.120.214:8095',
+  sfuServiceUrl: process.env.EXPO_PUBLIC_SFU_SERVICE_URL ?? 'https://chat.riskycfashion.com/sfu',
 } as const;
 
 /**
@@ -81,5 +78,9 @@ export function sfuWebSocketUrl(
     displayName,
     callType,
   });
-  return `${base}?${params.toString()}`;
+  // Trailing slash matters here: nginx's `location /sfu/ { proxy_pass
+  // http://127.0.0.1:8095/; }` only strips the /sfu/ prefix for requests
+  // that actually match that trailing slash — a query string with no path
+  // segment after /sfu (e.g. /sfu?token=...) doesn't match it at all.
+  return `${base}/?${params.toString()}`;
 }
