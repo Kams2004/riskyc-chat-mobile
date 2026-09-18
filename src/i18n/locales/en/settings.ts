@@ -80,7 +80,7 @@ export default {
     alreadyInUseEmail: 'This email is already in use by another account.',
     tooManyRequests: "You're sending codes too quickly — please wait a bit before trying again.",
     genericError: 'Something went wrong. Please try again.',
-    smsLimitReached: "You've reached the SMS code limit for this number. Please try again later, or use email instead.",
+    smsLimitReached: "You've reached the SMS code limit for this number. You can try SMS again in about {{hours}}h, or use email instead.",
     subtitleEnterPhone: "Enter your new phone number. We'll send a code to confirm it's yours.",
     subtitleEnterEmail: "Enter your new email address. We'll send a code to confirm it's yours.",
     phonePlaceholder: '+237 6XX XXX XXX',

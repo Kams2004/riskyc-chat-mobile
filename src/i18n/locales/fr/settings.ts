@@ -80,7 +80,7 @@ export default {
     alreadyInUseEmail: 'Cet e-mail est déjà utilisé par un autre compte.',
     tooManyRequests: 'Vous envoyez des codes trop rapidement — veuillez patienter avant de réessayer.',
     genericError: "Une erreur s'est produite. Veuillez réessayer.",
-    smsLimitReached: "Vous avez atteint la limite de codes SMS pour ce numéro. Veuillez réessayer plus tard, ou utiliser l'e-mail à la place.",
+    smsLimitReached: "Vous avez atteint la limite de codes SMS pour ce numéro. Vous pourrez réessayer par SMS dans environ {{hours}}h, ou utilisez l'e-mail à la place.",
     subtitleEnterPhone: 'Entrez votre nouveau numéro de téléphone. Nous vous enverrons un code pour le confirmer.',
     subtitleEnterEmail: 'Entrez votre nouvelle adresse e-mail. Nous vous enverrons un code pour la confirmer.',
     phonePlaceholder: '+237 6XX XXX XXX',

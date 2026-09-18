@@ -63,7 +63,7 @@ export default {
     incorrectCode: 'Code incorrect, veuillez réessayer',
     tooManyRequests: 'Vous envoyez des codes trop rapidement — veuillez patienter avant de réessayer.',
     couldNotResend: 'Impossible de renvoyer le code. Veuillez réessayer.',
-    smsLimitReached: "Vous avez atteint la limite de codes SMS pour ce numéro. Veuillez utiliser l'e-mail pour vous connecter.",
+    smsLimitReached: "Vous avez atteint la limite de codes SMS pour ce numéro. Vous pourrez réessayer par SMS dans environ {{hours}}h, ou utilisez l'e-mail dès maintenant — aucune limite de ce côté.",
     useEmailInstead: "Utiliser l'e-mail à la place",
     deviceConflictTitle: 'Déjà connecté ailleurs',
     deviceConflictBody: 'Ce compte est déjà ouvert sur {{device}}. Voulez-vous vous en déconnecter et vous connecter ici à la place ?',

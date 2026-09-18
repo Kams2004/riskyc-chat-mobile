@@ -42,7 +42,13 @@ export default function ChangeIdentifierScreen() {
   const [isResending, setIsResending] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [smsTrialLimitReached, setSmsTrialLimitReached] = useState(false);
+  const [smsRetryHours, setSmsRetryHours] = useState(24);
   const [error, setError] = useState<string | null>(null);
+
+  function smsRetryHoursFrom(e: unknown): number {
+    const seconds = e instanceof ApiError ? (e.body as { retryAfterSeconds?: number } | undefined)?.retryAfterSeconds : undefined;
+    return Math.max(1, Math.ceil((seconds ?? 24 * 3600) / 3600));
+  }
   const inputRef = useRef<TextInput>(null);
 
   useEffect(() => {
@@ -76,7 +82,7 @@ export default function ChangeIdentifierScreen() {
       setResendCooldown(RESEND_COOLDOWN_SECONDS);
     } catch (e) {
       if (e instanceof ApiError && e.status === 429 && (e.body as { reason?: string } | undefined)?.reason === 'SMS_TRIAL_LIMIT_REACHED') {
-        setError(t('changeIdentifier.smsLimitReached'));
+        setError(t('changeIdentifier.smsLimitReached', { hours: smsRetryHoursFrom(e) }));
       } else {
         setError(describeError(e));
       }
@@ -95,6 +101,7 @@ export default function ChangeIdentifierScreen() {
     } catch (e) {
       if (e instanceof ApiError && e.status === 429 && (e.body as { reason?: string } | undefined)?.reason === 'SMS_TRIAL_LIMIT_REACHED') {
         setSmsTrialLimitReached(true);
+        setSmsRetryHours(smsRetryHoursFrom(e));
       } else {
         setError(describeError(e));
       }
@@ -195,7 +202,7 @@ export default function ChangeIdentifierScreen() {
           {error && <Text style={styles.error}>{error}</Text>}
           {smsTrialLimitReached ? (
             <Text style={styles.trialLimitText}>
-              {t('changeIdentifier.smsLimitReached')}
+              {t('changeIdentifier.smsLimitReached', { hours: smsRetryHours })}
             </Text>
           ) : (
             <TouchableOpacity onPress={handleResend} disabled={isResending || resendCooldown > 0}>

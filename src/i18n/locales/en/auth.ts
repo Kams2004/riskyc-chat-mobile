@@ -63,7 +63,7 @@ export default {
     incorrectCode: 'Incorrect code, please try again',
     tooManyRequests: "You're sending codes too quickly — please wait a bit before trying again.",
     couldNotResend: 'Could not resend the code. Please try again.',
-    smsLimitReached: "You've reached the SMS code limit for this number. Please use email instead to sign in.",
+    smsLimitReached: "You've reached the SMS code limit for this number. You can try SMS again in about {{hours}}h, or use email instead right now — no limit there.",
     useEmailInstead: 'Use email instead',
     deviceConflictTitle: 'Already signed in elsewhere',
     deviceConflictBody: 'This account is already open on {{device}}. Sign out there and sign in here instead?',

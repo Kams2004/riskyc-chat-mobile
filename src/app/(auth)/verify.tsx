@@ -29,6 +29,7 @@ export default function VerifyScreen() {
   const [isVerifying, setIsVerifying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [smsTrialLimitReached, setSmsTrialLimitReached] = useState(false);
+  const [smsRetryHours, setSmsRetryHours] = useState(24);
   const [isResending, setIsResending] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const inputRef = useRef<TextInput>(null);
@@ -117,9 +118,12 @@ export default function VerifyScreen() {
       setResendCooldown(RESEND_COOLDOWN_SECONDS);
     } catch (e) {
       if (e instanceof ApiError && e.status === 429) {
-        const reason = (e.body as { reason?: string } | undefined)?.reason;
-        if (reason === 'SMS_TRIAL_LIMIT_REACHED') {
+        const body = e.body as { reason?: string; retryAfterSeconds?: number } | undefined;
+        if (body?.reason === 'SMS_TRIAL_LIMIT_REACHED') {
           setSmsTrialLimitReached(true);
+          // Backend caps this at 24h, so a missing/zero value (shouldn't
+          // normally happen) still shows something sane rather than "0h".
+          setSmsRetryHours(Math.max(1, Math.ceil((body.retryAfterSeconds ?? 24 * 3600) / 3600)));
           setError(null);
         } else {
           setError(t('verify.tooManyRequests'));
@@ -181,7 +185,7 @@ export default function VerifyScreen() {
 
       {smsTrialLimitReached ? (
         <View style={styles.trialLimitBox}>
-          <Text style={styles.trialLimitText}>{t('verify.smsLimitReached')}</Text>
+          <Text style={styles.trialLimitText}>{t('verify.smsLimitReached', { hours: smsRetryHours })}</Text>
           <TouchableOpacity onPress={useEmailInstead}>
             <Text style={[styles.resend, styles.link]}>{t('verify.useEmailInstead')}</Text>
           </TouchableOpacity>
