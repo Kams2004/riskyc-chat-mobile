@@ -10,9 +10,10 @@ import { Avatar } from '../../../components/Avatar';
 import { KeyboardScreen } from '../../../components/KeyboardScreen';
 import { useAuth } from '../../../features/auth/AuthContext';
 import { createGroup } from '../../../features/groups/api';
+import { looksLikeUnresolvedName, otherPartyFrom } from '../../../features/messaging/conversationId';
 import { useTheme } from '../../../features/theme/ThemeContext';
 import { matchContacts, type UserResult } from '../../../features/users/api';
-import { getAllLocalContacts, upsertLocalContact, useSQLiteContext } from '../../../data/db';
+import { getAllLocalContacts, listConversations, upsertLocalContact, useSQLiteContext } from '../../../data/db';
 import { fonts, gradients, type Palette } from '../../../theme';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -39,70 +40,98 @@ export default function NewGroupScreen() {
   const [groupName, setGroupName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
 
-  // Same contacts-only approach as new.tsx — only people in your device
-  // contacts who have an account are shown, not every user in the system.
+  // Two sources, merged: people in your device contacts who have an
+  // account (as before), PLUS people you already have a 1:1 conversation
+  // with even if they were never saved as a device contact (e.g. reached
+  // via phone-number search) — the same "an existing account shouldn't be
+  // gated behind being a saved contact" principle new.tsx's phone-search
+  // already follows. The conversation-derived half is fetched first and
+  // independently of contacts permission, so a denied/skipped permission
+  // doesn't leave this screen showing nobody at all.
   useFocusEffect(
     useCallback(() => {
+      if (!userId) return;
       let cancelled = false;
       setIsLoading(true);
 
       (async () => {
+        const byId = new Map<string, EnrichedUser>();
+
         try {
-          const permission = await Contacts.requestPermissionsAsync();
-          if (!permission.granted) {
-            if (!cancelled) setIsLoading(false);
-            return;
-          }
-
-          const { data } = await Contacts.getContactsAsync({
-            fields: [Contacts.Fields.PhoneNumbers, Contacts.Fields.Emails, Contacts.Fields.Name],
-          });
-
-          const phoneNumbers = new Set<string>();
-          const emails = new Set<string>();
-          const phoneToName = new Map<string, string>();
-
-          for (const contact of data) {
-            const name = contact.name?.trim() || '';
-            for (const phone of contact.phoneNumbers ?? []) {
-              if (phone.number) {
-                const norm = normalizePhone(phone.number);
-                phoneNumbers.add(norm);
-                if (name) phoneToName.set(norm, name);
-              }
-            }
-            for (const email of contact.emails ?? []) {
-              if (email.email) emails.add(email.email.trim().toLowerCase());
-            }
-          }
-
-          const matched = await matchContacts([...phoneNumbers], [...emails]);
-
-          for (const user of matched) {
-            if (user.phoneNumber) {
-              const norm = normalizePhone(user.phoneNumber);
-              const deviceName = phoneToName.get(norm);
-              if (deviceName) await upsertLocalContact(db, user.userId, deviceName);
-            }
-          }
-
-          const localNames = await getAllLocalContacts(db);
-          const enriched: EnrichedUser[] = matched.map((u) => ({
-            ...u,
-            localName: localNames.get(u.userId),
-          }));
-
-          if (!cancelled) {
-            setAllUsers(enriched);
-            setIsLoading(false);
+          const conversations = await listConversations(db, userId);
+          for (const convo of conversations) {
+            if (convo.is_group) continue;
+            const peerId = otherPartyFrom(convo.id, userId);
+            if (peerId === userId || looksLikeUnresolvedName(convo.title)) continue;
+            byId.set(peerId, {
+              userId: peerId,
+              displayName: convo.title,
+              email: null,
+              phoneNumber: null,
+              avatarObjectKey: convo.avatar_object_key,
+            });
           }
         } catch {
-          if (!cancelled) setIsLoading(false);
+          // Conversation history is local-only — nothing to fall back to,
+          // just proceed with whatever the contacts pass below finds.
+        }
+
+        try {
+          const permission = await Contacts.requestPermissionsAsync();
+          if (permission.granted) {
+            const { data } = await Contacts.getContactsAsync({
+              fields: [Contacts.Fields.PhoneNumbers, Contacts.Fields.Emails, Contacts.Fields.Name],
+            });
+
+            const phoneNumbers = new Set<string>();
+            const emails = new Set<string>();
+            const phoneToName = new Map<string, string>();
+
+            for (const contact of data) {
+              const name = contact.name?.trim() || '';
+              for (const phone of contact.phoneNumbers ?? []) {
+                if (phone.number) {
+                  const norm = normalizePhone(phone.number);
+                  phoneNumbers.add(norm);
+                  if (name) phoneToName.set(norm, name);
+                }
+              }
+              for (const email of contact.emails ?? []) {
+                if (email.email) emails.add(email.email.trim().toLowerCase());
+              }
+            }
+
+            const matched = await matchContacts([...phoneNumbers], [...emails]);
+
+            for (const user of matched) {
+              if (user.phoneNumber) {
+                const norm = normalizePhone(user.phoneNumber);
+                const deviceName = phoneToName.get(norm);
+                if (deviceName) await upsertLocalContact(db, user.userId, deviceName);
+              }
+            }
+
+            const localNames = await getAllLocalContacts(db);
+            // Overwrites any conversation-derived placeholder for the same
+            // person with the richer, freshly-fetched contact record
+            // (real phoneNumber/email, device-saved local name).
+            for (const user of matched) {
+              byId.set(user.userId, { ...user, localName: localNames.get(user.userId) });
+            }
+          }
+        } catch {
+          // Contacts matching failed/denied — the conversation-derived
+          // entries collected above still stand on their own.
+        }
+
+        if (!cancelled) {
+          setAllUsers(Array.from(byId.values()));
+          setIsLoading(false);
         }
       })();
 
       return () => { cancelled = true; };
-    }, [db])
+    }, [db, userId])
   );
 
   const results = useMemo(() => {

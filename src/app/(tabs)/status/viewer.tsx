@@ -7,9 +7,8 @@ import {
   Animated,
   FlatList,
   Image,
-  KeyboardAvoidingView,
+  Keyboard,
   Modal,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -23,6 +22,7 @@ import Svg, { Path } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
 
 import { Avatar } from '../../../components/Avatar';
+import { KeyboardScreen } from '../../../components/KeyboardScreen';
 import { StatusOverlayView, parseOverlay } from '../../../components/StatusOverlayView';
 import { getLocalContactName, useSQLiteContext } from '../../../data/db';
 import { useAuth } from '../../../features/auth/AuthContext';
@@ -57,6 +57,24 @@ function StatusMedia({ item, width, height }: { item: StatusItem; width: number;
   });
   const overlay = parseOverlay(item.overlayJson);
 
+  // Covers the SECOND loading phase: url turning truthy only means the
+  // download link resolved, not that the Image has decoded pixels or the
+  // VideoView has buffered a first frame — without tracking this
+  // separately, the screen went black in the gap between those two points
+  // (the spinner below used to disappear the instant url appeared).
+  const [mediaReady, setMediaReady] = useState(item.mediaType === 'TEXT');
+  useEffect(() => {
+    setMediaReady(item.mediaType === 'TEXT');
+  }, [item.statusId, item.mediaType]);
+
+  useEffect(() => {
+    if (item.mediaType !== 'VIDEO') return;
+    const subscription = videoPlayer.addListener('statusChange', ({ status }) => {
+      if (status === 'readyToPlay' || status === 'error') setMediaReady(true);
+    });
+    return () => subscription.remove();
+  }, [videoPlayer, item.mediaType]);
+
   if (item.mediaType === 'TEXT') {
     return (
       <View style={[StyleSheet.absoluteFill, styles.textSlide, { backgroundColor: item.backgroundColor ?? '#25d366' }]}>
@@ -64,19 +82,24 @@ function StatusMedia({ item, width, height }: { item: StatusItem; width: number;
       </View>
     );
   }
-  if (!url) {
-    return (
-      <View style={[StyleSheet.absoluteFill, styles.mediaLoading]}>
-        <ActivityIndicator color="#ffffff" />
-      </View>
-    );
-  }
   return (
     <>
-      {item.mediaType === 'VIDEO' ? (
-        <VideoView player={videoPlayer} style={StyleSheet.absoluteFill} contentFit="contain" nativeControls={false} />
-      ) : (
-        <Image source={{ uri: url }} style={StyleSheet.absoluteFill} resizeMode="contain" />
+      {url && (
+        item.mediaType === 'VIDEO' ? (
+          <VideoView player={videoPlayer} style={StyleSheet.absoluteFill} contentFit="contain" nativeControls={false} />
+        ) : (
+          <Image
+            source={{ uri: url }}
+            style={StyleSheet.absoluteFill}
+            resizeMode="contain"
+            onLoadEnd={() => setMediaReady(true)}
+          />
+        )
+      )}
+      {!mediaReady && (
+        <View style={[StyleSheet.absoluteFill, styles.mediaLoading]}>
+          <ActivityIndicator color="#ffffff" />
+        </View>
       )}
       <StatusOverlayView overlay={overlay} width={width} height={height} />
     </>
@@ -102,6 +125,8 @@ export default function StatusViewerScreen() {
   const [viewCount, setViewCount] = useState(0);
   const [replyText, setReplyText] = useState('');
   const [sendingReply, setSendingReply] = useState(false);
+  const [replyFocused, setReplyFocused] = useState(false);
+  const replyInputRef = useRef<TextInput>(null);
   const viewedRef = useRef<Set<string>>(new Set());
   const progressAnim = useRef(new Animated.Value(0)).current;
 
@@ -245,6 +270,12 @@ export default function StatusViewerScreen() {
     ]);
   }
 
+  /** Leaves the draft text alone — this only backs out of typing mode, same as WhatsApp's tap-outside-to-dismiss, not a "discard reply" action. */
+  function dismissReply() {
+    replyInputRef.current?.blur();
+    Keyboard.dismiss();
+  }
+
   async function sendReply() {
     if (!current || !replyText.trim() || !myUserId || sendingReply) return;
     setSendingReply(true);
@@ -268,7 +299,7 @@ export default function StatusViewerScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <KeyboardScreen style={styles.container}>
       <StatusMedia item={current} width={width} height={height} />
 
       <Pressable
@@ -276,6 +307,13 @@ export default function StatusViewerScreen() {
         onLongPress={() => setPaused(true)}
         onPressOut={() => setPaused(false)}
         onPress={(e) => {
+          // Tapping the status while replying just backs out of typing —
+          // same as WhatsApp's tap-outside-to-dismiss — rather than also
+          // advancing to the next/previous status underneath the keyboard.
+          if (replyFocused) {
+            dismissReply();
+            return;
+          }
           const isLeft = e.nativeEvent.locationX < 120;
           if (isLeft) goPrev();
           else goNext();
@@ -336,18 +374,29 @@ export default function StatusViewerScreen() {
       )}
 
       {!isMine && (
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={[styles.replyBar, { paddingBottom: insets.bottom + 16 }]}
-        >
+        <View style={[styles.replyBar, { paddingBottom: insets.bottom + 16 }]}>
+          {replyFocused && (
+            <TouchableOpacity style={styles.replyDismissButton} onPress={dismissReply}>
+              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth={2.4} strokeLinecap="round">
+                <Path d="M18 6L6 18M6 6l12 12" />
+              </Svg>
+            </TouchableOpacity>
+          )}
           <TextInput
+            ref={replyInputRef}
             style={styles.replyInput}
             placeholder={t('viewer.replyPlaceholder', { name })}
             placeholderTextColor="rgba(255,255,255,0.6)"
             value={replyText}
             onChangeText={setReplyText}
-            onFocus={() => setPaused(true)}
-            onBlur={() => setPaused(false)}
+            onFocus={() => {
+              setPaused(true);
+              setReplyFocused(true);
+            }}
+            onBlur={() => {
+              setPaused(false);
+              setReplyFocused(false);
+            }}
             multiline
           />
           {!!replyText.trim() && (
@@ -359,7 +408,7 @@ export default function StatusViewerScreen() {
               )}
             </TouchableOpacity>
           )}
-        </KeyboardAvoidingView>
+        </View>
       )}
 
       <Modal visible={viewersOpen} animationType="slide" transparent onRequestClose={() => setViewersOpen(false)}>
@@ -384,7 +433,7 @@ export default function StatusViewerScreen() {
           </View>
         </View>
       </Modal>
-    </View>
+    </KeyboardScreen>
   );
 }
 
@@ -454,6 +503,14 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   replySendButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#e6004a', alignItems: 'center', justifyContent: 'center' },
+  replyDismissButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalSheet: { backgroundColor: '#1f1317', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20 },
   modalTitle: { fontFamily: fonts.sansBold, fontSize: 17, color: '#ffffff', marginBottom: 12 },
