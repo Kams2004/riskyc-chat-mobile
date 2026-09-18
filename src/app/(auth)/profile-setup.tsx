@@ -81,6 +81,9 @@ export default function ProfileSetupScreen() {
             avatarObjectKey: result.user.avatarObjectKey,
             email: result.user.email,
             phoneNumber: result.user.phoneNumber,
+            requiresDeviceSwitchConfirmation: false,
+            confirmationToken: null,
+            conflictingDeviceLabel: null,
           });
           Alert.alert(t('editProfile.welcomeBackTitle'), t('editProfile.welcomeBackBody'));
           router.replace('/(tabs)/chats');

@@ -65,5 +65,9 @@ export default {
     couldNotResend: 'Impossible de renvoyer le code. Veuillez réessayer.',
     smsLimitReached: "Vous avez atteint la limite de codes SMS pour ce numéro. Veuillez utiliser l'e-mail pour vous connecter.",
     useEmailInstead: "Utiliser l'e-mail à la place",
+    deviceConflictTitle: 'Déjà connecté ailleurs',
+    deviceConflictBody: 'Ce compte est déjà ouvert sur {{device}}. Voulez-vous vous en déconnecter et vous connecter ici à la place ?',
+    deviceConflictUnknownDevice: 'un autre téléphone',
+    deviceConflictConfirm: 'Se déconnecter et continuer ici',
   },
 };

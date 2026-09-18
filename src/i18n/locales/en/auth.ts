@@ -65,5 +65,9 @@ export default {
     couldNotResend: 'Could not resend the code. Please try again.',
     smsLimitReached: "You've reached the SMS code limit for this number. Please use email instead to sign in.",
     useEmailInstead: 'Use email instead',
+    deviceConflictTitle: 'Already signed in elsewhere',
+    deviceConflictBody: 'This account is already open on {{device}}. Sign out there and sign in here instead?',
+    deviceConflictUnknownDevice: 'another phone',
+    deviceConflictConfirm: 'Sign out & continue here',
   },
 };

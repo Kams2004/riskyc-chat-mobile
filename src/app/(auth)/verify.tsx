@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 
@@ -18,7 +18,7 @@ export default function VerifyScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = makeStyles(colors);
-  const { signInWithOtp } = useAuth();
+  const { signInWithOtp, confirmDeviceSwitch } = useAuth();
   const { t } = useTranslation('auth');
 
   const { identifierType, identifierValue } = useLocalSearchParams<{
@@ -50,6 +50,46 @@ export default function VerifyScreen() {
     // them; only a brand-new account gets redirected onward to complete its
     // profile (see app/_layout.tsx's onboarding redirect).
     signInWithOtp({ type: identifierType, value: identifierValue }, code)
+      .then((result) => {
+        if (cancelled || !('requiresDeviceSwitchConfirmation' in result)) return;
+        // The OTP was correct, but this account is already open on another
+        // phone — login isn't complete yet (see signInWithOtp's own doc
+        // comment). Refusing here must leave things exactly as if this
+        // screen had never been submitted, so a decline just goes back to
+        // entering the phone/email again, nothing more.
+        Alert.alert(
+          t('verify.deviceConflictTitle'),
+          t('verify.deviceConflictBody', {
+            device: result.conflictingDeviceLabel ?? t('verify.deviceConflictUnknownDevice'),
+          }),
+          [
+            {
+              text: t('common:cancel'),
+              style: 'cancel',
+              onPress: () => {
+                setCode('');
+                router.replace('/(auth)/login');
+              },
+            },
+            {
+              text: t('verify.deviceConflictConfirm'),
+              style: 'destructive',
+              onPress: async () => {
+                setIsVerifying(true);
+                try {
+                  await confirmDeviceSwitch(result.confirmationToken);
+                  // Stack.Protected guard swaps to (tabs) automatically once userId is set.
+                } catch {
+                  setError(t('login.networkError'));
+                  setCode('');
+                } finally {
+                  setIsVerifying(false);
+                }
+              },
+            },
+          ]
+        );
+      })
       .catch((e) => {
         if (cancelled) return;
         // Never show raw network errors — a 401 really is a wrong/expired
@@ -66,7 +106,7 @@ export default function VerifyScreen() {
     return () => {
       cancelled = true;
     };
-  }, [code, identifierType, identifierValue, signInWithOtp]);
+  }, [code, identifierType, identifierValue, signInWithOtp, confirmDeviceSwitch, t]);
 
   async function handleResend() {
     if (isResending || resendCooldown > 0 || smsTrialLimitReached) return;
