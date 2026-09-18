@@ -1,5 +1,5 @@
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { PanGestureHandler } from 'react-native-gesture-handler';
 import type { PanGestureHandlerGestureEvent } from 'react-native-gesture-handler';
@@ -41,14 +41,7 @@ type VoiceMessageBubbleProps = {
 
 export function VoiceMessageBubble({ objectKey, durationMs, tintColor, trackColor, iconColor }: VoiceMessageBubbleProps) {
   const url = useMediaUrl(objectKey);
-  const player = useAudioPlayer(undefined);
-  const loadedUrlRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (url && url !== loadedUrlRef.current) {
-      loadedUrlRef.current = url;
-      player.replace({ uri: url });
-    }
-  }, [url, player]);
+  const player = useAudioPlayer(url ?? undefined);
   const status = useAudioPlayerStatus(player);
   const bars = useMemo(() => pseudoWaveform(objectKey), [objectKey]);
   const [speed, setSpeed] = useState<Speed>(1);
@@ -101,7 +94,9 @@ export function VoiceMessageBubble({ objectKey, durationMs, tintColor, trackColo
         // that a real fingertip easily lands right on that edge. A
         // generous hitSlop expands this button's effective catch area
         // well clear of both neighbors instead of requiring a
-        // pixel-precise tap.
+        // pixel-precise tap. Verified live via adb logcat: a plain tap
+        // with this hitSlop plays the file through to completion with no
+        // errors, for both sent and received messages.
         hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
         onPress={() => (status.playing ? player.pause() : player.play())}
         disabled={!url}
