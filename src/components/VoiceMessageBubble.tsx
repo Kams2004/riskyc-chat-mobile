@@ -56,7 +56,16 @@ export function VoiceMessageBubble({ objectKey, durationMs, tintColor, trackColo
     const nextIndex = (SPEEDS.indexOf(speed) + 1) % SPEEDS.length;
     const next = SPEEDS[nextIndex];
     setSpeed(next);
-    player.playbackRate = next;
+    // Guarded on isLoaded — mutating playbackRate on a player whose native
+    // side hasn't finished loading the source yet is the kind of thing
+    // that surfaces as a hard native crash rather than a catchable JS
+    // error, so try/catch alone isn't enough here.
+    if (!status.isLoaded) return;
+    try {
+      player.setPlaybackRate(next, 'high');
+    } catch (e) {
+      console.warn('[VoiceMessageBubble] setPlaybackRate failed', e);
+    }
   }
 
   function seekToProgress(ratio: number) {
