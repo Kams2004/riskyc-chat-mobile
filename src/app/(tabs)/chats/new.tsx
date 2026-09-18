@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Linking,
   Share,
   StyleSheet,
   Text,
@@ -73,74 +74,97 @@ export default function NewConversationScreen() {
 
   // Re-runs every time this screen comes into focus so newly-added device
   // contacts (including SIM / other storage locations) are picked up.
+  // Shared by both the focus effect below and the denied-state "Grant
+  // access" retry button — a plain, standalone reload rather than something
+  // that only ever runs once per screen focus, so re-requesting after a
+  // denial doesn't require leaving and re-entering this screen. Always
+  // calls requestPermissionsAsync (never getPermissionsAsync) so a
+  // previous denial keeps being retried instead of the screen going quiet
+  // — on iOS, past the first real denial the OS itself won't show the
+  // dialog again, so the "Grant access" button also offers Settings.
+  const loadContacts = useCallback(
+    async (cancelled: { value: boolean }) => {
+      const permission = await Contacts.requestPermissionsAsync();
+      if (!permission.granted) {
+        if (!cancelled.value) setLoadState('denied');
+        return;
+      }
+      try {
+        const { data } = await Contacts.getContactsAsync({
+          fields: [Contacts.Fields.PhoneNumbers, Contacts.Fields.Emails, Contacts.Fields.Name],
+        });
+
+        const phoneNumbers = new Set<string>();
+        const emails = new Set<string>();
+        const phoneToName = new Map<string, string>();
+
+        for (const contact of data) {
+          const name = contact.name?.trim() || '';
+          for (const phone of contact.phoneNumbers ?? []) {
+            if (phone.number) {
+              const norm = normalizePhone(phone.number);
+              phoneNumbers.add(norm);
+              if (name) phoneToName.set(norm, name);
+            }
+          }
+          for (const email of contact.emails ?? []) {
+            if (email.email) emails.add(email.email.trim().toLowerCase());
+          }
+        }
+
+        phoneToNameRef.current = phoneToName;
+
+        const matched = await matchContacts([...phoneNumbers], [...emails]);
+
+        for (const user of matched) {
+          if (user.phoneNumber) {
+            const deviceName = phoneToName.get(normalizePhone(user.phoneNumber));
+            if (deviceName) await upsertLocalContact(db, user.userId, deviceName);
+          }
+        }
+
+        const localNames = await getAllLocalContacts(db);
+        const enriched: EnrichedUser[] = matched.map((u) => ({
+          ...u,
+          localName: localNames.get(u.userId),
+        }));
+
+        if (!cancelled.value) {
+          setContactUsers(enriched);
+          setLoadState('granted');
+        }
+      } catch {
+        // Always the translated fallback, never the raw exception.
+        if (!cancelled.value) {
+          setError(t('newChat.loadErrorFallback'));
+          setLoadState('granted');
+        }
+      }
+    },
+    [db, t]
+  );
+
   useFocusEffect(
     useCallback(() => {
-      let cancelled = false;
+      const cancelled = { value: false };
       setLoadState('loading');
       setError(null);
-
-      (async () => {
-        const permission = await Contacts.requestPermissionsAsync();
-        if (!permission.granted) {
-          if (!cancelled) setLoadState('denied');
-          return;
-        }
-        try {
-          const { data } = await Contacts.getContactsAsync({
-            fields: [Contacts.Fields.PhoneNumbers, Contacts.Fields.Emails, Contacts.Fields.Name],
-          });
-
-          const phoneNumbers = new Set<string>();
-          const emails = new Set<string>();
-          const phoneToName = new Map<string, string>();
-
-          for (const contact of data) {
-            const name = contact.name?.trim() || '';
-            for (const phone of contact.phoneNumbers ?? []) {
-              if (phone.number) {
-                const norm = normalizePhone(phone.number);
-                phoneNumbers.add(norm);
-                if (name) phoneToName.set(norm, name);
-              }
-            }
-            for (const email of contact.emails ?? []) {
-              if (email.email) emails.add(email.email.trim().toLowerCase());
-            }
-          }
-
-          phoneToNameRef.current = phoneToName;
-
-          const matched = await matchContacts([...phoneNumbers], [...emails]);
-
-          for (const user of matched) {
-            if (user.phoneNumber) {
-              const deviceName = phoneToName.get(normalizePhone(user.phoneNumber));
-              if (deviceName) await upsertLocalContact(db, user.userId, deviceName);
-            }
-          }
-
-          const localNames = await getAllLocalContacts(db);
-          const enriched: EnrichedUser[] = matched.map((u) => ({
-            ...u,
-            localName: localNames.get(u.userId),
-          }));
-
-          if (!cancelled) {
-            setContactUsers(enriched);
-            setLoadState('granted');
-          }
-        } catch {
-          // Always the translated fallback, never the raw exception.
-          if (!cancelled) {
-            setError(t('newChat.loadErrorFallback'));
-            setLoadState('granted');
-          }
-        }
-      })();
-
-      return () => { cancelled = true; };
-    }, [db, t])
+      loadContacts(cancelled);
+      return () => {
+        cancelled.value = true;
+      };
+    }, [loadContacts])
   );
+
+  async function retryContactsPermission() {
+    const current = await Contacts.getPermissionsAsync();
+    if (!current.canAskAgain && !current.granted) {
+      await Linking.openSettings();
+      return;
+    }
+    setLoadState('loading');
+    loadContacts({ value: false });
+  }
 
   // When the query looks like a phone number, debounce a server lookup.
   const lookupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -374,6 +398,9 @@ export default function NewConversationScreen() {
           {loadState === 'denied' && (
             <View style={styles.stateBox}>
               <Text style={styles.emptyText}>{t('newChat.deniedBody')}</Text>
+              <TouchableOpacity style={[styles.grantAccessButton, { borderColor: colors.brand500 }]} onPress={retryContactsPermission}>
+                <Text style={[styles.grantAccessLabel, { color: colors.brand500 }]}>{t('newChat.grantAccess')}</Text>
+              </TouchableOpacity>
             </View>
           )}
 
@@ -446,6 +473,8 @@ function makeStyles(colors: Palette) {
     stateBox: { alignItems: 'center', marginTop: 48, paddingHorizontal: 12 },
     errorText: { fontFamily: fonts.sans, color: colors.brand800, textAlign: 'center', paddingHorizontal: 24 },
     emptyText: { fontFamily: fonts.sans, color: colors.textMuted, textAlign: 'center', lineHeight: 19 },
+    grantAccessButton: { marginTop: 16, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20, borderWidth: 1.5 },
+    grantAccessLabel: { fontFamily: fonts.sansSemiBold, fontSize: 14 },
     row: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.hairline },
     rowName: { fontFamily: fonts.sansSemiBold, fontSize: 15.5, color: colors.textPrimary },
     rowSubtitle: { fontFamily: fonts.sans, fontSize: 12.5, color: colors.textMuted, marginTop: 2 },

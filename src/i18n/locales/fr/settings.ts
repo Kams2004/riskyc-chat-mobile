@@ -15,6 +15,8 @@ export default {
     notificationsComingSoonBody: "Ceci nécessite un service de notifications push, qui n'est pas encore construit.",
     language: 'Langue',
     signOut: 'Se déconnecter',
+    signOutConfirmTitle: 'Se déconnecter ?',
+    signOutConfirmBody: 'Vous devrez à nouveau vérifier votre numéro de téléphone ou votre email pour vous reconnecter.',
   },
   language: {
     title: 'Langue',

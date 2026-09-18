@@ -141,6 +141,7 @@ export default {
     deniedBody:
       "RiskyC Chat n’affiche que les personnes déjà présentes dans vos contacts, pour éviter que des inconnus ne puissent démarrer une discussion avec vous.\n\nAutorisez l’accès aux contacts dans les réglages de votre appareil pour voir qui utilise déjà RiskyC Chat.",
     loadErrorFallback: 'Impossible de charger vos contacts',
+    grantAccess: 'Autoriser l’accès',
     emptyNoMatch: 'Aucun de vos contacts ne correspond à cette recherche.',
     emptyNoContacts: 'Aucun de vos contacts n’utilise encore RiskyC Chat — invitez-en un !',
     unnamedUser: 'Utilisateur sans nom',
@@ -164,6 +165,7 @@ export default {
     failedBody: 'Veuillez réessayer.',
   },
   contactDetails: {
+    headerTitle: 'Infos du contact',
     clearChatConfirmTitle: 'Effacer la discussion ?',
     clearChatConfirmBody: 'Cela retire les messages de cet appareil uniquement — l’autre personne garde les siens.',
     defaultPersonName: 'cette personne',

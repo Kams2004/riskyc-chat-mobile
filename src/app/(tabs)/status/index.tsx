@@ -6,6 +6,8 @@ import Svg, { Path } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
 
 import { Avatar } from '../../../components/Avatar';
+import { StatusPreviewThumb } from '../../../components/StatusPreviewThumb';
+import { StatusRing } from '../../../components/StatusRing';
 import { getAllLocalContacts, useSQLiteContext } from '../../../data/db';
 import { useAuth } from '../../../features/auth/AuthContext';
 import { STATUS_UPDATED_EVENT } from '../../../features/messaging/inboxSocket';
@@ -112,9 +114,15 @@ export default function StatusScreen() {
             style={styles.row}
             onPress={() => (myStatuses ? openViewer(userId!) : openComposer())}
           >
-            <View style={[styles.ring, myStatuses ? styles.ringNeutral : styles.ringNone]}>
-              <Avatar localUri={null} objectKey={avatarObjectKey} label={displayName ?? '?'} size={52} />
-            </View>
+            {myStatuses ? (
+              <StatusRing size={58} count={myStatuses.statuses.length} unviewedColor={colors.tint2} viewedColor={colors.tint2}>
+                <StatusPreviewThumb item={myStatuses.statuses[myStatuses.statuses.length - 1]} size={52} />
+              </StatusRing>
+            ) : (
+              <View style={styles.ringNoneWrap}>
+                <Avatar localUri={null} objectKey={avatarObjectKey} label={displayName ?? '?'} size={52} />
+              </View>
+            )}
             <View style={{ flex: 1 }}>
               <Text style={styles.name} numberOfLines={1}>{t('feed.myStatus')}</Text>
               <Text style={styles.sub} numberOfLines={1}>{t('feed.addStatus')}</Text>
@@ -169,9 +177,15 @@ function StatusRow({
   const latest = row.statuses[row.statuses.length - 1];
   return (
     <TouchableOpacity style={styles.row} onPress={onPress}>
-      <View style={[styles.ring, row.hasUnviewed ? styles.ringUnviewed(colors) : styles.ringNeutral]}>
-        <Avatar objectKey={row.avatarObjectKey} label={row.name} size={52} />
-      </View>
+      <StatusRing
+        size={58}
+        count={row.statuses.length}
+        viewedFlags={row.statuses.map((s) => s.viewedByMe)}
+        unviewedColor={colors.brand600}
+        viewedColor={colors.tint2}
+      >
+        <StatusPreviewThumb item={latest} size={52} />
+      </StatusRing>
       <View style={{ flex: 1 }}>
         <Text style={styles.name} numberOfLines={1}>{row.name}</Text>
         <Text style={styles.sub} numberOfLines={1}>{timeAgo(latest.createdAt)}</Text>
@@ -190,10 +204,7 @@ function makeStyles(colors: Palette) {
     emptyTitle: { fontFamily: fonts.sansSemiBold, fontSize: 15, color: colors.textPrimary, marginBottom: 4 } as const,
     emptyBody: { fontFamily: fonts.sans, fontSize: 13, color: colors.textMuted, textAlign: 'center' } as const,
     row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20, paddingVertical: 10 } as const,
-    ring: { width: 58, height: 58, borderRadius: 29, alignItems: 'center', justifyContent: 'center', borderWidth: 2 } as const,
-    ringNone: { borderColor: 'transparent' } as const,
-    ringNeutral: { borderColor: colors.tint2 } as const,
-    ringUnviewed: (c: Palette) => ({ borderColor: c.brand600 }) as const,
+    ringNoneWrap: { width: 58, height: 58, borderRadius: 29, alignItems: 'center', justifyContent: 'center' } as const,
     name: { fontFamily: fonts.sansSemiBold, fontSize: 15.5, color: colors.textPrimary } as const,
     sub: { fontFamily: fonts.sans, fontSize: 12.5, color: colors.textMuted, marginTop: 2 } as const,
     addButton: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.tint1 } as const,

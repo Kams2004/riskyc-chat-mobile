@@ -1,6 +1,18 @@
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 
 /**
+ * These two bundled files are ONLY what plays while the app is in the
+ * foreground (an already-open thread receiving a message, an active
+ * CallOverlay ringing) — there is no cross-platform API to read or play
+ * "whatever ringtone/notification sound the user has actually configured
+ * on their device" for in-app playback like this; iOS in particular never
+ * exposes the system ringtone to third-party apps at all. The
+ * backgrounded/killed-app case — arguably the one that matters most, since
+ * that's when the phone is expected to actually ring/chime — DOES use the
+ * device's own configured sound: see usePushNotifications.ts's Android
+ * notification channels (sound: 'default') and the server's Expo push
+ * payload (sound: "default"), neither of which bundle a custom file.
+ *
  * Two lazily-created, reused players (not one-shot createAudioPlayer() per
  * call) — a fresh player per notification would leak native audio
  * resources, and a ringtone specifically needs a persistent player to

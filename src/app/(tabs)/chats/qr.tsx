@@ -37,7 +37,7 @@ export default function QrScreen() {
           </Svg>
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: tab === 'scan' ? '#ffffff' : colors.textPrimary }]}>{t('qr.headerTitle')}</Text>
-        <View style={{ width: 44 }} />
+        <View style={{ width: 40 }} />
       </View>
 
       <View style={[styles.tabRow, { backgroundColor: tab === 'scan' ? 'transparent' : colors.tint1 }]}>
@@ -132,8 +132,8 @@ function makeStyles(colors: Palette) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: '#000000' },
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 6, paddingBottom: 8 },
-    backTouchable: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-    headerTitle: { fontFamily: fonts.sansSemiBold, fontSize: 17 },
+    backTouchable: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+    headerTitle: { fontFamily: fonts.sansSemiBold, fontSize: 16.5 },
     tabRow: { flexDirection: 'row' },
     tab: { flex: 1, alignItems: 'center', paddingVertical: 12 },
     tabLabel: { fontFamily: fonts.sansSemiBold, fontSize: 12.5, letterSpacing: 0.5 },

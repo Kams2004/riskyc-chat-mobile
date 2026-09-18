@@ -48,18 +48,30 @@ async function ensureCallCategory() {
   ]);
 }
 
+// Channel ids carry a "-v2" suffix specifically to force Android to create
+// BRAND NEW channels instead of reusing whatever "messages"/"calls" already
+// exist on an upgrading install — Android treats a channel's sound as
+// immutable after first creation, so re-calling setNotificationChannelAsync
+// with a different sound on the OLD channel id would silently do nothing
+// for anyone who already had the app installed. `sound: 'default'` (not a
+// bundled file) is what actually makes Android use whatever ringtone/
+// notification sound the user has chosen on their own device, per channel,
+// in system settings — see lib/sounds.ts's own doc comment for why the
+// FOREGROUND in-app sound (played directly by this app, not through a
+// system notification) can't use the same "ask the OS for the device's
+// sound" trick; there's no cross-platform API for that.
 async function ensureAndroidChannels() {
   if (Platform.OS !== 'android') return;
-  await Notifications.setNotificationChannelAsync('messages', {
+  await Notifications.setNotificationChannelAsync('messages-v2', {
     name: 'Messages',
     importance: Notifications.AndroidImportance.DEFAULT,
-    sound: 'notification.wav',
+    sound: 'default',
     vibrationPattern: [0, 200, 100, 200],
   });
-  await Notifications.setNotificationChannelAsync('calls', {
+  await Notifications.setNotificationChannelAsync('calls-v2', {
     name: 'Calls',
     importance: Notifications.AndroidImportance.MAX,
-    sound: 'ringtone.wav',
+    sound: 'default',
     bypassDnd: true,
     vibrationPattern: [0, 400, 200, 400, 200, 400],
   });

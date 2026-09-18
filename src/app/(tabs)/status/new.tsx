@@ -267,7 +267,10 @@ export default function NewStatusScreen() {
               />
             </View>
           ) : (
-            <View style={[StyleSheet.absoluteFill, styles.textSlide, { backgroundColor: current.bgColor }]}>
+            <KeyboardAvoidingView
+              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+              style={[StyleSheet.absoluteFill, styles.textSlide, { backgroundColor: current.bgColor }]}
+            >
               <TextInput
                 style={styles.textSlideInput}
                 placeholder={t('composer.textPlaceholder')}
@@ -278,7 +281,7 @@ export default function NewStatusScreen() {
                 autoFocus
                 textAlign="center"
               />
-            </View>
+            </KeyboardAvoidingView>
           )}
 
           <TouchableOpacity style={[styles.closeButton, { top: insets.top + 12 }]} onPress={onClosePress}>
@@ -326,7 +329,7 @@ export default function NewStatusScreen() {
 
           {/* Text-overlay editing */}
           {activeTool === 'textOverlay' && (
-            <View style={StyleSheet.absoluteFill}>
+            <KeyboardAvoidingView style={StyleSheet.absoluteFill} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
               <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={commitTextOverlay} />
               <View style={styles.textOverlayEditorWrap} pointerEvents="box-none">
                 <TextInput
@@ -346,13 +349,13 @@ export default function NewStatusScreen() {
                   <Path d="M20 6L9 17l-5-5" />
                 </Svg>
               </TouchableOpacity>
-            </View>
+            </KeyboardAvoidingView>
           )}
 
           {/* Bottom: pending-item thumbnails + caption/swatches + send */}
           {activeTool === 'none' && (
             <KeyboardAvoidingView
-              behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
               style={[styles.bottomArea, { paddingBottom: insets.bottom + 16 }]}
             >
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.thumbRow}>

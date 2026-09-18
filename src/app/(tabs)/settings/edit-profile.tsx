@@ -82,6 +82,7 @@ export default function EditProfileScreen() {
           </Svg>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t('editProfile.titleEdit')}</Text>
+        <View style={{ width: 40 }} />
       </View>
 
       {/*
@@ -163,9 +164,9 @@ function makeStyles(colors: Palette) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.surface },
     scrollContent: { alignItems: 'center', paddingHorizontal: 28, flexGrow: 1 },
-    header: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'stretch', paddingHorizontal: 28, marginBottom: 32 },
-    backTouchable: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-    headerTitle: { fontFamily: fonts.sansSemiBold, fontSize: 17, color: colors.textPrimary },
+    header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', alignSelf: 'stretch', paddingHorizontal: 28, marginBottom: 32 },
+    backTouchable: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+    headerTitle: { fontFamily: fonts.sansSemiBold, fontSize: 16.5, color: colors.textPrimary },
     avatarWrap: { width: 132, height: 132, marginBottom: 40 },
     avatar: {
       width: '100%',

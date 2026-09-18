@@ -76,7 +76,7 @@ export default function BroadcastScreen() {
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={[styles.container, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 16 }]}
     >
       <View style={styles.header}>

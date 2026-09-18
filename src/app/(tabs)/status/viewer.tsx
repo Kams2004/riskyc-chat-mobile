@@ -163,15 +163,36 @@ export default function StatusViewerScreen() {
     }
   }, [current, isMine]);
 
-  // Drives both the visible progress-bar fill and the auto-advance — a
-  // long-press-pause/viewers-modal restarts the current item's bar from
-  // zero rather than truly resuming mid-fill, a deliberate MVP tradeoff
-  // (same category as this project's other "not full parity" simplifications).
+  // Tracks the bar's live fill so a pause can resume from wherever it
+  // actually stopped instead of restarting — Animated.Value has no public
+  // getter, so a listener is the only way to read it back.
+  const progressValueRef = useRef(0);
+  useEffect(() => {
+    const id = progressAnim.addListener(({ value }) => {
+      progressValueRef.current = value;
+    });
+    return () => progressAnim.removeListener(id);
+  }, [progressAnim]);
+
+  // Resets the bar to empty only when the item itself changes — NOT on
+  // every pause/resume toggle, which used to call setValue(0) here too and
+  // made a long-press-pause look like it kept restarting the bar from
+  // scratch even though the underlying auto-advance really was paused.
   useEffect(() => {
     progressAnim.setValue(0);
+    progressValueRef.current = 0;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current?.statusId]);
+
+  // Drives both the visible progress-bar fill and the auto-advance.
+  // Pausing just stops the animation in place (Animated.Value keeps its
+  // last value on stop()); resuming continues from there over whatever
+  // duration is left, rather than restarting the whole item.
+  useEffect(() => {
     if (!current || paused || viewersOpen) return;
     const duration = current.mediaType === 'VIDEO' ? VIDEO_DURATION_MS : IMAGE_DURATION_MS;
-    const animation = Animated.timing(progressAnim, { toValue: 1, duration, useNativeDriver: false });
+    const remaining = Math.max(duration * (1 - progressValueRef.current), 0);
+    const animation = Animated.timing(progressAnim, { toValue: 1, duration: remaining, useNativeDriver: false });
     animation.start(({ finished }) => {
       if (finished) goNext();
     });
@@ -316,7 +337,7 @@ export default function StatusViewerScreen() {
 
       {!isMine && (
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={[styles.replyBar, { paddingBottom: insets.bottom + 16 }]}
         >
           <TextInput

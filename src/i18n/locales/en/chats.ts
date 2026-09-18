@@ -141,6 +141,7 @@ export default {
     deniedBody:
       "RiskyC Chat only shows people already in your contacts, to keep strangers from starting a chat with you.\n\nAllow contacts access in your device settings to see who's already on RiskyC Chat.",
     loadErrorFallback: 'Could not load your contacts',
+    grantAccess: 'Grant access',
     emptyNoMatch: 'No one in your contacts matches that search.',
     emptyNoContacts: "None of your contacts are on RiskyC Chat yet — try inviting one!",
     unnamedUser: 'Unnamed user',
@@ -164,6 +165,7 @@ export default {
     failedBody: 'Please try again.',
   },
   contactDetails: {
+    headerTitle: 'Contact info',
     clearChatConfirmTitle: 'Clear chat?',
     clearChatConfirmBody: 'This removes the messages from this device only — the other person keeps theirs.',
     defaultPersonName: 'this person',

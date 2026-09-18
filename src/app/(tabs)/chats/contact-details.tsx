@@ -147,6 +147,7 @@ export default function ContactDetailsScreen() {
             <Path d="M15 18l-6-6 6-6" />
           </Svg>
         </TouchableOpacity>
+        <Text style={styles.headerTitle}>{t('contactDetails.headerTitle')}</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -338,6 +339,7 @@ function makeStyles(colors: Palette) {
     centered: { alignItems: 'center', justifyContent: 'center' },
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
     iconTouchable: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+    headerTitle: { fontFamily: fonts.sansSemiBold, fontSize: 16.5, color: colors.textPrimary },
     profileHeader: { alignItems: 'center', gap: 6, paddingVertical: 12 },
     nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
     name: { fontFamily: fonts.display, fontSize: 21, color: colors.textPrimary },

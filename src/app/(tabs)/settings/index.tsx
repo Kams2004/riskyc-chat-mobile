@@ -104,6 +104,13 @@ export default function SettingsScreen() {
       .catch(() => {});
   }, [userId]);
 
+  function confirmSignOut() {
+    Alert.alert(t('index.signOutConfirmTitle'), t('index.signOutConfirmBody'), [
+      { text: t('common:cancel'), style: 'cancel' },
+      { text: t('index.signOut'), style: 'destructive', onPress: signOut },
+    ]);
+  }
+
   return (
     <ScrollView
       style={styles.container}
@@ -237,7 +244,7 @@ export default function SettingsScreen() {
           }
           label={t('index.signOut')}
           danger
-          onPress={signOut}
+          onPress={confirmSignOut}
         />
       </View>
     </ScrollView>

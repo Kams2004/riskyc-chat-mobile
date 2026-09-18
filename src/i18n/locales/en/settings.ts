@@ -15,6 +15,8 @@ export default {
     notificationsComingSoonBody: 'This needs a push-notification service, which is not built yet.',
     language: 'Language',
     signOut: 'Sign out',
+    signOutConfirmTitle: 'Sign out?',
+    signOutConfirmBody: "You'll need to verify your phone number or email again to sign back in.",
   },
   language: {
     title: 'Language',

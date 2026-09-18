@@ -34,6 +34,7 @@ export default function LanguageSettingsScreen() {
           </Svg>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t('language.title')}</Text>
+        <View style={{ width: 40 }} />
       </View>
 
       <View style={styles.card}>
@@ -59,9 +60,9 @@ export default function LanguageSettingsScreen() {
 function makeStyles(colors: Palette) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
-    header: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 8, marginBottom: 18 },
-    backTouchable: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-    headerTitle: { fontFamily: fonts.sansSemiBold, fontSize: 17, color: colors.textPrimary },
+    header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 8, marginBottom: 18 },
+    backTouchable: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+    headerTitle: { fontFamily: fonts.sansSemiBold, fontSize: 16.5, color: colors.textPrimary },
     card: {
       backgroundColor: colors.surface,
       borderRadius: 20,
