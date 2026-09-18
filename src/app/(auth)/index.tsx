@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
 import { Logo } from '../../components/Logo';
 import { useTheme } from '../../features/theme/ThemeContext';
+import { config } from '../../lib/config';
 import { fonts, type Palette } from '../../theme';
 
 const FEATURE_ICONS: Array<(color: string) => React.ReactNode> = [
@@ -69,11 +70,11 @@ export default function WelcomeScreen() {
       <View style={[styles.footer, { paddingBottom: insets.bottom + 20 }]}>
         <Text style={styles.consent}>
           {t('welcome.consentPrefix')}
-          <Text style={styles.link} onPress={() => Linking.openURL('https://example.com/privacy')}>
+          <Text style={styles.link} onPress={() => Linking.openURL(`${config.webAppUrl}/privacy`)}>
             {t('welcome.privacyPolicy')}
           </Text>
           {t('welcome.consentMiddle')}
-          <Text style={styles.link} onPress={() => Linking.openURL('https://example.com/terms')}>
+          <Text style={styles.link} onPress={() => Linking.openURL(`${config.webAppUrl}/terms`)}>
             {t('welcome.termsOfService')}
           </Text>
           {t('welcome.consentSuffix')}
