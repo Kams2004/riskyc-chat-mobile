@@ -116,7 +116,7 @@ export default function StatusScreen() {
           >
             {myStatuses ? (
               <StatusRing size={58} count={myStatuses.statuses.length} unviewedColor={colors.tint2} viewedColor={colors.tint2}>
-                <StatusPreviewThumb item={myStatuses.statuses[myStatuses.statuses.length - 1]} size={52} />
+                <StatusPreviewThumb item={myStatuses.statuses[0]} size={52} />
               </StatusRing>
             ) : (
               <View style={styles.ringNoneWrap}>
@@ -174,6 +174,10 @@ function StatusRow({
   colors: Palette;
   onPress: () => void;
 }) {
+  // Thumbnail shows the FIRST status (matches tapping the row, which opens
+  // the viewer starting there too), but the timestamp below still reflects
+  // the most recent post — that's what tells you there's fresh activity.
+  const first = row.statuses[0];
   const latest = row.statuses[row.statuses.length - 1];
   return (
     <TouchableOpacity style={styles.row} onPress={onPress}>
@@ -184,7 +188,7 @@ function StatusRow({
         unviewedColor={colors.brand600}
         viewedColor={colors.tint2}
       >
-        <StatusPreviewThumb item={latest} size={52} />
+        <StatusPreviewThumb item={first} size={52} />
       </StatusRing>
       <View style={{ flex: 1 }}>
         <Text style={styles.name} numberOfLines={1}>{row.name}</Text>

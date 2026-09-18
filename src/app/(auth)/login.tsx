@@ -1,72 +1,20 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo, useState } from 'react';
-import {
-  FlatList,
-  Modal,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  TouchableWithoutFeedback,
-  View,
-} from 'react-native';
+import { useState } from 'react';
+import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '../../components/Button';
+import { CountryPickerModal } from '../../components/CountryPickerModal';
 import { KeyboardScreen } from '../../components/KeyboardScreen';
 import * as authApi from '../../features/auth/api';
 import { useAuth } from '../../features/auth/AuthContext';
 import { useTheme } from '../../features/theme/ThemeContext';
+import { COUNTRIES, type Country } from '../../lib/countries';
 import { fonts, type Palette } from '../../theme';
 
 type Mode = 'phone' | 'email';
-type Country = { name: string; dialCode: string };
-
-const COUNTRIES: Country[] = [
-  { name: 'Cameroon', dialCode: '+237' },
-  { name: 'France', dialCode: '+33' },
-  { name: 'United States', dialCode: '+1' },
-  { name: 'United Kingdom', dialCode: '+44' },
-  { name: 'Nigeria', dialCode: '+234' },
-  { name: 'Senegal', dialCode: '+221' },
-  { name: "Côte d'Ivoire", dialCode: '+225' },
-  { name: 'Ghana', dialCode: '+233' },
-  { name: 'South Africa', dialCode: '+27' },
-  { name: 'Kenya', dialCode: '+254' },
-  { name: 'Ethiopia', dialCode: '+251' },
-  { name: 'Tanzania', dialCode: '+255' },
-  { name: 'Uganda', dialCode: '+256' },
-  { name: 'Rwanda', dialCode: '+250' },
-  { name: 'Congo (DRC)', dialCode: '+243' },
-  { name: 'Congo (Republic)', dialCode: '+242' },
-  { name: 'Gabon', dialCode: '+241' },
-  { name: 'Chad', dialCode: '+235' },
-  { name: 'Central African Republic', dialCode: '+236' },
-  { name: 'Equatorial Guinea', dialCode: '+240' },
-  { name: 'Germany', dialCode: '+49' },
-  { name: 'Belgium', dialCode: '+32' },
-  { name: 'Switzerland', dialCode: '+41' },
-  { name: 'Canada', dialCode: '+1' },
-  { name: 'Brazil', dialCode: '+55' },
-  { name: 'China', dialCode: '+86' },
-  { name: 'India', dialCode: '+91' },
-  { name: 'Japan', dialCode: '+81' },
-  { name: 'Australia', dialCode: '+61' },
-  { name: 'Morocco', dialCode: '+212' },
-  { name: 'Algeria', dialCode: '+213' },
-  { name: 'Tunisia', dialCode: '+216' },
-  { name: 'Egypt', dialCode: '+20' },
-  { name: 'Spain', dialCode: '+34' },
-  { name: 'Italy', dialCode: '+39' },
-  { name: 'Portugal', dialCode: '+351' },
-  { name: 'Netherlands', dialCode: '+31' },
-  { name: 'Russia', dialCode: '+7' },
-  { name: 'Turkey', dialCode: '+90' },
-  { name: 'Saudi Arabia', dialCode: '+966' },
-  { name: 'UAE', dialCode: '+971' },
-];
 
 export default function LoginScreen() {
   const { colors } = useTheme();
@@ -83,17 +31,10 @@ export default function LoginScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPicker, setShowPicker] = useState(false);
-  const [pickerSearch, setPickerSearch] = useState('');
   const [showConfirm, setShowConfirm] = useState(false);
 
   const fullPhone = `${country.dialCode}${localNumber.replace(/\s/g, '')}`;
   const canSubmit = mode === 'phone' ? localNumber.trim().length >= 5 : email.trim().length > 3;
-
-  const filteredCountries = useMemo(() => {
-    const q = pickerSearch.trim().toLowerCase();
-    if (!q) return COUNTRIES;
-    return COUNTRIES.filter((c) => c.name.toLowerCase().includes(q) || c.dialCode.includes(q));
-  }, [pickerSearch]);
 
   async function handleConfirmedSend() {
     setShowConfirm(false);
@@ -123,7 +64,19 @@ export default function LoginScreen() {
   }
 
   return (
-    <KeyboardScreen style={[styles.container, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 20 }]}>
+    <KeyboardScreen style={[styles.container, { paddingTop: insets.top + 24 }]}>
+      {/* A flex:1 spacer pushing the button to the screen's bottom edge
+          collapses to ~0 once the keyboard eats enough height on Android,
+          leaving the button jammed right under the phone/email field
+          instead of a real gap — same bug already fixed this way in
+          edit-profile.tsx. A ScrollView with the button at a fixed
+          marginTop after the last field keeps a real gap regardless of
+          keyboard height. */}
+      <ScrollView
+        contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
       <Text style={styles.title}>{mode === 'phone' ? t('login.titlePhone') : t('login.titleEmail')}</Text>
       <Text style={styles.subtitle}>{t('login.subtitle')}</Text>
 
@@ -174,42 +127,12 @@ export default function LoginScreen() {
       )}
 
       {error && <Text style={styles.error}>{error}</Text>}
-      <View style={{ flex: 1 }} />
-      <Button onPress={() => { setError(null); setShowConfirm(true); }} disabled={!canSubmit} loading={isSubmitting}>
+      <Button onPress={() => { setError(null); setShowConfirm(true); }} disabled={!canSubmit} loading={isSubmitting} style={styles.sendButton}>
         {t('login.sendCode')}
       </Button>
+      </ScrollView>
 
-      {/* ── Country picker sheet ── */}
-      <Modal visible={showPicker} animationType="slide" transparent onRequestClose={() => setShowPicker(false)}>
-        <TouchableWithoutFeedback onPress={() => setShowPicker(false)}>
-          <View style={styles.backdrop} />
-        </TouchableWithoutFeedback>
-        <View style={[styles.sheet, { backgroundColor: colors.surface, paddingBottom: insets.bottom + 16 }]}>
-          <View style={[styles.sheetHandle, { backgroundColor: colors.hairline }]} />
-          <TextInput
-            style={[styles.pickerSearch, { borderColor: colors.inputBorder, color: colors.textPrimary }]}
-            placeholder={t('login.searchCountry')}
-            placeholderTextColor={colors.textMuted}
-            value={pickerSearch}
-            onChangeText={setPickerSearch}
-            autoFocus
-          />
-          <FlatList
-            data={filteredCountries}
-            keyExtractor={(item) => item.name}
-            keyboardShouldPersistTaps="handled"
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={[styles.countryItem, { borderBottomColor: colors.hairline }]}
-                onPress={() => { setCountry(item); setPickerSearch(''); setShowPicker(false); }}
-              >
-                <Text style={[styles.countryItemName, { color: colors.textPrimary }]}>{item.name}</Text>
-                <Text style={[styles.countryItemDial, { color: colors.textMuted }]}>{item.dialCode}</Text>
-              </TouchableOpacity>
-            )}
-          />
-        </View>
-      </Modal>
+      <CountryPickerModal visible={showPicker} onClose={() => setShowPicker(false)} onSelect={setCountry} />
 
       {/* ── Confirmation modal ── */}
       <Modal visible={showConfirm} transparent animationType="fade" onRequestClose={() => setShowConfirm(false)}>
@@ -242,6 +165,7 @@ export default function LoginScreen() {
 function makeStyles(colors: Palette) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.surface, paddingHorizontal: 28 },
+    sendButton: { marginTop: 32 },
     title: { fontFamily: fonts.display, fontSize: 25, color: colors.textPrimary, marginBottom: 10 },
     subtitle: { fontFamily: fonts.sans, fontSize: 13.5, lineHeight: 20, color: colors.textMuted, marginBottom: 28 },
     toggleRow: { flexDirection: 'row', backgroundColor: colors.tint1, borderRadius: 14, padding: 4, marginBottom: 20 },
@@ -257,13 +181,6 @@ function makeStyles(colors: Palette) {
     phoneInput: { flex: 1, borderWidth: 1.5, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14, fontFamily: fonts.sans, fontSize: 16 },
     input: { borderWidth: 1.5, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14, fontFamily: fonts.sans, fontSize: 16 },
     error: { fontFamily: fonts.sans, color: colors.brand800, marginTop: 12 },
-    backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' },
-    sheet: { maxHeight: '75%', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingTop: 12, paddingHorizontal: 16 },
-    sheetHandle: { width: 36, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 12 },
-    pickerSearch: { borderWidth: 1.5, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, fontFamily: fonts.sans, fontSize: 14, marginBottom: 8 },
-    countryItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1 },
-    countryItemName: { fontFamily: fonts.sans, fontSize: 15 },
-    countryItemDial: { fontFamily: fonts.sansMedium, fontSize: 14 },
     confirmBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
     confirmCenter: { position: 'absolute', inset: 0, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
     confirmCard: { width: '100%', borderRadius: 18, padding: 24 },

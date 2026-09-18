@@ -17,11 +17,13 @@ import Svg, { Path } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
 
 import { Avatar } from '../../../components/Avatar';
+import { CountryPickerModal } from '../../../components/CountryPickerModal';
 import { KeyboardScreen } from '../../../components/KeyboardScreen';
 import { useAuth } from '../../../features/auth/AuthContext';
 import { conversationIdFor } from '../../../features/messaging/conversationId';
 import { useTheme } from '../../../features/theme/ThemeContext';
 import { config } from '../../../lib/config';
+import { COUNTRIES, type Country } from '../../../lib/countries';
 import { lookupByPhone, matchContacts, type UserResult } from '../../../features/users/api';
 import { getAllLocalContacts, upsertLocalContact, useSQLiteContext } from '../../../data/db';
 import { fonts, type Palette } from '../../../theme';
@@ -63,6 +65,12 @@ export default function NewConversationScreen() {
   const db = useSQLiteContext();
 
   const [query, setQuery] = useState('');
+  // Only matters for a bare local number with no leading '+' — see the
+  // lookup effect below. Same default country as login.tsx (first entry),
+  // deliberately not tied to the signed-in account's own registered
+  // country, since the person being searched for could be anywhere.
+  const [searchCountry, setSearchCountry] = useState<Country>(COUNTRIES[0]);
+  const [showCountryPicker, setShowCountryPicker] = useState(false);
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [contactUsers, setContactUsers] = useState<EnrichedUser[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -174,7 +182,15 @@ export default function NewConversationScreen() {
       setPhoneLookup({ kind: 'idle' });
       return;
     }
-    const norm = normalizePhone(q);
+    // A bare local number (no leading '+') means nothing to lookup-by-phone,
+    // which matches the FULL internationally-formatted number exactly (the
+    // same format the signup/login country picker always produces) — a
+    // typed "641482013" would silently never match a real "+237641482013"
+    // account without this. Someone who already typed the '+' themselves
+    // (or a device contact's number, which expo-contacts returns already
+    // formatted) is left untouched.
+    const normDigits = normalizePhone(q);
+    const norm = normDigits.startsWith('+') ? normDigits : `${searchCountry.dialCode}${normDigits}`;
     setPhoneLookup({ kind: 'loading' });
     if (lookupTimerRef.current) clearTimeout(lookupTimerRef.current);
     lookupTimerRef.current = setTimeout(async () => {
@@ -198,7 +214,7 @@ export default function NewConversationScreen() {
       }
     }, 400);
     return () => { if (lookupTimerRef.current) clearTimeout(lookupTimerRef.current); };
-  }, [query, db]);
+  }, [query, db, searchCountry]);
 
   const isPhoneMode = looksLikePhoneQuery(query.trim());
 
@@ -315,6 +331,14 @@ export default function NewConversationScreen() {
       {/* ── Phone-number search results ── */}
       {isPhoneMode && (
         <View style={styles.phoneResultBox}>
+          {!query.trim().startsWith('+') && (
+            <TouchableOpacity style={styles.countryChip} onPress={() => setShowCountryPicker(true)}>
+              <Text style={styles.countryChipLabel}>{searchCountry.name} ({searchCountry.dialCode})</Text>
+              <Svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={colors.textMuted} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                <Path d="M6 9l6 6 6-6" />
+              </Svg>
+            </TouchableOpacity>
+          )}
           {phoneLookup.kind === 'loading' && (
             <View style={styles.phoneResultRow}>
               <ActivityIndicator color={colors.brand500} size="small" />
@@ -442,6 +466,8 @@ export default function NewConversationScreen() {
           )}
         </>
       )}
+
+      <CountryPickerModal visible={showCountryPicker} onClose={() => setShowCountryPicker(false)} onSelect={setSearchCountry} />
     </KeyboardScreen>
   );
 }
@@ -469,6 +495,8 @@ function makeStyles(colors: Palette) {
     searchInput: { flex: 1, fontFamily: fonts.sans, fontSize: 14.5, color: colors.textPrimary, paddingVertical: 10 },
     phoneResultBox: { marginBottom: 8 },
     phoneResultRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 14 },
+    countryChip: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingVertical: 8 },
+    countryChipLabel: { fontFamily: fonts.sansMedium, fontSize: 13, color: colors.textMuted },
     phoneResultHint: { fontFamily: fonts.sans, fontSize: 13.5, color: colors.textMuted },
     stateBox: { alignItems: 'center', marginTop: 48, paddingHorizontal: 12 },
     errorText: { fontFamily: fonts.sans, color: colors.brand800, textAlign: 'center', paddingHorizontal: 24 },

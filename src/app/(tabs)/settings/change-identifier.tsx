@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
@@ -130,7 +130,13 @@ export default function ChangeIdentifierScreen() {
   const digits = Array.from({ length: CODE_LENGTH }, (_, i) => code[i] ?? '');
 
   return (
-    <KeyboardScreen style={[styles.container, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 20 }]}>
+    <KeyboardScreen style={[styles.container, { paddingTop: insets.top + 12 }]}>
+      {/* Same fix as login.tsx: a flex:1 spacer pushing the button to the
+          bottom collapses to ~0 once the keyboard eats enough height, so the
+          button ends up jammed under the input instead of a real gap — a
+          ScrollView with the button at a fixed marginTop avoids that
+          regardless of keyboard height. */}
+      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 20 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.iconTouchable} onPress={() => (step === 'verify' ? setStep('enter') : router.back())}>
           <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={colors.textPrimary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -158,8 +164,7 @@ export default function ChangeIdentifierScreen() {
             autoFocus
           />
           {error && <Text style={styles.error}>{error}</Text>}
-          <View style={{ flex: 1 }} />
-          <Button onPress={handleSendCode} disabled={!value} loading={isSubmitting}>
+          <Button onPress={handleSendCode} disabled={!value} loading={isSubmitting} style={styles.sendButton}>
             {t('changeIdentifier.sendCode')}
           </Button>
         </>
@@ -208,6 +213,7 @@ export default function ChangeIdentifierScreen() {
           )}
         </>
       )}
+      </ScrollView>
     </KeyboardScreen>
   );
 }
@@ -215,6 +221,7 @@ export default function ChangeIdentifierScreen() {
 function makeStyles(colors: Palette) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.surface, paddingHorizontal: 20 },
+    sendButton: { marginTop: 24 },
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
     iconTouchable: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
     headerTitle: { fontFamily: fonts.sansSemiBold, fontSize: 16.5, color: colors.textPrimary },

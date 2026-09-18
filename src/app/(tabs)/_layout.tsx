@@ -115,12 +115,19 @@ export default function TabsLayout() {
   };
   // The floating pill is drawn as an overlay on top of every tab's content
   // (see the comment on floatingTabBarStyle) rather than reserving flex
-  // space for itself, so a genuinely full-screen sub-screen — the Status
-  // composer and its story viewer, both edge-to-edge with their own close
-  // controls right where the pill would sit — needs it explicitly hidden,
-  // or the pill floats on top of and can obscure those screens' own bottom
-  // controls (this was a real, reported bug on the composer's send button).
-  const hideTabBar = pathname.startsWith('/status/new') || pathname.startsWith('/status/viewer');
+  // space for itself, so ANY screen pushed on top of a tab's own root —
+  // not just Status's composer/viewer — needs it explicitly hidden, or the
+  // pill floats on top of and can obscure that screen's own bottom content
+  // (first found on the Status composer's send button, then again on
+  // change-identifier's submit button — a systemic issue, not one screen's
+  // bug, hence checking against the root paths generically here instead of
+  // hardcoding each affected screen one at a time as they get reported).
+  // Every root path is present in this list so a plain uniform equality
+  // check is enough; keeping the pill visible+labeled on exactly these four
+  // and hidden everywhere else is what "uniform tab bar" means in practice
+  // — it's never a bare-icon sliver on some screens and full on others.
+  const TAB_ROOT_PATHS = ['/chats', '/status', '/calls', '/settings'];
+  const hideTabBar = !TAB_ROOT_PATHS.includes(pathname);
 
   return (
     <Tabs
@@ -132,7 +139,7 @@ export default function TabsLayout() {
         // Floats above the screen edge (like WhatsApp's iOS tab bar) instead
         // of docking flush to the bottom — see theme.ts's tabBarLayout/
         // TAB_BAR_CLEARANCE, which every tab screen uses to leave room for it.
-        tabBarStyle: floatingTabBarStyle,
+        tabBarStyle: hideTabBar ? { display: 'none' } : floatingTabBarStyle,
         tabBarLabelStyle: { fontFamily: fonts.sansSemiBold, fontSize: 11 },
       }}
     >
@@ -148,7 +155,6 @@ export default function TabsLayout() {
         options={{
           title: t('status:tab.title'),
           tabBarIcon: ({ color, focused }) => <StatusIcon color={color} focused={focused} colors={colors} />,
-          tabBarStyle: hideTabBar ? { display: 'none' } : floatingTabBarStyle,
         }}
       />
       <Tabs.Screen
