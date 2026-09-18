@@ -107,6 +107,17 @@ export default function TabsLayout() {
     backgroundColor: colors.surface,
     borderTopWidth: 0,
     paddingTop: 6,
+    // Without this, React Navigation's own BottomTabBar still applies its
+    // default `paddingBottom: insets.bottom` inside the bar's content box
+    // (it's unconditional whenever tabBarPosition is 'bottom', and our style
+    // object above never overrides it) — on top of `bottom` already lifting
+    // the whole pill clear of the system nav bar. That leftover inset eats
+    // into this fixed height a second time, and on devices with a real
+    // bottom inset (e.g. 3-button nav) there's barely room left for the
+    // icon, let alone the label underneath it — which is exactly why labels
+    // were disappearing on some devices despite every tab sharing the same
+    // tabBarShowLabel/tabBarLabelStyle config.
+    paddingBottom: 6,
     shadowColor: colors.brand900,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.16,
