@@ -1330,7 +1330,14 @@ export default function ChatThreadScreen() {
                     objectKey={item.media_object_key ?? ''}
                     durationMs={item.media_duration_ms}
                     tintColor={isMine ? '#ffffff' : colors.brand600}
-                    trackColor={isMine ? 'rgba(255,255,255,0.35)' : colors.tint2}
+                    // colors.tint2 IS the incoming bubble's own background
+                    // (see its own doc comment in theme.ts) — using it here
+                    // made every unplayed waveform bar invisible against the
+                    // bubble behind it. A semi-transparent tint over that
+                    // background is visible, mirroring how the sent side
+                    // already uses translucent white over its own solid
+                    // background rather than a second flat color.
+                    trackColor={isMine ? 'rgba(255,255,255,0.35)' : 'rgba(230,0,74,0.25)'}
                     iconColor={isMine ? colors.brand600 : '#ffffff'}
                   />
                 </View>
