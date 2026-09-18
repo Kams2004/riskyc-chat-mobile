@@ -18,7 +18,7 @@ export function getUser(userId: string): Promise<UserResult> {
   return apiFetch(`${config.authServiceUrl}/api/users/${userId}`);
 }
 
-export function updateMyProfile(fields: { displayName?: string; avatarObjectKey?: string; phoneNumber?: string }): Promise<UserResult> {
+export function updateMyProfile(fields: { displayName?: string; avatarObjectKey?: string; phoneNumber?: string; email?: string }): Promise<UserResult> {
   return apiFetch(`${config.authServiceUrl}/api/users/me`, {
     method: 'PUT',
     body: JSON.stringify(fields),
@@ -27,6 +27,27 @@ export function updateMyProfile(fields: { displayName?: string; avatarObjectKey?
 
 export function deleteMyAccount(): Promise<void> {
   return apiFetch(`${config.authServiceUrl}/api/users/me`, { method: 'DELETE' });
+}
+
+export type OnboardingPhoneMergeResult = {
+  /** false: the number was free — it's just attached to the current (new) account, same session as before. true: it already belonged to a pre-existing account, which is what accessToken/user now point at — see UserController#setOnboardingPhone's own doc comment. */
+  merged: boolean;
+  accessToken: string | null;
+  user: UserResult | null;
+};
+
+/**
+ * Phone-number-is-canonical-identity check, run once during onboarding for
+ * an email-verified account. Deliberately NOT OTP-verified — see the
+ * backend endpoint's own doc comment for the full merge design and the
+ * explicit tradeoff (no billed SMS, but also no proof the caller actually
+ * owns the number they typed).
+ */
+export function setOnboardingPhone(phoneNumber: string): Promise<OnboardingPhoneMergeResult> {
+  return apiFetch(`${config.authServiceUrl}/api/users/me/onboarding-phone`, {
+    method: 'POST',
+    body: JSON.stringify({ phoneNumber }),
+  });
 }
 
 export type IdentifierField = { newPhoneNumber: string } | { newEmail: string };

@@ -96,8 +96,12 @@ export const gradients = {
  * it automatically — every tab screen has to leave room for it manually
  * using these same numbers, or its own content/FAB ends up hidden behind it.
  */
+// height was 58 — tight enough that the label (below a 32px icon pill with
+// 6px top padding) had barely 20px left for itself once React Navigation's
+// own internal label spacing was accounted for, and reportedly wasn't
+// showing at all on a real device. 70 gives the label real room.
 export const tabBarLayout = {
-  height: 58,
+  height: 70,
   bottomMargin: 12,
   sideMargin: 16,
 };

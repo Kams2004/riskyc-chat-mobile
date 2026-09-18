@@ -76,6 +76,13 @@ import {
 } from '../../../data/db';
 
 const READ_BLUE = '#34b7f1';
+// Must match ChatController#edit's own EDIT_WINDOW — this only ever hides
+// the option once it's already too late; the server enforces it for real.
+const EDIT_WINDOW_MS = 2 * 60 * 60 * 1000;
+
+function isWithinEditWindow(message: LocalMessage): boolean {
+  return Date.now() - new Date(message.sent_at).getTime() < EDIT_WINDOW_MS;
+}
 const SWIPE_THRESHOLD = 60;
 const REACTION_EMOJIS = ['❤️', '😂', '😮', '😢', '🙏', '👍'];
 
@@ -1522,7 +1529,7 @@ export default function ChatThreadScreen() {
             ? [
                 { label: t('thread.selection.info'), onPress: () => showMessageInfo(moreMenuMessage) },
                 ...(!moreMenuMessage.media_type ? [{ label: t('thread.selection.copy'), onPress: () => copyMessage(moreMenuMessage) }] : []),
-                ...(moreMenuMessage.sender_id === userId && !moreMenuMessage.media_type
+                ...(moreMenuMessage.sender_id === userId && !moreMenuMessage.media_type && isWithinEditWindow(moreMenuMessage)
                   ? [{ label: t('thread.selection.edit'), onPress: () => startEdit(moreMenuMessage) }]
                   : []),
                 { label: t('thread.selection.react'), onPress: () => setReactionTargetId(moreMenuMessage.message_id) },

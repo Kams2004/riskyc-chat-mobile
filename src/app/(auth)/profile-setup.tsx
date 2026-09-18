@@ -13,8 +13,7 @@ import { KeyboardScreen } from '../../components/KeyboardScreen';
 import { useAuth } from '../../features/auth/AuthContext';
 import { uploadImage } from '../../features/media/api';
 import { useTheme } from '../../features/theme/ThemeContext';
-import { updateMyProfile } from '../../features/users/api';
-import { ApiError } from '../../lib/httpClient';
+import { setOnboardingPhone, updateMyProfile } from '../../features/users/api';
 import { fonts, gradients, type Palette } from '../../theme';
 
 /**
@@ -35,13 +34,75 @@ export default function ProfileSetupScreen() {
   const insets = useSafeAreaInsets();
   const styles = makeStyles(colors);
 
-  const { email, updateProfile } = useAuth();
+  const { email, phoneNumber, updateProfile, completeSystemLogin } = useAuth();
   const { t } = useTranslation('settings');
+  // Mutually exclusive: profile-setup only ever runs for a genuinely brand-
+  // new account (see the class doc comment below), so whichever identifier
+  // it verified with is already set here and the OTHER one is what's
+  // missing. needsPhone is required to finish onboarding (see
+  // setOnboardingPhone's own doc comment for why); needsEmail is a
+  // convenience alias, save-only, entirely optional.
   const needsPhone = !!email;
+  const needsEmail = !!phoneNumber;
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [emailInput, setEmailInput] = useState('');
   const [freshLocalUri, setFreshLocalUri] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  /**
+   * Phone number is this app's canonical identity — even for an account
+   * that verified via email, so a brand-new email-only account can't sit
+   * disconnected from a pre-existing phone-based account that's actually
+   * the same real person. See UserController#setOnboardingPhone's own doc
+   * comment for the full design, including the deliberate choice NOT to
+   * verify ownership of the phone via OTP here (an explicit, informed
+   * tradeoff to avoid a second billed SMS on top of the one that already
+   * verified this account's email) — merely typing the right number is
+   * enough to be routed into an existing account with it.
+   */
+  async function handleContinue() {
+    setIsSaving(true);
+    try {
+      const newAvatarObjectKey = freshLocalUri ? await uploadImage(freshLocalUri) : undefined;
+
+      if (needsPhone) {
+        const result = await setOnboardingPhone(phone.trim());
+        if (result.merged && result.accessToken && result.user) {
+          // Routed into a pre-existing account — the name/avatar just
+          // typed belong to the discarded, brand-new account, not this
+          // one, so they're deliberately never applied. If this (real)
+          // account itself still needs onboarding, app/_layout.tsx's own
+          // guard redirects here again automatically, for THIS account.
+          await completeSystemLogin({
+            accessToken: result.accessToken,
+            userId: result.user.userId,
+            displayName: result.user.displayName,
+            avatarObjectKey: result.user.avatarObjectKey,
+            email: result.user.email,
+            phoneNumber: result.user.phoneNumber,
+          });
+          Alert.alert(t('editProfile.welcomeBackTitle'), t('editProfile.welcomeBackBody'));
+          router.replace('/(tabs)/chats');
+          return;
+        }
+      }
+
+      const fields: { displayName: string; avatarObjectKey?: string; email?: string } = {
+        displayName: name,
+        ...(newAvatarObjectKey ? { avatarObjectKey: newAvatarObjectKey } : {}),
+        ...(needsEmail && emailInput.trim() ? { email: emailInput.trim() } : {}),
+      };
+      await updateMyProfile(fields);
+      await updateProfile({ displayName: name, ...(newAvatarObjectKey ? { avatarObjectKey: newAvatarObjectKey } : {}) });
+      router.replace('/(tabs)/chats');
+    } catch (e) {
+      console.warn('[ProfileSetup] save failed', e);
+      Alert.alert(t('editProfile.saveError'), t('common:checkConnectionAndRetry'));
+    } finally {
+      setIsSaving(false);
+    }
+  }
 
   async function handlePickAvatar() {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -57,30 +118,6 @@ export default function ProfileSetupScreen() {
     });
     if (!result.canceled) {
       setFreshLocalUri(result.assets[0].uri);
-    }
-  }
-
-  async function handleSave() {
-    setIsSaving(true);
-    try {
-      const newAvatarObjectKey = freshLocalUri ? await uploadImage(freshLocalUri) : undefined;
-      const fields: { displayName: string; avatarObjectKey?: string; phoneNumber?: string } = {
-        displayName: name,
-        ...(newAvatarObjectKey ? { avatarObjectKey: newAvatarObjectKey } : {}),
-        ...(needsPhone && phone.trim() ? { phoneNumber: phone.trim() } : {}),
-      };
-      await updateMyProfile(fields);
-      await updateProfile({ displayName: name, ...(newAvatarObjectKey ? { avatarObjectKey: newAvatarObjectKey } : {}) });
-      router.replace('/(tabs)/chats');
-    } catch (e) {
-      console.warn('[ProfileSetup] save failed', e);
-      if (e instanceof ApiError && e.status === 409) {
-        Alert.alert(t('editProfile.phoneInUseTitle'), t('editProfile.phoneInUseBody'));
-      } else {
-        Alert.alert(t('editProfile.saveError'), t('common:checkConnectionAndRetry'));
-      }
-    } finally {
-      setIsSaving(false);
     }
   }
 
@@ -158,13 +195,30 @@ export default function ProfileSetupScreen() {
           </View>
         )}
 
+        {needsEmail && (
+          <View style={[styles.field, { marginTop: 24 }]}>
+            <Text style={styles.label}>{t('editProfile.emailLabel')}</Text>
+            <TextInput
+              style={styles.input}
+              placeholder={t('editProfile.emailPlaceholder')}
+              placeholderTextColor={colors.textMuted}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoComplete="email"
+              value={emailInput}
+              onChangeText={setEmailInput}
+            />
+            <Text style={styles.phoneHint}>{t('editProfile.emailHint')}</Text>
+          </View>
+        )}
+
         <Button
-          onPress={handleSave}
+          onPress={handleContinue}
           loading={isSaving}
           disabled={!name.trim() || (needsPhone && !phone.trim())}
           style={styles.saveButton}
         >
-          {t('common:save')}
+          {needsPhone ? t('common:continue') : t('common:save')}
         </Button>
       </ScrollView>
     </KeyboardScreen>

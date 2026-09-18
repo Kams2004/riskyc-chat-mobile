@@ -32,8 +32,14 @@ export default function AccountScreen() {
     }, [userId])
   );
 
-  const identifier = user ? (user.email ?? user.phoneNumber) : null;
-  const identifierMode: 'phone' | 'email' = user?.email ? 'email' : 'phone';
+  // Phone is this app's canonical identity — even an account that verified
+  // with email is asked for a phone number during onboarding (see
+  // profile-setup.tsx), so by the time anyone reaches Settings there's
+  // normally one on file. Shown first/primary regardless of which
+  // identifier the person actually signed in with; email (if any) gets its
+  // own card below rather than being hidden — "change his setting" still
+  // needs to reach both.
+  const [isEmailRevealed, setIsEmailRevealed] = useState(false);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 20 }]}>
@@ -48,18 +54,31 @@ export default function AccountScreen() {
       </View>
 
       <TouchableOpacity style={styles.card} onPress={() => setIsRevealed((prev) => !prev)} activeOpacity={0.7}>
-        <Text style={styles.label}>{t('account.registeredWith')}</Text>
-        <Text style={styles.value}>{identifier ? (isRevealed ? identifier : maskIdentifier(identifier)) : '—'}</Text>
-        {!!identifier && <Text style={styles.revealHint}>{isRevealed ? t('account.tapToHide') : t('account.tapToReveal')}</Text>}
+        <Text style={styles.label}>{t('account.phoneNumber')}</Text>
+        <Text style={styles.value}>{user?.phoneNumber ? (isRevealed ? user.phoneNumber : maskIdentifier(user.phoneNumber)) : '—'}</Text>
+        {!!user?.phoneNumber && <Text style={styles.revealHint}>{isRevealed ? t('account.tapToHide') : t('account.tapToReveal')}</Text>}
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.changeButton}
+        onPress={() => router.push({ pathname: '/(tabs)/settings/change-identifier', params: { mode: 'phone' } })}
+      >
+        <Text style={styles.changeLabel}>{t('account.changePhoneNumber')}</Text>
       </TouchableOpacity>
 
-      {!!identifier && (
-        <TouchableOpacity
-          style={styles.changeButton}
-          onPress={() => router.push({ pathname: '/(tabs)/settings/change-identifier', params: { mode: identifierMode } })}
-        >
-          <Text style={styles.changeLabel}>{identifierMode === 'phone' ? t('account.changePhoneNumber') : t('account.changeEmail')}</Text>
-        </TouchableOpacity>
+      {!!user?.email && (
+        <>
+          <TouchableOpacity style={[styles.card, { marginTop: 16 }]} onPress={() => setIsEmailRevealed((prev) => !prev)} activeOpacity={0.7}>
+            <Text style={styles.label}>{t('account.email')}</Text>
+            <Text style={styles.value}>{isEmailRevealed ? user.email : maskIdentifier(user.email)}</Text>
+            <Text style={styles.revealHint}>{isEmailRevealed ? t('account.tapToHide') : t('account.tapToReveal')}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.changeButton}
+            onPress={() => router.push({ pathname: '/(tabs)/settings/change-identifier', params: { mode: 'email' } })}
+          >
+            <Text style={styles.changeLabel}>{t('account.changeEmail')}</Text>
+          </TouchableOpacity>
+        </>
       )}
 
       <View style={{ flex: 1 }} />
