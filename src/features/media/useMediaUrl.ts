@@ -27,7 +27,13 @@ export function useMediaUrl(objectKey?: string | null): string | null {
         urlCache.set(objectKey, downloadUrl);
         if (!cancelled) setResolvedUrl(downloadUrl);
       })
-      .catch(() => {});
+      .catch((e) => {
+        // Was silently swallowed — a failed resolve looked identical to a
+        // still-in-flight one from the outside (both just leave the caller
+        // stuck at null forever), which made a real failure here
+        // indistinguishable from normal loading.
+        console.warn('[useMediaUrl] failed to resolve', objectKey, e);
+      });
     return () => {
       cancelled = true;
     };

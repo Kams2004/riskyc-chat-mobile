@@ -85,6 +85,17 @@ export function VoiceMessageBubble({ objectKey, durationMs, tintColor, trackColo
     <View style={styles.container}>
       <TouchableOpacity
         style={[styles.playButton, { backgroundColor: tintColor }]}
+        // The bubble this sits inside is itself a TouchableOpacity (for
+        // long-press-to-select), and the waveform right next to this
+        // button is wrapped in a PanGestureHandler (for seeking) - RN's
+        // core touch responder system and react-native-gesture-handler's
+        // native one don't always agree on who wins a touch near that
+        // boundary, and this button's own box (34x34) is small enough
+        // that a real fingertip easily lands right on that edge. A
+        // generous hitSlop expands this button's effective catch area
+        // well clear of both neighbors instead of requiring a
+        // pixel-precise tap.
+        hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
         onPress={() => (status.playing ? player.pause() : player.play())}
         disabled={!url}
       >
