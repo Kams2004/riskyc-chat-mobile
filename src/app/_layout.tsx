@@ -27,6 +27,7 @@ import { usePresenceHeartbeat } from '../features/presence/usePresenceHeartbeat'
 import { ThemeProvider, useTheme } from '../features/theme/ThemeContext';
 import { WallpaperProvider } from '../features/wallpaper/WallpaperContext';
 import { loadPreferences } from '../lib/preferences';
+import { AnimatedSplash } from '../components/AnimatedSplash';
 import { CallOverlay } from '../components/CallOverlay';
 import { GroupCallOverlay } from '../components/GroupCallOverlay';
 import { IncomingGroupCallBanner } from '../components/IncomingGroupCallBanner';
@@ -44,6 +45,7 @@ export default function RootLayout() {
     PlayfairDisplay_600SemiBold_Italic,
   });
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
+  const [introDone, setIntroDone] = useState(false);
 
   useEffect(() => {
     // i18n must be ready before ANY screen renders, including the very
@@ -77,6 +79,10 @@ export default function RootLayout() {
                 <CallProvider>
                   <GroupCallProvider>
                     <Root />
+                    {/* Overlaid on top, not gating — Root mounts and starts
+                        restoring the session underneath immediately, so
+                        nothing is lost waiting on this purely-visual intro. */}
+                    {!introDone && <AnimatedSplash onDone={() => setIntroDone(true)} />}
                   </GroupCallProvider>
                 </CallProvider>
               </AuthProvider>
