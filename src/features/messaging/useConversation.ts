@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { DeviceEventEmitter } from 'react-native';
 import { randomUUID } from 'expo-crypto';
+import * as Notifications from 'expo-notifications';
 
 import {
   advanceMessagesStatus,
@@ -218,6 +219,25 @@ export function useConversation({
     // exists before fetchHistory/the socket populate it for real below, not
     // to bump the timestamp every time this screen is opened.
     upsertConversation(db, conversationId, titleRef.current, null, avatarRef.current, isGroup);
+
+    // Opening this thread means its messages have been read, regardless of
+    // HOW it was opened — tapping the notification itself already clears it
+    // (that's just OS behavior), but opening via the chat list, a cold
+    // launch, or already being elsewhere in the app left it sitting in the
+    // shade forever with nothing to ever cancel it. Only ever needed for
+    // notifications that arrived while backgrounded/killed — a live message
+    // while this screen is already open never gets shown as a shade
+    // notification in the first place (see usePushNotifications' foreground
+    // handler).
+    Notifications.getPresentedNotificationsAsync()
+      .then((presented) => {
+        for (const notification of presented) {
+          if (notification.request.content.data?.conversationId === conversationId) {
+            Notifications.dismissNotificationAsync(notification.request.identifier).catch(() => {});
+          }
+        }
+      })
+      .catch(() => {});
 
     messagingApi.fetchHistory(conversationId).then(async (history) => {
       for (const envelope of history) {
