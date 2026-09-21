@@ -11,6 +11,7 @@ import { StatusRing } from '../../../components/StatusRing';
 import { getAllLocalContacts, useSQLiteContext } from '../../../data/db';
 import { useAuth } from '../../../features/auth/AuthContext';
 import { STATUS_UPDATED_EVENT } from '../../../features/messaging/inboxSocket';
+import { setComposerIntent } from '../../../features/status/composerIntent';
 import { fetchStatusFeed, fetchStatusesFor, type StatusFeedEntry } from '../../../features/status/api';
 import { useTheme } from '../../../features/theme/ThemeContext';
 import { getUser } from '../../../features/users/api';
@@ -89,7 +90,8 @@ export default function StatusScreen() {
   }
 
   function openComposer(mode?: 'camera' | 'text') {
-    router.push({ pathname: '/(tabs)/status/new', params: mode ? { mode } : {} } as never);
+    if (mode) setComposerIntent(mode);
+    router.push({ pathname: '/(tabs)/status/new' } as never);
   }
 
   const unviewed = rows.filter((r) => r.hasUnviewed);

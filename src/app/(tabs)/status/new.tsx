@@ -1,7 +1,7 @@
 import * as ImagePicker from 'expo-image-picker';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { randomUUID } from 'expo-crypto';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -27,6 +27,7 @@ import { EMPTY_OVERLAY, serializeOverlay, type StatusOverlay } from '../../../co
 import { VideoTrimmer } from '../../../components/VideoTrimmer';
 import { trimVideo, uploadMedia } from '../../../features/media/api';
 import { createStatus } from '../../../features/status/api';
+import { consumeComposerIntent } from '../../../features/status/composerIntent';
 import { fonts } from '../../../theme';
 
 const BACKGROUND_PRESETS = ['#e6004a', '#075e54', '#128c7e', '#25d366', '#34495e', '#8e44ad', '#d35400', '#2c3e50'];
@@ -55,7 +56,6 @@ export default function NewStatusScreen() {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const { t } = useTranslation('status');
-  const { mode } = useLocalSearchParams<{ mode?: 'camera' | 'text' }>();
 
   const [items, setItems] = useState<PendingItem[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -152,19 +152,15 @@ export default function NewStatusScreen() {
 
   // Launched directly from the Status list's own camera/pencil quick-action
   // icons (see status/index.tsx's "My status" row) instead of always
-  // landing on the plain camera/gallery/text menu first. Immediately clears
-  // the param it just consumed — expo-router can hand a pushed screen back
-  // its PREVIOUS params if the same route is reached again without this,
-  // which was opening the camera on every visit (even the plain "add
-  // status" tap with no mode at all) once it had fired here once.
+  // landing on the plain camera/gallery/text menu first. Reads a plain
+  // in-memory one-shot flag rather than a route param — see
+  // composerIntent.ts's own doc comment for why a route param kept
+  // misfiring on a plain "add status" tap that never asked for camera/text
+  // at all.
   useEffect(() => {
-    if (mode === 'camera') {
-      router.setParams({ mode: undefined });
-      pickFromCamera();
-    } else if (mode === 'text') {
-      router.setParams({ mode: undefined });
-      addTextItem();
-    }
+    const intent = consumeComposerIntent();
+    if (intent === 'camera') pickFromCamera();
+    else if (intent === 'text') addTextItem();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
