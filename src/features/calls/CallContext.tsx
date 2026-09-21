@@ -22,17 +22,33 @@ const ICE_SERVERS = [
   { urls: config.turnServerUrl, username: config.turnUsername, credential: config.turnCredential },
 ];
 
-// Conservative mobile-data-friendly caps, in the same ballpark WhatsApp/
-// Signal use for a 1:1 call — WebRTC's default encoder targets far more
-// (video defaults toward 2Mbps+ if left uncapped) than a phone call
-// actually needs, which is exactly what "consumes too much data" on a
-// cellular connection. Capped per-sender rather than globally so audio
-// isn't starved when both are on the connection at once.
-const MAX_VIDEO_BITRATE_BPS = 500_000;
-const MAX_AUDIO_BITRATE_BPS = 32_000;
+/**
+ * User-facing quality control (the HD toggle in CallOverlay) — 'auto' is
+ * the default and the only mode that ever changes on its own; picking a
+ * fixed level opts out of adaptation until the user picks 'auto' again.
+ * ResolvedQuality is what's actually ever applied to the connection —
+ * 'auto' always resolves to one of these three before reaching
+ * applyQualityLevel, it's never a real encoder setting itself.
+ */
+export type CallQuality = 'auto' | 'low' | 'medium' | 'high';
+type ResolvedQuality = 'low' | 'medium' | 'high';
+const QUALITY_LEVELS: ResolvedQuality[] = ['low', 'medium', 'high'];
+
+// Same ballpark WhatsApp/Signal-style mobile calling uses — WebRTC's default
+// encoder targets far more (video defaults toward 2Mbps+ if left uncapped)
+// than a phone call actually needs on a cellular connection. scaleResolutionDownBy
+// is a standard RTCRtpEncodingParameters field — encodes at 1/N the
+// captured resolution without re-requesting the camera at a lower
+// resolution (cheaper, and avoids a visible capture restart).
+const QUALITY_PRESETS: Record<ResolvedQuality, { videoBitrate: number; videoScaleDown: number; audioBitrate: number }> = {
+  low: { videoBitrate: 150_000, videoScaleDown: 4, audioBitrate: 20_000 },
+  medium: { videoBitrate: 400_000, videoScaleDown: 2, audioBitrate: 32_000 },
+  high: { videoBitrate: 1_200_000, videoScaleDown: 1, audioBitrate: 48_000 },
+};
 
 /** Best-effort — an unsupported sender param on some device/codec combo should never block the call from proceeding. */
-async function applyBandwidthLimits(pc: RTCPeerConnection) {
+async function applyQualityLevel(pc: RTCPeerConnection, level: ResolvedQuality) {
+  const preset = QUALITY_PRESETS[level];
   for (const sender of pc.getSenders()) {
     if (!sender.track) continue;
     try {
@@ -40,10 +56,15 @@ async function applyBandwidthLimits(pc: RTCPeerConnection) {
       if (!params.encodings || params.encodings.length === 0) {
         params.encodings = [{ active: true }];
       }
-      params.encodings[0].maxBitrate = sender.track.kind === 'video' ? MAX_VIDEO_BITRATE_BPS : MAX_AUDIO_BITRATE_BPS;
+      if (sender.track.kind === 'video') {
+        params.encodings[0].maxBitrate = preset.videoBitrate;
+        params.encodings[0].scaleResolutionDownBy = preset.videoScaleDown;
+      } else {
+        params.encodings[0].maxBitrate = preset.audioBitrate;
+      }
       await sender.setParameters(params);
     } catch (e) {
-      console.warn('[CallContext] failed to apply bandwidth limit', e);
+      console.warn('[CallContext] failed to apply quality level', e);
     }
   }
 }
@@ -108,6 +129,11 @@ type CallContextValue = {
   /** A group-call invite arrived on this same persistent /queue/calls channel — see GroupCallInviteMessage. Consumed by IncomingGroupCallBanner (app root), which is also the only place that knows about GroupCallContext. */
   pendingGroupInvite: GroupCallInviteMessage | null;
   dismissGroupInvite: () => void;
+  /** What the user picked — 'auto' unless they explicitly locked a level via CallOverlay's HD button. */
+  qualityMode: CallQuality;
+  /** What's actually applied right now — under 'auto' this drifts on its own as the network changes; under a fixed mode it always equals that mode. */
+  effectiveQuality: ResolvedQuality;
+  setQualityMode: (mode: CallQuality) => void;
 };
 
 const CallContext = createContext<CallContextValue | null>(null);
@@ -132,6 +158,33 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   // drives ICE-restart renegotiation — see attemptIceRestart's own comment
   // for why only one side may do this.
   const isOffererRef = useRef(false);
+
+  const [qualityMode, setQualityModeState] = useState<CallQuality>('auto');
+  const qualityModeRef = useRef<CallQuality>('auto');
+  const [effectiveQuality, setEffectiveQualityState] = useState<ResolvedQuality>('medium');
+  const effectiveQualityRef = useRef<ResolvedQuality>('medium');
+  // Cumulative stats from the previous poll, to derive a per-interval loss
+  // fraction rather than an all-time average that a single bad patch early
+  // in a long call would never meaningfully move again.
+  const prevQualityStatsRef = useRef<{ lost: number; sent: number } | null>(null);
+  const consecutiveGoodPollsRef = useRef(0);
+
+  const setEffectiveQuality = useCallback((level: ResolvedQuality) => {
+    effectiveQualityRef.current = level;
+    setEffectiveQualityState(level);
+    if (pcRef.current) applyQualityLevel(pcRef.current, level);
+  }, []);
+
+  const setQualityMode = useCallback(
+    (mode: CallQuality) => {
+      qualityModeRef.current = mode;
+      setQualityModeState(mode);
+      if (mode !== 'auto') {
+        setEffectiveQuality(mode);
+      }
+    },
+    [setEffectiveQuality]
+  );
 
   const [callState, setCallState] = useState<CallState>('idle');
   const callStateRef = useRef<CallState>('idle');
@@ -186,6 +239,14 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     setIsCameraOff(false);
     setIsSpeakerOn(false);
     setConnectedAt(null);
+    // Fresh per call — a level picked on a previous call shouldn't silently
+    // carry over and skip adaptation on the next one.
+    qualityModeRef.current = 'auto';
+    setQualityModeState('auto');
+    effectiveQualityRef.current = 'medium';
+    setEffectiveQualityState('medium');
+    prevQualityStatsRef.current = null;
+    consecutiveGoodPollsRef.current = 0;
   }, []);
 
   const createPeerConnection = useCallback((toUserId: string) => {
@@ -287,7 +348,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
       const pc = createPeerConnection(recipientId);
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-      applyBandwidthLimits(pc);
+      applyQualityLevel(pc, effectiveQualityRef.current);
 
       isOffererRef.current = true;
       activeCallIdRef.current = callId;
@@ -322,7 +383,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
     const pc = createPeerConnection(invite.fromUserId);
     stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-    applyBandwidthLimits(pc);
+    applyQualityLevel(pc, effectiveQualityRef.current);
     isOffererRef.current = false;
 
     await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: invite.sdpOffer }));
@@ -531,6 +592,64 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken, userId]);
 
+  // Auto-quality: polls every 3s while connected, comparing this interval's
+  // packet loss against the previous poll (not an all-time average, which a
+  // single bad patch early in a long call would never meaningfully move
+  // again). Downgrades on one bad poll — react fast to real degradation —
+  // but only upgrades after 3 consecutive good ones (~9s), so a momentary
+  // recovery doesn't immediately bounce back up into more loss. No-ops
+  // entirely once the user picks a fixed level (qualityModeRef !== 'auto').
+  useEffect(() => {
+    if (callState !== 'connected') return;
+    prevQualityStatsRef.current = null;
+    consecutiveGoodPollsRef.current = 0;
+
+    const interval = setInterval(async () => {
+      if (qualityModeRef.current !== 'auto') return;
+      const pc = pcRef.current;
+      if (!pc) return;
+      try {
+        const stats = await pc.getStats();
+        let lost = 0;
+        let sent = 0;
+        stats.forEach((report: any) => {
+          if (report.type === 'remote-inbound-rtp' && typeof report.packetsLost === 'number') {
+            lost += report.packetsLost;
+          }
+          if (report.type === 'outbound-rtp' && typeof report.packetsSent === 'number') {
+            sent += report.packetsSent;
+          }
+        });
+        const prev = prevQualityStatsRef.current;
+        prevQualityStatsRef.current = { lost, sent };
+        if (!prev) return; // first sample — need a delta, not just a snapshot
+
+        const deltaSent = sent - prev.sent;
+        const deltaLost = lost - prev.lost;
+        if (deltaSent <= 0) return;
+        const lossFraction = deltaLost / (deltaSent + deltaLost);
+
+        const currentIndex = QUALITY_LEVELS.indexOf(effectiveQualityRef.current);
+        if (lossFraction > 0.08 && currentIndex > 0) {
+          consecutiveGoodPollsRef.current = 0;
+          setEffectiveQuality(QUALITY_LEVELS[currentIndex - 1]);
+        } else if (lossFraction < 0.02) {
+          consecutiveGoodPollsRef.current += 1;
+          if (consecutiveGoodPollsRef.current >= 3 && currentIndex < QUALITY_LEVELS.length - 1) {
+            consecutiveGoodPollsRef.current = 0;
+            setEffectiveQuality(QUALITY_LEVELS[currentIndex + 1]);
+          }
+        } else {
+          consecutiveGoodPollsRef.current = 0;
+        }
+      } catch (e) {
+        console.warn('[CallContext] quality-adapt stats poll failed', e);
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [callState, setEffectiveQuality]);
+
   const value: CallContextValue = {
     callState,
     incomingCall,
@@ -554,6 +673,9 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     seedIncomingCallFromNotification,
     pendingGroupInvite,
     dismissGroupInvite,
+    qualityMode,
+    effectiveQuality,
+    setQualityMode,
   };
 
   return <CallContext.Provider value={value}>{children}</CallContext.Provider>;

@@ -3,7 +3,6 @@ export default {
     title: 'Appels',
     empty: 'Aucun appel pour le moment',
     dataUsageYou: 'Vous : {{amount}}',
-    dataUsageThem: 'Eux : {{amount}}',
   },
   status: {
     missed: 'Manqué',
@@ -17,6 +16,12 @@ export default {
     ringing: 'Sonnerie…',
     groupCallsTitle: 'Appels de groupe',
     groupCallsComingSoon: "L'ajout de participants en cours d'appel arrive bientôt.",
+    qualityTitle: "Qualité d'appel",
+    qualitySubtitle: "Auto s'ajuste automatiquement selon le réseau. Choisissez un niveau fixe pour le verrouiller.",
+    qualityAuto: 'Auto',
+    qualityLow: 'Faible',
+    qualityMedium: 'Moyenne',
+    qualityHigh: 'HD',
   },
   groupOverlay: {
     fallbackTitle: 'Appel de groupe',

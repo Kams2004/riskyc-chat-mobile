@@ -102,12 +102,10 @@ export default function CallsScreen() {
         renderItem={({ item }) => {
           const myBytesSent = item.isOutgoing ? item.callerBytesSent : item.calleeBytesSent;
           const myBytesReceived = item.isOutgoing ? item.callerBytesReceived : item.calleeBytesReceived;
-          const otherBytesSent = item.isOutgoing ? item.calleeBytesSent : item.callerBytesSent;
-          const otherBytesReceived = item.isOutgoing ? item.calleeBytesReceived : item.callerBytesReceived;
-          // Only shows once a side actually reported (calls that never
-          // connected have nothing to show) — the two are never assumed
-          // symmetric, so both are always shown separately, never averaged.
-          const hasUsage = myBytesSent != null || otherBytesSent != null;
+          // Only this device's own usage — the other party's is never shown
+          // here (their own call log shows theirs), even though the server
+          // does track both sides independently.
+          const hasUsage = myBytesSent != null || myBytesReceived != null;
           return (
           <TouchableOpacity style={styles.row} onPress={() => redial(item, item.type)}>
             <Avatar objectKey={item.otherAvatarKey} label={item.otherName} size={48} />
@@ -124,8 +122,6 @@ export default function CallsScreen() {
               {hasUsage && (
                 <Text style={styles.usage} numberOfLines={1}>
                   {t('screen.dataUsageYou', { amount: formatBytes((myBytesSent ?? 0) + (myBytesReceived ?? 0)) })}
-                  {'  ·  '}
-                  {t('screen.dataUsageThem', { amount: formatBytes((otherBytesSent ?? 0) + (otherBytesReceived ?? 0)) })}
                 </Text>
               )}
             </View>

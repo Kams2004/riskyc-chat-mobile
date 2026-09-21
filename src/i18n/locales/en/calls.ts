@@ -3,7 +3,6 @@ export default {
     title: 'Calls',
     empty: 'No calls yet',
     dataUsageYou: 'You: {{amount}}',
-    dataUsageThem: 'Them: {{amount}}',
   },
   status: {
     missed: 'Missed',
@@ -17,6 +16,12 @@ export default {
     ringing: 'Ringing…',
     groupCallsTitle: 'Group calls',
     groupCallsComingSoon: 'Adding participants mid-call is coming soon.',
+    qualityTitle: 'Call quality',
+    qualitySubtitle: 'Auto adjusts on its own as the network changes. Pick a fixed level to lock it.',
+    qualityAuto: 'Auto',
+    qualityLow: 'Low',
+    qualityMedium: 'Medium',
+    qualityHigh: 'HD',
   },
   groupOverlay: {
     fallbackTitle: 'Group call',

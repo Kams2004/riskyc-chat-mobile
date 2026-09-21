@@ -57,8 +57,27 @@ export function CallOverlay() {
     toggleCamera,
     toggleSpeaker,
     minimizeCall,
+    qualityMode,
+    effectiveQuality,
+    setQualityMode,
   } = useCall();
   const { t } = useTranslation('calls');
+
+  const qualityLabels: Record<'low' | 'medium' | 'high', string> = {
+    low: t('overlay.qualityLow'),
+    medium: t('overlay.qualityMedium'),
+    high: t('overlay.qualityHigh'),
+  };
+
+  function openQualityPicker() {
+    Alert.alert(t('overlay.qualityTitle'), t('overlay.qualitySubtitle'), [
+      { text: `${t('overlay.qualityAuto')} (${qualityLabels[effectiveQuality]})`, onPress: () => setQualityMode('auto') },
+      { text: qualityLabels.low, onPress: () => setQualityMode('low') },
+      { text: qualityLabels.medium, onPress: () => setQualityMode('medium') },
+      { text: qualityLabels.high, onPress: () => setQualityMode('high') },
+      { text: t('common:cancel'), style: 'cancel' },
+    ]);
+  }
 
   const [callerName, setCallerName] = useState<string | null>(null);
   const [callerAvatar, setCallerAvatar] = useState<string | null>(null);
@@ -122,16 +141,23 @@ export function CallOverlay() {
                 <Path d="M6 9l6 6 6-6" />
               </Svg>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.topBarButton}
-              onPress={() => Alert.alert(t('overlay.groupCallsTitle'), t('overlay.groupCallsComingSoon'))}
-            >
-              <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                <Path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                <Path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" />
-                <Path d="M19 8v6M22 11h-6" />
-              </Svg>
-            </TouchableOpacity>
+            <View style={styles.topBarRightGroup}>
+              <TouchableOpacity style={styles.qualityButton} onPress={openQualityPicker}>
+                <Text style={styles.qualityButtonLabel}>
+                  {qualityMode === 'auto' ? t('overlay.qualityAuto') : qualityLabels[effectiveQuality]}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.topBarButton}
+                onPress={() => Alert.alert(t('overlay.groupCallsTitle'), t('overlay.groupCallsComingSoon'))}
+              >
+                <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <Path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                  <Path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" />
+                  <Path d="M19 8v6M22 11h-6" />
+                </Svg>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
         {isVideo && callState === 'connected' && remoteStream ? (
@@ -260,6 +286,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'rgba(0,0,0,0.35)',
   },
+  topBarRightGroup: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  qualityButton: {
+    height: 32,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  qualityButtonLabel: { fontFamily: fonts.sansSemiBold, fontSize: 12, color: '#ffffff' },
   centerInfo: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 },
   name: { fontFamily: fonts.sansSemiBold, fontSize: 22, color: '#ffffff', marginTop: 8 },
   status: { fontFamily: fonts.sans, fontSize: 15, color: 'rgba(255,255,255,0.7)' },
