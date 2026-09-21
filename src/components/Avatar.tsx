@@ -1,9 +1,9 @@
 import { Image, StyleSheet, Text, View } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
 
 import { useMediaUrl } from '../features/media/useMediaUrl';
 import { useTheme } from '../features/theme/ThemeContext';
 import { fonts } from '../theme';
+import { PersonIcon } from './icons';
 
 type AvatarProps = {
   /** Use for the signed-in user's own avatar — already on-device, no network round trip needed. */
@@ -36,10 +36,7 @@ export function Avatar({ localUri, objectKey, label, size = 52 }: AvatarProps) {
   return (
     <View style={[styles.placeholder, dimension, { backgroundColor: colors.tint2 }]}>
       {showIcon ? (
-        <Svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none" stroke={colors.brand700} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-          <Path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-          <Path d="M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" />
-        </Svg>
+        <PersonIcon size={iconSize} color={colors.brand700} strokeWidth={1.8} />
       ) : (
         <Text style={[styles.label, { color: colors.brand700, fontSize: size * 0.32 }]}>
           {label.trim().slice(0, 2).toUpperCase()}

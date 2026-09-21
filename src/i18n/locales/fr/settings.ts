@@ -7,6 +7,7 @@ export default {
     themeSystem: 'Système',
     themeLight: 'Clair',
     themeDark: 'Sombre',
+    chatWallpaper: 'Fond de discussion',
     account: 'Compte',
     loggedInDevices: 'Appareils connectés',
     privacy: 'Confidentialité',
@@ -22,6 +23,13 @@ export default {
     title: 'Langue',
     english: 'Anglais',
     french: 'Français',
+  },
+  wallpaper: {
+    title: 'Fond de discussion',
+    subtitle: "Choisissez le fond affiché derrière les messages d'une discussion.",
+    dots: 'Points',
+    doodle: 'Motifs',
+    plain: 'Uni',
   },
   editProfile: {
     titleEdit: 'Modifier le profil',

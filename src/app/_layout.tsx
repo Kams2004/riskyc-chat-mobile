@@ -25,6 +25,7 @@ import { useInboxSocket } from '../features/messaging/inboxSocket';
 import { usePushNotifications } from '../features/notifications/usePushNotifications';
 import { usePresenceHeartbeat } from '../features/presence/usePresenceHeartbeat';
 import { ThemeProvider, useTheme } from '../features/theme/ThemeContext';
+import { WallpaperProvider } from '../features/wallpaper/WallpaperContext';
 import { loadPreferences } from '../lib/preferences';
 import { CallOverlay } from '../components/CallOverlay';
 import { GroupCallOverlay } from '../components/GroupCallOverlay';
@@ -71,13 +72,15 @@ export default function RootLayout() {
       <SQLiteProvider databaseName={DATABASE_NAME} onInit={migrateDbIfNeeded}>
         <SafeAreaProvider>
           <ThemeProvider>
-            <AuthProvider>
-              <CallProvider>
-                <GroupCallProvider>
-                  <Root />
-                </GroupCallProvider>
-              </CallProvider>
-            </AuthProvider>
+            <WallpaperProvider>
+              <AuthProvider>
+                <CallProvider>
+                  <GroupCallProvider>
+                    <Root />
+                  </GroupCallProvider>
+                </CallProvider>
+              </AuthProvider>
+            </WallpaperProvider>
           </ThemeProvider>
         </SafeAreaProvider>
       </SQLiteProvider>

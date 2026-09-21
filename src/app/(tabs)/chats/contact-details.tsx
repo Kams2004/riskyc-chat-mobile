@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 
 import { ActionRow } from '../../../components/ActionRow';
 import { Avatar } from '../../../components/Avatar';
+import { CircleIconBadge, PhoneIcon, VideoIcon } from '../../../components/icons';
 import { clearConversationMessages, getLocalContactName, setFavorite, upsertLocalContact, useSQLiteContext } from '../../../data/db';
 import { useAuth } from '../../../features/auth/AuthContext';
 import { useCall } from '../../../features/calls/CallContext';
@@ -200,25 +201,26 @@ export default function ContactDetailsScreen() {
 
       <View style={styles.actionsRow}>
         <TouchableOpacity style={styles.circleAction} onPress={() => startCall(userId, name, 'AUDIO')}>
-          <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={colors.brand600} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-            <Path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.902.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.908.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
-          </Svg>
+          <CircleIconBadge size={48} backgroundColor={colors.tint1}>
+            <PhoneIcon size={20} color={colors.brand600} />
+          </CircleIconBadge>
           <Text style={styles.circleActionLabel}>{t('contactDetails.voice')}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.circleAction} onPress={() => startCall(userId, name, 'VIDEO')}>
-          <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={colors.brand600} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-            <Path d="M23 7l-7 5 7 5V7z" />
-            <Path d="M16 5H3a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2z" />
-          </Svg>
+          <CircleIconBadge size={48} backgroundColor={colors.tint1}>
+            <VideoIcon size={20} color={colors.brand600} />
+          </CircleIconBadge>
           <Text style={styles.circleActionLabel}>{t('contactDetails.video')}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.circleAction}
           onPress={() => router.push({ pathname: '/(tabs)/chats/search', params: { conversationId } })}
         >
-          <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={colors.brand600} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-            <Path d="M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.35-4.35" />
-          </Svg>
+          <CircleIconBadge size={48} backgroundColor={colors.tint1}>
+            <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={colors.brand600} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <Path d="M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.35-4.35" />
+            </Svg>
+          </CircleIconBadge>
           <Text style={styles.circleActionLabel}>{t('contactDetails.search')}</Text>
         </TouchableOpacity>
       </View>

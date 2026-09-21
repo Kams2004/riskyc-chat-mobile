@@ -12,6 +12,7 @@ import { useTheme } from '../features/theme/ThemeContext';
 import { fonts } from '../theme';
 import { Avatar } from './Avatar';
 import { ChatWallpaper } from './ChatWallpaper';
+import { MicIcon, PhoneIcon, VideoIcon } from './icons';
 
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60).toString().padStart(2, '0');
@@ -112,7 +113,7 @@ export function CallOverlay() {
 
   return (
     <Modal visible transparent={false} animationType="slide">
-      <ChatWallpaper dark>
+      <ChatWallpaper dark variant="dots">
         <View style={styles.container}>
         {callState === 'connected' && (
           <View style={[styles.topBar, { paddingTop: insets.top + 12 }]}>
@@ -168,36 +169,41 @@ export function CallOverlay() {
           {callState === 'incoming-ringing' && (
             <>
               <IconButton onPress={declineIncoming} color="#e53935">
-                <Svg width={26} height={26} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                  <Path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.902.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.908.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
-                  <Path d="M2 2l20 20" />
-                </Svg>
+                <View>
+                  <PhoneIcon size={26} color="#fff" />
+                  <Svg width={26} height={26} viewBox="0 0 24 24" style={StyleSheet.absoluteFill}>
+                    <Path d="M2 2l20 20" stroke="#fff" strokeWidth={2} strokeLinecap="round" />
+                  </Svg>
+                </View>
               </IconButton>
               <IconButton onPress={acceptIncoming} color="#43a047">
-                <Svg width={26} height={26} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                  <Path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.902.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.908.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
-                </Svg>
+                <PhoneIcon size={26} color="#fff" />
               </IconButton>
             </>
           )}
 
           {callState === 'outgoing-ringing' && (
             <IconButton onPress={endCall} color="#e53935">
-              <Svg width={26} height={26} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                <Path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.902.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.908.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
-                <Path d="M2 2l20 20" />
-              </Svg>
+              <View>
+                <PhoneIcon size={26} color="#fff" />
+                <Svg width={26} height={26} viewBox="0 0 24 24" style={StyleSheet.absoluteFill}>
+                  <Path d="M2 2l20 20" stroke="#fff" strokeWidth={2} strokeLinecap="round" />
+                </Svg>
+              </View>
             </IconButton>
           )}
 
           {callState === 'connected' && (
             <>
               <IconButton onPress={toggleMute} color={isMuted ? '#ffffff' : 'rgba(255,255,255,0.2)'}>
-                <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={isMuted ? '#1a0d10' : '#fff'} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                  <Path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                  <Path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                  {isMuted && <Path d="M2 2l20 20" />}
-                </Svg>
+                <View>
+                  <MicIcon size={22} color={isMuted ? '#1a0d10' : '#fff'} />
+                  {isMuted && (
+                    <Svg width={22} height={22} viewBox="0 0 24 24" style={StyleSheet.absoluteFill}>
+                      <Path d="M2 2l20 20" stroke="#1a0d10" strokeWidth={2} strokeLinecap="round" />
+                    </Svg>
+                  )}
+                </View>
               </IconButton>
               <IconButton onPress={toggleSpeaker} color={isSpeakerOn ? '#ffffff' : 'rgba(255,255,255,0.2)'}>
                 <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={isSpeakerOn ? '#1a0d10' : '#fff'} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -207,18 +213,23 @@ export function CallOverlay() {
               </IconButton>
               {isVideo && (
                 <IconButton onPress={toggleCamera} color={isCameraOff ? '#ffffff' : 'rgba(255,255,255,0.2)'}>
-                  <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={isCameraOff ? '#1a0d10' : '#fff'} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                    <Path d="M23 7l-7 5 7 5V7z" />
-                    <Path d="M16 5H3a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2z" />
-                    {isCameraOff && <Path d="M2 2l20 20" />}
-                  </Svg>
+                  <View>
+                    <VideoIcon size={22} color={isCameraOff ? '#1a0d10' : '#fff'} />
+                    {isCameraOff && (
+                      <Svg width={22} height={22} viewBox="0 0 24 24" style={StyleSheet.absoluteFill}>
+                        <Path d="M2 2l20 20" stroke="#1a0d10" strokeWidth={2} strokeLinecap="round" />
+                      </Svg>
+                    )}
+                  </View>
                 </IconButton>
               )}
               <IconButton onPress={endCall} color="#e53935">
-                <Svg width={26} height={26} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                  <Path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.902.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.908.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
-                  <Path d="M2 2l20 20" />
-                </Svg>
+                <View>
+                  <PhoneIcon size={26} color="#fff" />
+                  <Svg width={26} height={26} viewBox="0 0 24 24" style={StyleSheet.absoluteFill}>
+                    <Path d="M2 2l20 20" stroke="#fff" strokeWidth={2} strokeLinecap="round" />
+                  </Svg>
+                </View>
               </IconButton>
             </>
           )}

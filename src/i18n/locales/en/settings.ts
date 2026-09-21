@@ -7,6 +7,7 @@ export default {
     themeSystem: 'System',
     themeLight: 'Light',
     themeDark: 'Dark',
+    chatWallpaper: 'Chat wallpaper',
     account: 'Account',
     loggedInDevices: 'Logged-in devices',
     privacy: 'Privacy',
@@ -22,6 +23,13 @@ export default {
     title: 'Language',
     english: 'English',
     french: 'French',
+  },
+  wallpaper: {
+    title: 'Chat wallpaper',
+    subtitle: 'Choose the background shown behind messages in a chat.',
+    dots: 'Dots',
+    doodle: 'Doodle',
+    plain: 'Plain',
   },
   editProfile: {
     titleEdit: 'Edit profile',

@@ -173,6 +173,19 @@ export default function SettingsScreen() {
           colors={colors}
           icon={
             <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={colors.brand600} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <Rect x={3} y={3} width={18} height={18} rx={3} />
+              <Circle cx={8.5} cy={8.5} r={1.5} />
+              <Path d="M21 15l-5-5L5 21" />
+            </Svg>
+          }
+          label={t('index.chatWallpaper')}
+          onPress={() => router.push('/(tabs)/settings/wallpaper' as never)}
+        />
+        <Row
+          styles={styles}
+          colors={colors}
+          icon={
+            <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={colors.brand600} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
               <Path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
               <Circle cx={12} cy={7} r={4} />
             </Svg>
