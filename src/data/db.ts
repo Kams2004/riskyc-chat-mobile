@@ -273,7 +273,13 @@ export async function upsertConversation(
   db: SQLiteDatabase,
   id: string,
   title: string,
-  lastMessageAt: string,
+  // null means "don't touch the existing last_message_at" — for calls that
+  // are only here to keep title/avatar fresh or make sure the row exists
+  // (see the two such call sites in useConversation.ts). Passing the
+  // current time for those used to stomp the real last-message timestamp
+  // on every single conversation open, which is what made the chat list
+  // show "now" instead of when the last message actually went out.
+  lastMessageAt: string | null,
   avatarObjectKey?: string | null,
   isGroup = false
 ) {
@@ -285,12 +291,19 @@ export async function upsertConversation(
   // accidentally reset it.
   await db.runAsync(
     `INSERT INTO conversations (id, title, last_message_at, avatar_object_key, is_group)
-     VALUES ($id, $title, $lastMessageAt, $avatarObjectKey, $isGroup)
+     VALUES ($id, $title, COALESCE($lastMessageAt, $now), $avatarObjectKey, $isGroup)
      ON CONFLICT(id) DO UPDATE SET
-       last_message_at = excluded.last_message_at,
+       last_message_at = COALESCE($lastMessageAt, conversations.last_message_at),
        title = excluded.title,
        avatar_object_key = COALESCE(excluded.avatar_object_key, conversations.avatar_object_key)`,
-    { $id: id, $title: title, $lastMessageAt: lastMessageAt, $avatarObjectKey: avatarObjectKey ?? null, $isGroup: isGroup ? 1 : 0 }
+    {
+      $id: id,
+      $title: title,
+      $lastMessageAt: lastMessageAt,
+      $now: new Date().toISOString(),
+      $avatarObjectKey: avatarObjectKey ?? null,
+      $isGroup: isGroup ? 1 : 0,
+    }
   );
 }
 

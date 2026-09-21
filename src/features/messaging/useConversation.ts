@@ -25,7 +25,7 @@ import { useAuth } from '../auth/AuthContext';
 import { preferences } from '../../lib/preferences';
 import { UNRESOLVED_TITLE_PLACEHOLDER } from './conversationId';
 import * as messagingApi from './api';
-import { MESSAGES_CLEARED_EVENT } from './inboxSocket';
+import { CONVERSATIONS_CHANGED_EVENT, MESSAGES_CLEARED_EVENT } from './inboxSocket';
 import { ChatSocket } from './ws';
 
 export type OutgoingMedia = {
@@ -176,13 +176,27 @@ export function useConversation({
   // the socket lifecycle below.
   useEffect(() => {
     if (recipientName || recipientAvatarObjectKey) {
-      upsertConversation(db, conversationId, recipientName || titleRef.current, new Date().toISOString(), recipientAvatarObjectKey);
+      upsertConversation(db, conversationId, recipientName || titleRef.current, null, recipientAvatarObjectKey);
     }
   }, [conversationId, db, recipientAvatarObjectKey, recipientName]);
 
   const ackIfNotMine = useCallback(
     (messageId: string, senderId: string, recipient: string) => {
       if (senderId === userId) return;
+      // Marks MY OWN copy read immediately, regardless of the privacy
+      // setting below — that setting only controls whether the OTHER
+      // party learns I've read it, not whether my own unread count
+      // reflects what I've actually seen. Previously this whole function
+      // (including this local update) was skipped when the setting was
+      // off, silently leaving that user's own unread badges stuck.
+      // Emitting CONVERSATIONS_CHANGED_EVENT is what lets the chats list
+      // (still mounted underneath this screen in the nav stack) pick up
+      // the badge change right away instead of only on its next full
+      // history refetch — previously the badge only cleared once a later
+      // fetchHistory happened to re-pull the read status the server
+      // already recorded, which could take a few conversation reopens.
+      advanceMessagesStatus(db, [messageId], 'read');
+      DeviceEventEmitter.emit(CONVERSATIONS_CHANGED_EVENT);
       // Settings → Privacy "Send read receipts" off: still fine to receive
       // and display the message, just never reveal that I've read it —
       // it'll sit at delivered from the sender's side, same as WhatsApp.
@@ -193,14 +207,17 @@ export function useConversation({
         socketRef.current?.sendAck({ conversationId, messageIds: [messageId], status: 'READ' });
       }
     },
-    [conversationId, isGroup, userId]
+    [conversationId, isGroup, userId, db]
   );
 
   useEffect(() => {
     let cancelled = false;
 
     reload();
-    upsertConversation(db, conversationId, titleRef.current, new Date().toISOString(), avatarRef.current, isGroup);
+    // null last_message_at — this call exists purely to make sure the row
+    // exists before fetchHistory/the socket populate it for real below, not
+    // to bump the timestamp every time this screen is opened.
+    upsertConversation(db, conversationId, titleRef.current, null, avatarRef.current, isGroup);
 
     messagingApi.fetchHistory(conversationId).then(async (history) => {
       for (const envelope of history) {
