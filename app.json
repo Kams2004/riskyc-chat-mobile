@@ -6,7 +6,7 @@
     "scheme": "riskycchat",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "plugins": [
       [
         "expo-router",
@@ -17,6 +17,12 @@
       "expo-secure-store",
       "expo-sqlite",
       "expo-font",
+      [
+        "expo-navigation-bar",
+        {
+          "enforceContrast": false
+        }
+      ],
       [
         "expo-splash-screen",
         {

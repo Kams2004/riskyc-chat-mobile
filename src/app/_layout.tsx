@@ -7,6 +7,7 @@ import { useFonts } from 'expo-font';
 import { router, Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { SQLiteProvider } from 'expo-sqlite';
+import { NavigationBar } from 'expo-navigation-bar';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
@@ -99,6 +100,11 @@ function Root() {
       <IncomingGroupCallBanner />
       <MinimizedCallBubble />
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+      {/* Android-only (no-ops elsewhere) — without this the system nav bar
+          never follows this app's OWN theme preference (which can differ
+          from the OS's own dark/light setting), only whatever its
+          build-time default was. */}
+      <NavigationBar style={scheme === 'dark' ? 'light' : 'dark'} />
     </View>
   );
 }
