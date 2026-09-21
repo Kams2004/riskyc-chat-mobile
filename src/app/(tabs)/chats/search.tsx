@@ -1,11 +1,12 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, DeviceEventEmitter, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
 
 import { searchInConversation, type SearchResult } from '../../../features/messaging/api';
+import { SCROLL_TO_MESSAGE_EVENT } from '../../../features/messaging/inboxSocket';
 import { useTheme } from '../../../features/theme/ThemeContext';
 import { fonts, type Palette } from '../../../theme';
 
@@ -40,6 +41,12 @@ export default function SearchInConversationScreen() {
     return () => clearTimeout(timer);
   }, [conversationId, query]);
 
+  /** Jumps back into the thread and asks it to scroll to/highlight this result, instead of showing matches on their own disconnected screen. */
+  function openResult(messageId: string) {
+    DeviceEventEmitter.emit(SCROLL_TO_MESSAGE_EVENT, { conversationId, messageId });
+    router.back();
+  }
+
   return (
     <View style={[styles.container, { paddingTop: insets.top + 12, paddingBottom: insets.bottom }]}>
       <View style={styles.header}>
@@ -64,10 +71,10 @@ export default function SearchInConversationScreen() {
         data={results}
         keyExtractor={(item) => item.messageId}
         renderItem={({ item }) => (
-          <View style={styles.row}>
+          <TouchableOpacity style={styles.row} onPress={() => openResult(item.messageId)}>
             <Text style={styles.snippet} numberOfLines={2}>{item.ciphertext}</Text>
             <Text style={styles.time}>{formatTime(item.sentAt)}</Text>
-          </View>
+          </TouchableOpacity>
         )}
         ListEmptyComponent={
           !isSearching && query.trim() ? <Text style={styles.empty}>{t('search.empty')}</Text> : null

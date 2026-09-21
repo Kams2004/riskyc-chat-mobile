@@ -28,6 +28,15 @@ export const TYPING_EVENT = 'riskyc:typing';
 export const STATUS_UPDATED_EVENT = 'riskyc:statusUpdated';
 /** Emitted (with the conversationId) whenever something outside a mounted thread screen's own action functions deletes that conversation's messages directly in SQLite (e.g. "Clear chat" from contact-details.tsx) — see useConversation.ts's own subscription for why this is needed. */
 export const MESSAGES_CLEARED_EVENT = 'riskyc:messagesCleared';
+/**
+ * Emitted (with {conversationId, messageId}) when search.tsx's in-thread
+ * search wants the already-mounted [conversationId].tsx screen behind it to
+ * scroll to and highlight a result, instead of showing results on their own
+ * separate screen — the thread screen stays mounted the whole time (search
+ * is just pushed on top of it), so this reaches it directly rather than
+ * needing a route param round-trip through router.back().
+ */
+export const SCROLL_TO_MESSAGE_EVENT = 'riskyc:scrollToMessage';
 
 /**
  * Backfills any conversation this device never saw live over STOMP — a

@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
+  DeviceEventEmitter,
   FlatList,
   Image,
   KeyboardAvoidingView,
@@ -52,6 +53,7 @@ import {
   UNRESOLVED_PERSON_PLACEHOLDER,
   UNRESOLVED_TITLE_PLACEHOLDER,
 } from '../../../features/messaging/conversationId';
+import { SCROLL_TO_MESSAGE_EVENT } from '../../../features/messaging/inboxSocket';
 import { useConversation, type ReplyToDraft } from '../../../features/messaging/useConversation';
 import { usePresence } from '../../../features/presence/usePresence';
 import { useTheme } from '../../../features/theme/ThemeContext';
@@ -749,6 +751,29 @@ export default function ChatThreadScreen() {
     highlightTimerRef.current = setTimeout(() => setHighlightedMessageId(null), 2500);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages, scrollToMessageId]);
+
+  // search.tsx (pushed on top of this screen, still mounted underneath)
+  // emits this instead of showing results on its own separate list — same
+  // scroll+highlight behavior as navigateToMessage's same-conversation case.
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener(
+      SCROLL_TO_MESSAGE_EVENT,
+      ({ conversationId: targetConversationId, messageId }: { conversationId: string; messageId: string }) => {
+        if (targetConversationId !== conversationId) return;
+        const index = messages.findIndex((m) => m.message_id === messageId);
+        if (index === -1) return;
+        try {
+          listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.4 });
+        } catch {
+          // handled by onScrollToIndexFailed below
+        }
+        if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+        setHighlightedMessageId(messageId);
+        highlightTimerRef.current = setTimeout(() => setHighlightedMessageId(null), 2500);
+      }
+    );
+    return () => sub.remove();
+  }, [conversationId, messages]);
 
   /** Most recently pinned, non-deleted message — feeds the thread's pin banner. Derived from `messages` (already in sync via SQLite reload) rather than a separate query. */
   const pinnedMessage = useMemo(() => {
