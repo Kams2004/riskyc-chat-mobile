@@ -145,7 +145,12 @@ export function CallOverlay() {
 
         {(!isVideo || callState !== 'connected' || !remoteStream) && (
           <View style={styles.centerInfo}>
-            <Avatar objectKey={otherAvatar} label={otherName || '?'} size={110} />
+            {/* Avatar's own showIcon fallback (a generic person icon) only
+                fires on a falsy label — passing the literal string '?' here
+                used to defeat that and render "?" as if it were initials,
+                which was very visible during the incoming/outgoing ringing
+                window while callerName/outgoingAvatar are still resolving. */}
+            <Avatar objectKey={otherAvatar} label={otherName ?? ''} size={110} />
             <Text style={styles.name}>{otherName}</Text>
             <Text style={styles.status}>
               {callState === 'incoming-ringing' && (isVideo ? t('overlay.incomingVideoCall') : t('overlay.incomingVoiceCall'))}

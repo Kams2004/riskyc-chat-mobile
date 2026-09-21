@@ -1,3 +1,4 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -375,6 +376,14 @@ export default function StatusViewerScreen() {
 
       {!isMine && (
         <View style={[styles.replyBar, { paddingBottom: insets.bottom + 16 }]}>
+          {/* A busy/bright status photo can wash out a translucent bar with
+              nothing behind it — this scrim guarantees contrast regardless
+              of what's underneath, independent of the input's own opacity. */}
+          <LinearGradient
+            colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.55)']}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+          />
           {replyFocused && (
             <TouchableOpacity style={styles.replyDismissButton} onPress={dismissReply}>
               <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth={2.4} strokeLinecap="round">
@@ -488,17 +497,17 @@ const styles = StyleSheet.create({
   },
   viewersBar: { position: 'absolute', left: 16, flexDirection: 'row', alignItems: 'center', gap: 6 },
   viewersText: { fontFamily: fonts.sansSemiBold, fontSize: 13, color: '#ffffff' },
-  replyBar: { position: 'absolute', left: 16, right: 16, bottom: 0, flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
+  replyBar: { position: 'absolute', left: 16, right: 16, bottom: 0, flexDirection: 'row', alignItems: 'flex-end', gap: 10, paddingTop: 24 },
   replyInput: {
     flex: 1,
     maxHeight: 100,
     color: '#ffffff',
     fontFamily: fonts.sans,
     fontSize: 15,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(0,0,0,0.4)',
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.4)',
+    borderColor: 'rgba(255,255,255,0.55)',
     paddingHorizontal: 16,
     paddingVertical: 10,
   },
@@ -507,7 +516,9 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.55)',
     alignItems: 'center',
     justifyContent: 'center',
   },
