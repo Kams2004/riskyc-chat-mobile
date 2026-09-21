@@ -24,16 +24,19 @@ import { useTranslation } from 'react-i18next';
 
 import { StatusDrawingCanvas } from '../../../components/StatusDrawingCanvas';
 import { EMPTY_OVERLAY, serializeOverlay, type StatusOverlay } from '../../../components/StatusOverlayView';
-import { uploadMedia } from '../../../features/media/api';
+import { VideoTrimmer } from '../../../components/VideoTrimmer';
+import { trimVideo, uploadMedia } from '../../../features/media/api';
 import { createStatus } from '../../../features/status/api';
 import { fonts } from '../../../theme';
 
 const BACKGROUND_PRESETS = ['#e6004a', '#075e54', '#128c7e', '#25d366', '#34495e', '#8e44ad', '#d35400', '#2c3e50'];
 const DRAW_COLORS = ['#ffffff', '#f44336', '#ff9800', '#ffeb3b', '#4caf50', '#00bcd4', '#2196f3', '#9c27b0', '#000000'];
+// Matches WhatsApp's own status video cap.
+const MAX_STATUS_VIDEO_MS = 30_000;
 
 type PendingItem = {
   id: string;
-  media: { uri: string; type: 'IMAGE' | 'VIDEO'; mimeType?: string } | null;
+  media: { uri: string; type: 'IMAGE' | 'VIDEO'; mimeType?: string; trimStartMs?: number; trimEndMs?: number } | null;
   textValue: string;
   bgColor: string;
   caption: string;
@@ -60,6 +63,12 @@ export default function NewStatusScreen() {
   const [drawColor, setDrawColor] = useState(DRAW_COLORS[0]);
   const [textOverlayDraft, setTextOverlayDraft] = useState('');
   const [posting, setPosting] = useState(false);
+  // Set right after a video is added — shows VideoTrimmer for that item.
+  // Every video goes through the trimmer, even a short one (confirming
+  // with the full-length selection already picked is a one-tap no-op),
+  // matching WhatsApp's own composer rather than only intervening once a
+  // clip happens to be over the limit.
+  const [trimmerTargetId, setTrimmerTargetId] = useState<string | null>(null);
 
   const current = items[activeIndex] ?? null;
 
@@ -116,7 +125,9 @@ export default function NewStatusScreen() {
     const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images', 'videos'], quality: 0.8 });
     if (!result.canceled && result.assets[0]) {
       const asset = result.assets[0];
-      addItem(newMediaItem(asset.uri, asset.type === 'video' ? 'VIDEO' : 'IMAGE', asset.mimeType));
+      const item = newMediaItem(asset.uri, asset.type === 'video' ? 'VIDEO' : 'IMAGE', asset.mimeType);
+      addItem(item);
+      if (item.media?.type === 'VIDEO') setTrimmerTargetId(item.id);
     }
   }
 
@@ -129,7 +140,9 @@ export default function NewStatusScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images', 'videos'], quality: 0.8 });
     if (!result.canceled && result.assets[0]) {
       const asset = result.assets[0];
-      addItem(newMediaItem(asset.uri, asset.type === 'video' ? 'VIDEO' : 'IMAGE', asset.mimeType));
+      const item = newMediaItem(asset.uri, asset.type === 'video' ? 'VIDEO' : 'IMAGE', asset.mimeType);
+      addItem(item);
+      if (item.media?.type === 'VIDEO') setTrimmerTargetId(item.id);
     }
   }
 
@@ -175,13 +188,36 @@ export default function NewStatusScreen() {
     setActiveTool('none');
   }
 
+  function confirmTrim(startMs: number, endMs: number) {
+    const target = items.find((it) => it.id === trimmerTargetId);
+    if (target && target.media) {
+      setItems((prev) =>
+        prev.map((it) => (it.id === trimmerTargetId && it.media ? { ...it, media: { ...it.media, trimStartMs: startMs, trimEndMs: endMs } } : it))
+      );
+    }
+    setTrimmerTargetId(null);
+  }
+
+  function cancelTrim() {
+    // Matches the length limit being a hard requirement — an unconfirmed
+    // trim never falls back to posting the untrimmed (possibly too long)
+    // original, it just drops the video.
+    const targetId = trimmerTargetId;
+    setTrimmerTargetId(null);
+    if (targetId) removeItem(items.findIndex((it) => it.id === targetId));
+  }
+
   async function postAll() {
     if (items.length === 0 || posting) return;
     setPosting(true);
     try {
       for (const item of items) {
         if (item.media) {
-          const objectKey = await uploadMedia(item.media.uri, item.media.mimeType ?? (item.media.type === 'VIDEO' ? 'video/mp4' : 'image/jpeg'));
+          let objectKey = await uploadMedia(item.media.uri, item.media.mimeType ?? (item.media.type === 'VIDEO' ? 'video/mp4' : 'image/jpeg'));
+          if (item.media.type === 'VIDEO' && item.media.trimStartMs != null && item.media.trimEndMs != null) {
+            const trimmed = await trimVideo(objectKey, item.media.trimStartMs, item.media.trimEndMs);
+            objectKey = trimmed.objectKey;
+          }
           await createStatus({
             mediaType: item.media.type,
             mediaObjectKey: objectKey,
@@ -203,9 +239,20 @@ export default function NewStatusScreen() {
   }
 
   const canvasHeight = height;
+  const trimmerTarget = items.find((it) => it.id === trimmerTargetId) ?? null;
 
   return (
     <View style={styles.fullScreen}>
+      {trimmerTarget?.media && (
+        <VideoTrimmer
+          uri={trimmerTarget.media.uri}
+          maxWindowMs={MAX_STATUS_VIDEO_MS}
+          initialStartMs={trimmerTarget.media.trimStartMs}
+          initialEndMs={trimmerTarget.media.trimEndMs}
+          onConfirm={confirmTrim}
+          onCancel={cancelTrim}
+        />
+      )}
       {/* Menu (no items chosen yet) */}
       {items.length === 0 && (
         <View style={styles.menuScreen}>

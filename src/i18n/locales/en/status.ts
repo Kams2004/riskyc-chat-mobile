@@ -29,6 +29,11 @@ export default {
     keepEditing: 'Keep editing',
     discard: 'Discard',
   },
+  trimmer: {
+    selected: '{{seconds}}s selected',
+    trimFailedTitle: 'Could not trim video',
+    trimFailedBody: 'Please try again.',
+  },
   viewer: {
     viewedBy_one: '{{count}} view',
     viewedBy_other: '{{count}} views',

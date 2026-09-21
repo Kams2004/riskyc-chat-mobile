@@ -29,6 +29,11 @@ export default {
     keepEditing: 'Continuer',
     discard: 'Abandonner',
   },
+  trimmer: {
+    selected: '{{seconds}}s sélectionnées',
+    trimFailedTitle: 'Impossible de découper la vidéo',
+    trimFailedBody: 'Veuillez réessayer.',
+  },
   viewer: {
     viewedBy_one: '{{count}} vue',
     viewedBy_other: '{{count}} vues',

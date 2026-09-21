@@ -54,3 +54,17 @@ export async function uploadImage(localUri: string, contentType = 'image/jpeg'):
 
 /** Same as uploadImage, named for chat-attachment call sites (images, documents, voice notes). */
 export const uploadMedia = uploadImage;
+
+/**
+ * Cuts an already-uploaded video down to [startMs, endMs) server-side (see
+ * MediaController#trimVideo — ffmpeg stream copy, no re-encode) and returns
+ * the NEW object key for the trimmed result; the original upload is left
+ * untouched. Used by the status composer's video trimmer, never for chat
+ * video attachments (those post the full clip as-is).
+ */
+export function trimVideo(objectKey: string, startMs: number, endMs: number): Promise<{ objectKey: string }> {
+  return apiFetch(`${config.mediaServiceUrl}/api/media/trim-video`, {
+    method: 'POST',
+    body: JSON.stringify({ objectKey, startMs, endMs }),
+  });
+}
