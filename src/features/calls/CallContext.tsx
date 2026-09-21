@@ -197,6 +197,14 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       setCallType(type);
       setOutgoingCall({ callId, toUserId: recipientId, toUserName: recipientName, type });
       setCallState('outgoing-ringing');
+      // The caller's own ringback — previously only the callee's device
+      // ever played anything (playRingtone in seedIncomingCallFromNotification/
+      // the live invite handler below), leaving the caller's screen ringing
+      // in total silence. Same asset/player as the incoming ringtone (no
+      // separate ringback-tone file exists); stopped the moment the other
+      // side answers (onAnswer below) or the call ends for any reason
+      // (resetCallState already calls stopRingtone unconditionally).
+      playRingtone();
 
       const offer = await pc.createOffer({});
       await pc.setLocalDescription(offer);
@@ -355,6 +363,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       onAnswer: async (answer) => {
         const pc = pcRef.current;
         if (!pc || answer.callId !== activeCallIdRef.current) return;
+        stopRingtone();
         await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: answer.sdpAnswer }));
         remoteDescriptionSetRef.current = true;
         await flushPendingIce();

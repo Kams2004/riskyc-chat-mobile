@@ -14,7 +14,7 @@ const PREFERENCE_KEY = 'riskyc.wallpaperVariant';
 const WallpaperContext = createContext<WallpaperState | null>(null);
 
 export function WallpaperProvider({ children }: PropsWithChildren) {
-  const [variant, setVariantState] = useState<WallpaperVariant>('dots');
+  const [variant, setVariantState] = useState<WallpaperVariant>('doodle');
 
   useEffect(() => {
     SecureStore.getItemAsync(PREFERENCE_KEY).then((stored) => {

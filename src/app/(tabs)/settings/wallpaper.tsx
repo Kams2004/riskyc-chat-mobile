@@ -9,7 +9,7 @@ import { useTheme } from '../../../features/theme/ThemeContext';
 import { useWallpaper, type WallpaperVariant } from '../../../features/wallpaper/WallpaperContext';
 import { fonts, type Palette } from '../../../theme';
 
-const VARIANTS: WallpaperVariant[] = ['dots', 'doodle', 'plain'];
+const VARIANTS: WallpaperVariant[] = ['doodle', 'dots', 'plain'];
 
 function Check({ colors }: { colors: Palette }) {
   return (
