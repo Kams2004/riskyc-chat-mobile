@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type PropsWith
 
 import { currentDeviceLabel } from '../../lib/deviceLabel';
 import { profile, session } from '../../lib/secureStore';
+import { unregisterCurrentDevicePushToken } from '../notifications/api';
 import * as authApi from './api';
 import type { Identifier, VerifyOtpResponse } from './api';
 
@@ -112,6 +113,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
         setAvatarObjectKey(nextAvatarObjectKey);
       },
       async signOut() {
+        // Must run before session.clear() below — apiFetch reads the access
+        // token from secureStore itself (not from this closure's state), so
+        // clearing it first would send the unregister request unauthenticated.
+        await unregisterCurrentDevicePushToken();
         await session.clear();
         setUserId(null);
         setAccessToken(null);

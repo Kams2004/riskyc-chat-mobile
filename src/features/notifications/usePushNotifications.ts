@@ -87,9 +87,19 @@ type NotificationData = {
 
 /** Mounted once at the app root (see app/_layout.tsx), alongside the other always-on hooks — inside CallProvider, so useCall() is available here. */
 export function usePushNotifications() {
-  const { userId, accessToken } = useAuth();
+  const { userId, accessToken, displayName } = useAuth();
   const { seedIncomingCallFromNotification, acceptIncoming, declineIncoming } = useCall();
   const handledColdStartRef = useRef(false);
+  // A notification tap that launches the app cold (or arrives before
+  // AuthContext's own async session restore finishes) can fire before the
+  // router has swapped off the (auth) stack — router.push-ing a (tabs)/...
+  // route that isn't mounted in the currently active Stack.Protected group
+  // throws and crashes the app outright. See RootNavigator's own
+  // needsOnboarding — !!userId && !!displayName is the same "the (tabs)
+  // stack actually exists right now" condition it uses. Stashed here and
+  // replayed once that's true, instead of dropped or crashed on.
+  const pendingResponseRef = useRef<Notifications.NotificationResponse | null>(null);
+  const isNavigationReady = !!userId && !!displayName;
 
   useEffect(() => {
     if (!userId || !accessToken) return;
@@ -138,6 +148,11 @@ export function usePushNotifications() {
   // lets the user decide from the in-app UI, same as the live-socket path.
   const handleResponse = useCallback(
     async (response: Notifications.NotificationResponse) => {
+      if (!isNavigationReady) {
+        pendingResponseRef.current = response;
+        return;
+      }
+
       const data = response.notification.request.content.data as NotificationData;
 
       if (data.type === 'call' && data.callId) {
@@ -166,7 +181,7 @@ export function usePushNotifications() {
         router.push('/(tabs)/chats/group-invitations' as never);
       }
     },
-    [acceptIncoming, declineIncoming, seedIncomingCallFromNotification]
+    [isNavigationReady, acceptIncoming, declineIncoming, seedIncomingCallFromNotification]
   );
 
   useEffect(() => {
@@ -182,4 +197,14 @@ export function usePushNotifications() {
     }
     return () => sub.remove();
   }, [handleResponse]);
+
+  // Replays whatever notification tap arrived before the (tabs) stack was
+  // actually mounted, now that it is — see isNavigationReady's own comment.
+  useEffect(() => {
+    if (isNavigationReady && pendingResponseRef.current) {
+      const response = pendingResponseRef.current;
+      pendingResponseRef.current = null;
+      handleResponse(response);
+    }
+  }, [isNavigationReady, handleResponse]);
 }
