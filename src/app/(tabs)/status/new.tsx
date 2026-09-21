@@ -152,10 +152,19 @@ export default function NewStatusScreen() {
 
   // Launched directly from the Status list's own camera/pencil quick-action
   // icons (see status/index.tsx's "My status" row) instead of always
-  // landing on the plain camera/gallery/text menu first.
+  // landing on the plain camera/gallery/text menu first. Immediately clears
+  // the param it just consumed — expo-router can hand a pushed screen back
+  // its PREVIOUS params if the same route is reached again without this,
+  // which was opening the camera on every visit (even the plain "add
+  // status" tap with no mode at all) once it had fired here once.
   useEffect(() => {
-    if (mode === 'camera') pickFromCamera();
-    else if (mode === 'text') addTextItem();
+    if (mode === 'camera') {
+      router.setParams({ mode: undefined });
+      pickFromCamera();
+    } else if (mode === 'text') {
+      router.setParams({ mode: undefined });
+      addTextItem();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
