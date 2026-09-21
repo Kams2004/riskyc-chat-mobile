@@ -22,6 +22,58 @@ const ICE_SERVERS = [
   { urls: config.turnServerUrl, username: config.turnUsername, credential: config.turnCredential },
 ];
 
+// Conservative mobile-data-friendly caps, in the same ballpark WhatsApp/
+// Signal use for a 1:1 call — WebRTC's default encoder targets far more
+// (video defaults toward 2Mbps+ if left uncapped) than a phone call
+// actually needs, which is exactly what "consumes too much data" on a
+// cellular connection. Capped per-sender rather than globally so audio
+// isn't starved when both are on the connection at once.
+const MAX_VIDEO_BITRATE_BPS = 500_000;
+const MAX_AUDIO_BITRATE_BPS = 32_000;
+
+/** Best-effort — an unsupported sender param on some device/codec combo should never block the call from proceeding. */
+async function applyBandwidthLimits(pc: RTCPeerConnection) {
+  for (const sender of pc.getSenders()) {
+    if (!sender.track) continue;
+    try {
+      const params = sender.getParameters();
+      if (!params.encodings || params.encodings.length === 0) {
+        params.encodings = [{ active: true }];
+      }
+      params.encodings[0].maxBitrate = sender.track.kind === 'video' ? MAX_VIDEO_BITRATE_BPS : MAX_AUDIO_BITRATE_BPS;
+      await sender.setParameters(params);
+    } catch (e) {
+      console.warn('[CallContext] failed to apply bandwidth limit', e);
+    }
+  }
+}
+
+/**
+ * Snapshot of this device's OWN total bytes for the call so far — sent
+ * independently by whichever side notices the call end (see
+ * resetCallState), never assumed symmetric with the other party's own
+ * report. outbound-rtp/inbound-rtp are the standard WebRTC stats report
+ * types that carry cumulative bytesSent/bytesReceived per RTP stream;
+ * summed across all of them (audio + video where applicable).
+ */
+async function collectByteUsage(pc: RTCPeerConnection): Promise<{ bytesSent: number; bytesReceived: number }> {
+  let bytesSent = 0;
+  let bytesReceived = 0;
+  try {
+    const stats = await pc.getStats();
+    stats.forEach((report: any) => {
+      if (report.type === 'outbound-rtp' && typeof report.bytesSent === 'number') {
+        bytesSent += report.bytesSent;
+      } else if (report.type === 'inbound-rtp' && typeof report.bytesReceived === 'number') {
+        bytesReceived += report.bytesReceived;
+      }
+    });
+  } catch (e) {
+    console.warn('[CallContext] failed to collect call stats', e);
+  }
+  return { bytesSent, bytesReceived };
+}
+
 // 'minimized' is a pure UI-presentation state layered on top of 'connected'
 // — the peer connection, streams and timers are all untouched by it, only
 // which component renders changes (CallOverlay's full Modal vs the small
@@ -76,6 +128,10 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   const pendingIceRef = useRef<CallIceCandidate[]>([]);
   const remoteDescriptionSetRef = useRef(false);
   const pendingInviteRef = useRef<CallInvite | null>(null);
+  // Only the side that placed the call (startCall, not acceptIncoming)
+  // drives ICE-restart renegotiation — see attemptIceRestart's own comment
+  // for why only one side may do this.
+  const isOffererRef = useRef(false);
 
   const [callState, setCallState] = useState<CallState>('idle');
   const callStateRef = useRef<CallState>('idle');
@@ -99,6 +155,16 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   const dismissGroupInvite = useCallback(() => setPendingGroupInvite(null), []);
 
   const resetCallState = useCallback(() => {
+    // Captured before close() below — grabbed synchronously so the native
+    // module snapshots stats for the still-open connection; the report
+    // itself is sent whenever that resolves, without blocking teardown.
+    const pc = pcRef.current;
+    const callId = activeCallIdRef.current;
+    if (pc && callId) {
+      collectByteUsage(pc).then(({ bytesSent, bytesReceived }) => {
+        socketRef.current?.sendUsageReport({ callId, bytesSent, bytesReceived });
+      });
+    }
     stopRingtone();
     setSpeakerphoneEnabled(false);
     pcRef.current?.close();
@@ -156,14 +222,43 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
           setCallState('connected');
         }
         setConnectedAt((prev) => prev ?? Date.now());
-      } else if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
-        // Remote side dropped without a clean call.end (network loss, app kill).
+      } else if (pc.connectionState === 'failed') {
+        // A real connectivity break — not the transient 'disconnected'
+        // state WebRTC often recovers from on its own within a few seconds
+        // without any action here. Renegotiate instead of just dropping
+        // the call, the same way a phone call rides out a wifi-to-cellular
+        // handoff rather than hanging up on it.
+        attemptIceRestart();
       }
+      // 'closed' (a clean call.end from either side) is handled entirely
+      // by resetCallState already — nothing extra needed here.
     };
 
     pcRef.current = pc;
     otherUserIdRef.current = toUserId;
     return pc;
+  }, []);
+
+  /**
+   * Only the offering side (startCall, never acceptIncoming — see
+   * isOffererRef) restarts, so both ends don't race to renegotiate at
+   * once: WebRTC's offer/answer model has no defined outcome for two
+   * simultaneous offers on the same connection ("glare"), and resolving
+   * that is real complexity this call setup has no need for when one side
+   * can simply always own it.
+   */
+  const attemptIceRestart = useCallback(async () => {
+    const pc = pcRef.current;
+    const callId = activeCallIdRef.current;
+    if (!pc || !callId || !isOffererRef.current) return;
+    try {
+      pc.restartIce();
+      const offer = await pc.createOffer({ iceRestart: true });
+      await pc.setLocalDescription(offer);
+      socketRef.current?.sendRenegotiateOffer({ callId, sdpOffer: offer.sdp ?? '' });
+    } catch (e) {
+      console.warn('[CallContext] ICE restart failed', e);
+    }
   }, []);
 
   const flushPendingIce = useCallback(async () => {
@@ -192,7 +287,9 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
       const pc = createPeerConnection(recipientId);
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+      applyBandwidthLimits(pc);
 
+      isOffererRef.current = true;
       activeCallIdRef.current = callId;
       setCallType(type);
       setOutgoingCall({ callId, toUserId: recipientId, toUserName: recipientName, type });
@@ -225,6 +322,8 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
     const pc = createPeerConnection(invite.fromUserId);
     stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+    applyBandwidthLimits(pc);
+    isOffererRef.current = false;
 
     await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: invite.sdpOffer }));
     remoteDescriptionSetRef.current = true;
@@ -391,6 +490,31 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       onEnd: (end) => {
         if (end.callId !== activeCallIdRef.current) return;
         resetCallState();
+      },
+      // Only reaches the non-offering side (see attemptIceRestart) —
+      // answer it the same way the original offer was answered, just over
+      // the renegotiate-answer relay instead of call.answer.
+      onRenegotiateOffer: async (offer) => {
+        const pc = pcRef.current;
+        if (!pc || offer.callId !== activeCallIdRef.current || isOffererRef.current) return;
+        try {
+          await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: offer.sdpOffer }));
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          socketRef.current?.sendRenegotiateAnswer({ callId: offer.callId, sdpAnswer: answer.sdp ?? '' });
+        } catch (e) {
+          console.warn('[CallContext] failed to answer ICE-restart renegotiation', e);
+        }
+      },
+      // Only reaches the offering side — the other half of attemptIceRestart.
+      onRenegotiateAnswer: async (answer) => {
+        const pc = pcRef.current;
+        if (!pc || answer.callId !== activeCallIdRef.current || !isOffererRef.current) return;
+        try {
+          await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: answer.sdpAnswer }));
+        } catch (e) {
+          console.warn('[CallContext] failed to apply ICE-restart answer', e);
+        }
       },
       onGroupInvite: (invite) => {
         // Own invite echoing back (the starting client is also a group

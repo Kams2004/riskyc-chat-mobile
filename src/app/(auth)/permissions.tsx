@@ -8,6 +8,7 @@ import Svg, { Path, Rect } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '../../components/Button';
+import { PersonIcon } from '../../components/icons';
 import { useTheme } from '../../features/theme/ThemeContext';
 import { config } from '../../lib/config';
 import { fonts, type Palette } from '../../theme';
@@ -51,7 +52,7 @@ export default function PermissionsScreen() {
 
       <View style={styles.items}>
         <PermItem colors={colors} title={t('permissions.contactsTitle')} desc={t('permissions.contactsDesc')}
-          icon={<Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={colors.brand500} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><Path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><Path d="M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" /></Svg>}
+          icon={<PersonIcon size={20} color={colors.brand500} />}
         />
         <PermItem colors={colors} title={t('permissions.mediaTitle')} desc={t('permissions.mediaDesc')}
           icon={<Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={colors.brand500} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><Rect x={3} y={3} width={18} height={18} rx={2} /><Path d="M3 9h18M9 21V9" /></Svg>}

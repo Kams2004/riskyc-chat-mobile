@@ -6,6 +6,7 @@ import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
 
 import { Avatar } from '../../../components/Avatar';
+import { PersonIcon } from '../../../components/icons';
 import { useAuth } from '../../../features/auth/AuthContext';
 import { useTheme, type ThemePreference } from '../../../features/theme/ThemeContext';
 import { getUser } from '../../../features/users/api';
@@ -184,12 +185,7 @@ export default function SettingsScreen() {
         <Row
           styles={styles}
           colors={colors}
-          icon={
-            <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={colors.brand600} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-              <Path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-              <Circle cx={12} cy={7} r={4} />
-            </Svg>
-          }
+          icon={<PersonIcon size={18} color={colors.brand600} />}
           label={t('index.account')}
           onPress={() => router.push('/(tabs)/settings/account' as never)}
         />

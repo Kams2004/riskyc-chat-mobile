@@ -15,6 +15,7 @@ import {
   Linking,
   Modal,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -34,7 +35,7 @@ import { Avatar } from '../../../components/Avatar';
 import { ChatOverflowMenu } from '../../../components/ChatOverflowMenu';
 import { ChatWallpaper } from '../../../components/ChatWallpaper';
 import { GalleryCaptionComposer, type PendingGalleryItem } from '../../../components/GalleryCaptionComposer';
-import { PhoneIcon } from '../../../components/icons';
+import { PhoneIcon, VideoIcon } from '../../../components/icons';
 import { MediaCaptionComposer, type PendingMedia } from '../../../components/MediaCaptionComposer';
 import { MediaViewer } from '../../../components/MediaViewer';
 import { MessageAttachmentGrid } from '../../../components/MessageAttachmentGrid';
@@ -1061,9 +1062,7 @@ export default function ChatThreadScreen() {
             if (recipientId && resolvedName) startCall(recipientId, resolvedName, 'AUDIO');
           }}
         >
-          <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={colors.textPrimary} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-            <Path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.902.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.908.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
-          </Svg>
+          <PhoneIcon size={20} color={colors.textPrimary} strokeWidth={1.8} />
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.headerActionTouchable}
@@ -1075,10 +1074,7 @@ export default function ChatThreadScreen() {
             if (recipientId && resolvedName) startCall(recipientId, resolvedName, 'VIDEO');
           }}
         >
-          <Svg width={21} height={21} viewBox="0 0 24 24" fill="none" stroke={colors.textPrimary} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-            <Path d="M23 7l-7 5 7 5V7z" />
-            <Rect x={1} y={5} width={15} height={14} rx={2} />
-          </Svg>
+          <VideoIcon size={21} color={colors.textPrimary} strokeWidth={1.8} />
         </TouchableOpacity>
         <TouchableOpacity style={styles.headerActionTouchable} onPress={() => setOverflowMenuVisible(true)}>
           <Svg width={20} height={20} viewBox="0 0 24 24" fill={colors.textPrimary}>
@@ -1347,7 +1343,16 @@ export default function ChatThreadScreen() {
                 </View>
               )}
               {item.media_type === 'AUDIO' && (
-                <View style={styles.mediaWrap}>
+                // Pressable with no visual feedback acts as a touch-stopper:
+                // it claims the tap event for itself so the outer bubble's
+                // TouchableOpacity (which has no onPress, only onLongPress)
+                // never receives it. Without this, RN's responder system lets
+                // the outer bubble win the touch when the finger lands anywhere
+                // on the AUDIO row — the play button's own hitSlop is then
+                // ignored for received messages (which additionally sit inside
+                // a PanGestureHandler). The Pressable itself does nothing on
+                // press; actual play/pause is handled inside VoiceMessageBubble.
+                <Pressable style={styles.mediaWrap} onPress={() => {}}>
                   <VoiceMessageBubble
                     objectKey={item.media_object_key ?? ''}
                     durationMs={item.media_duration_ms}
@@ -1362,7 +1367,7 @@ export default function ChatThreadScreen() {
                     trackColor={isMine ? 'rgba(255,255,255,0.35)' : 'rgba(230,0,74,0.25)'}
                     iconColor={isMine ? colors.brand600 : '#ffffff'}
                   />
-                </View>
+                </Pressable>
               )}
               {!!item.ciphertext && (
                 <Text style={isMine ? styles.outgoingText : styles.incomingText}>{item.ciphertext}</Text>

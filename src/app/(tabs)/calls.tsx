@@ -31,6 +31,12 @@ function statusLabel(row: CallRow, t: (key: string) => string): string {
   return row.isOutgoing ? t('status.outgoing') : t('status.incoming');
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)}KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+}
+
 export default function CallsScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -93,7 +99,16 @@ export default function CallsScreen() {
         data={calls}
         keyExtractor={(item) => item.id}
         contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE(insets.bottom) }}
-        renderItem={({ item }) => (
+        renderItem={({ item }) => {
+          const myBytesSent = item.isOutgoing ? item.callerBytesSent : item.calleeBytesSent;
+          const myBytesReceived = item.isOutgoing ? item.callerBytesReceived : item.calleeBytesReceived;
+          const otherBytesSent = item.isOutgoing ? item.calleeBytesSent : item.callerBytesSent;
+          const otherBytesReceived = item.isOutgoing ? item.calleeBytesReceived : item.callerBytesReceived;
+          // Only shows once a side actually reported (calls that never
+          // connected have nothing to show) — the two are never assumed
+          // symmetric, so both are always shown separately, never averaged.
+          const hasUsage = myBytesSent != null || otherBytesSent != null;
+          return (
           <TouchableOpacity style={styles.row} onPress={() => redial(item, item.type)}>
             <Avatar objectKey={item.otherAvatarKey} label={item.otherName} size={48} />
             <View style={{ flex: 1 }}>
@@ -106,6 +121,13 @@ export default function CallsScreen() {
                   {statusLabel(item, t)} · {formatWhen(item.startedAt)}
                 </Text>
               </View>
+              {hasUsage && (
+                <Text style={styles.usage} numberOfLines={1}>
+                  {t('screen.dataUsageYou', { amount: formatBytes((myBytesSent ?? 0) + (myBytesReceived ?? 0)) })}
+                  {'  ·  '}
+                  {t('screen.dataUsageThem', { amount: formatBytes((otherBytesSent ?? 0) + (otherBytesReceived ?? 0)) })}
+                </Text>
+              )}
             </View>
             <TouchableOpacity style={styles.callButton} onPress={() => redial(item, item.type)}>
               {item.type === 'VIDEO' ? (
@@ -115,7 +137,8 @@ export default function CallsScreen() {
               )}
             </TouchableOpacity>
           </TouchableOpacity>
-        )}
+          );
+        }}
       />
     </View>
   );
@@ -138,6 +161,7 @@ function makeStyles(colors: Palette) {
     name: { fontFamily: fonts.sansSemiBold, fontSize: 15.5, color: colors.textPrimary },
     subRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
     sub: { fontFamily: fonts.sans, fontSize: 12.5, color: colors.textMuted },
+    usage: { fontFamily: fonts.sans, fontSize: 11, color: colors.textMuted, marginTop: 2 },
     callButton: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.tint1 },
   });
 }

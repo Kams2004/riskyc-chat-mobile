@@ -21,6 +21,8 @@ export type CallIceCandidate = {
   sdpMLineIndex: number | null;
 };
 export type CallEnd = { callId: string; fromUserId: string; reason: string };
+export type CallRenegotiateOffer = { callId: string; fromUserId: string; sdpOffer: string };
+export type CallUsageReport = { callId: string; bytesSent: number; bytesReceived: number };
 /** roomId is always === groupId (see backend/sfu-service's room model) — carried anyway for symmetry with CallInvite's callId. */
 export type GroupCallInviteMessage = { roomId: string; groupId: string; callerId: string; callerName: string; callType: CallType };
 
@@ -31,6 +33,10 @@ type Handlers = {
   onAnswer?: (answer: CallAnswer) => void;
   onIce?: (ice: CallIceCandidate) => void;
   onEnd?: (end: CallEnd) => void;
+  /** The non-offering side's response to attemptIceRestart's renegotiation offer. */
+  onRenegotiateOffer?: (offer: CallRenegotiateOffer) => void;
+  /** Only the offering side (the one who called startCall, not acceptIncoming) ever receives this. */
+  onRenegotiateAnswer?: (answer: CallAnswer) => void;
   /** Fanned out via messaging-service's GroupCallController — a different call system (sfu-service) entirely, riding this same persistent channel purely for delivery, same as 1:1 invites. */
   onGroupInvite?: (invite: GroupCallInviteMessage) => void;
 };
@@ -75,6 +81,12 @@ export class CallSignalingSocket {
           case 'end':
             handlers.onEnd?.(body as CallEnd);
             break;
+          case 'renegotiate-offer':
+            handlers.onRenegotiateOffer?.(body as CallRenegotiateOffer);
+            break;
+          case 'renegotiate-answer':
+            handlers.onRenegotiateAnswer?.(body as CallAnswer);
+            break;
           case 'group-invite':
             handlers.onGroupInvite?.(body as GroupCallInviteMessage);
             break;
@@ -107,6 +119,19 @@ export class CallSignalingSocket {
 
   sendEnd(end: Omit<CallEnd, 'fromUserId'>) {
     this.enqueue({ destination: '/app/call.end', body: JSON.stringify(end) });
+  }
+
+  sendRenegotiateOffer(offer: Omit<CallRenegotiateOffer, 'fromUserId'>) {
+    this.enqueue({ destination: '/app/call.renegotiate', body: JSON.stringify(offer) });
+  }
+
+  sendRenegotiateAnswer(answer: Omit<CallAnswer, 'fromUserId'>) {
+    this.enqueue({ destination: '/app/call.renegotiate-answer', body: JSON.stringify(answer) });
+  }
+
+  /** Fire-and-forget, best-effort — a lost usage report just means that side's data column stays null in the call log, nothing else depends on it. */
+  sendUsageReport(report: CallUsageReport) {
+    this.enqueue({ destination: '/app/call.report-usage', body: JSON.stringify(report) });
   }
 
   private enqueue(frame: QueuedFrame) {

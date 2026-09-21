@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Avatar } from '../../../components/Avatar';
 import { Button } from '../../../components/Button';
+import { PersonIcon } from '../../../components/icons';
 import { KeyboardScreen } from '../../../components/KeyboardScreen';
 import { useAuth } from '../../../features/auth/AuthContext';
 import { uploadImage } from '../../../features/media/api';
@@ -114,10 +115,7 @@ export default function EditProfileScreen() {
                     {name.trim().slice(0, 2).toUpperCase()}
                   </Text>
                 ) : (
-                  <Svg width={52} height={52} viewBox="0 0 24 24" fill="none" stroke={colors.brand700} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                    <Path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                    <Path d="M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" />
-                  </Svg>
+                  <PersonIcon size={52} color={colors.brand700} strokeWidth={1.8} />
                 )}
               </View>
             )}

@@ -10,6 +10,14 @@ export type CallResult = {
   startedAt: string;
   answeredAt: string | null;
   endedAt: string | null;
+  // Each side reports its own totals independently at call teardown — never
+  // assumed symmetric (video-heavy content, packet loss, or which side
+  // mostly sends vs. receives can make these genuinely different). Null
+  // until that side actually reports, e.g. a call that never connected.
+  callerBytesSent: number | null;
+  callerBytesReceived: number | null;
+  calleeBytesSent: number | null;
+  calleeBytesReceived: number | null;
 };
 
 export function listCallHistory(): Promise<CallResult[]> {

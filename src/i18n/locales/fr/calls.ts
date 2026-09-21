@@ -2,6 +2,8 @@ export default {
   screen: {
     title: 'Appels',
     empty: 'Aucun appel pour le moment',
+    dataUsageYou: 'Vous : {{amount}}',
+    dataUsageThem: 'Eux : {{amount}}',
   },
   status: {
     missed: 'Manqué',

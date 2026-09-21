@@ -101,7 +101,16 @@ export function useInboxSocket() {
         // single recipient) — the fact that the server routed it to MY OWN
         // queue at all (see ChatController#send's per-member loop) is already
         // the guarantee that it's for me, so it must NOT be checked here.
-        if (cancelled || (!envelope.groupId && envelope.recipientId !== userId)) return;
+        //
+        // CALL log messages (mediaType === 'CALL') are an exception: the
+        // backend logs them with recipientId = calleeId and senderId =
+        // callerId regardless of which party's queue is receiving them —
+        // both parties get the envelope so the log appears in both threads.
+        // Without this carve-out, the caller's queue silently drops the
+        // message (recipientId !== callerId = userId), and the call log
+        // never shows up in the caller's conversation.
+        const isCallLog = envelope.mediaType === 'CALL';
+        if (cancelled || (!envelope.groupId && !isCallLog && envelope.recipientId !== userId)) return;
 
         await upsertMessage(db, {
           message_id: envelope.messageId,
@@ -129,7 +138,11 @@ export function useInboxSocket() {
           reply_to_status_id: envelope.replyToStatusId ?? null,
           reply_to_status_owner_id: envelope.replyToStatusOwnerId ?? null,
         });
-        playNotificationSound();
+        // CALL log entries are a backend-generated event summary, not
+        // something a person typed or sent — no notification sound, and
+        // no delivery ACK either (the backend never expects one for these;
+        // they have no meaningful "status" lifecycle of their own).
+        if (!isCallLog) playNotificationSound();
 
         let title = await getConversationTitle(db, envelope.conversationId);
         let avatarObjectKey: string | null | undefined;
@@ -163,10 +176,13 @@ export function useInboxSocket() {
         }
         await upsertConversation(db, envelope.conversationId, title, envelope.sentAt, avatarObjectKey, !!envelope.groupId);
 
-        if (envelope.groupId) {
-          socket.sendGroupAck({ conversationId: envelope.conversationId, messageIds: [envelope.messageId], status: 'DELIVERED' });
-        } else {
-          socket.sendAck({ conversationId: envelope.conversationId, messageIds: [envelope.messageId], status: 'DELIVERED' });
+        // CALL log messages don't have a status lifecycle — skip the ACK.
+        if (!isCallLog) {
+          if (envelope.groupId) {
+            socket.sendGroupAck({ conversationId: envelope.conversationId, messageIds: [envelope.messageId], status: 'DELIVERED' });
+          } else {
+            socket.sendAck({ conversationId: envelope.conversationId, messageIds: [envelope.messageId], status: 'DELIVERED' });
+          }
         }
 
         if (!cancelled) DeviceEventEmitter.emit(CONVERSATIONS_CHANGED_EVENT);
