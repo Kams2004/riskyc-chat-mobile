@@ -2,7 +2,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Path, Rect } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
 
 import { useAuth } from '../../../features/auth/AuthContext';
@@ -77,6 +77,16 @@ export default function DevicesScreen() {
         <View style={{ width: 40 }} />
       </View>
 
+      <TouchableOpacity style={styles.linkDeviceRow} onPress={() => router.push('/(tabs)/settings/link-device' as never)}>
+        <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={colors.brand600} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+          <Rect x={3} y={3} width={7} height={7} rx={1} />
+          <Rect x={14} y={3} width={7} height={7} rx={1} />
+          <Rect x={3} y={14} width={7} height={7} rx={1} />
+          <Path d="M14 14h3v3h-3zM14 21h3M21 14v3M17.5 21H21v-3.5" />
+        </Svg>
+        <Text style={styles.linkDeviceLabel}>{t('devices.linkDevice')}</Text>
+      </TouchableOpacity>
+
       {isLoading && sessions.length === 0 && <ActivityIndicator color={colors.brand500} style={{ marginTop: 24 }} />}
 
       <FlatList
@@ -111,6 +121,15 @@ function makeStyles(colors: Palette) {
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
     iconTouchable: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
     headerTitle: { fontFamily: fonts.sansSemiBold, fontSize: 16.5, color: colors.textPrimary },
+    linkDeviceRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      paddingVertical: 14,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.hairline,
+    },
+    linkDeviceLabel: { fontFamily: fonts.sansMedium, fontSize: 15, color: colors.brand600 },
     row: {
       flexDirection: 'row',
       alignItems: 'center',

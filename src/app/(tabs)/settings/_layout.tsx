@@ -9,6 +9,7 @@ export default function SettingsLayout() {
       <Stack.Screen name="delete-account" />
       <Stack.Screen name="change-identifier" />
       <Stack.Screen name="devices" />
+      <Stack.Screen name="link-device" />
       <Stack.Screen name="privacy" />
       <Stack.Screen name="language" />
       <Stack.Screen name="wallpaper" />
