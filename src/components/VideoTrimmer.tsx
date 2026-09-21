@@ -4,7 +4,7 @@ import { useVideoPlayer, VideoView } from 'expo-video';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import { useEffect, useRef, useState } from 'react';
 import { Image, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { PanGestureHandler, State, type PanGestureHandlerGestureEvent, type PanGestureHandlerStateChangeEvent } from 'react-native-gesture-handler';
+import { GestureHandlerRootView, PanGestureHandler, State, type PanGestureHandlerGestureEvent, type PanGestureHandlerStateChangeEvent } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 
@@ -186,7 +186,12 @@ export function VideoTrimmer({
 
   return (
     <Modal visible animationType="fade" onRequestClose={onCancel}>
-      <View style={styles.container}>
+      {/* Modal portals its content into its own native window, separate
+          from the one _layout.tsx's own GestureHandlerRootView wraps — the
+          PanGestureHandler below (and, once it's active but un-rooted, even
+          plain touches on this screen) silently stops responding without
+          a GestureHandlerRootView of its own in here. */}
+      <GestureHandlerRootView style={styles.container}>
         <TouchableOpacity style={styles.preview} activeOpacity={1} onPress={togglePlayback}>
           <VideoView player={player} style={StyleSheet.absoluteFill} contentFit="contain" nativeControls={false} />
           {!isPlaying && (
@@ -258,7 +263,7 @@ export function VideoTrimmer({
             </TouchableOpacity>
           </View>
         </View>
-      </View>
+      </GestureHandlerRootView>
     </Modal>
   );
 }
