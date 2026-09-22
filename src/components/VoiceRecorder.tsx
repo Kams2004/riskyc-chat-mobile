@@ -14,12 +14,40 @@ import { useTheme } from '../features/theme/ThemeContext';
 import { fonts, type Palette } from '../theme';
 
 const MAX_BARS = 40;
+// Bar count the final, stored waveform gets resampled to — matches web's
+// VoiceMessagePlayer so a voice note looks the same density on either
+// platform, though there's no hard requirement they match.
+const FINAL_BAR_COUNT = 46;
 // Rough dBFS-to-visual-height normalization — expo-audio's metering follows
 // the usual AVAudioRecorder-style convention (~-60 near-silence, 0 = peak);
 // there's no need for exact calibration, just a waveform that visibly moves.
 function normalizeMetering(db: number | undefined): number {
   if (db === undefined) return 0.05;
   return Math.min(1, Math.max(0.05, (db + 60) / 60));
+}
+
+/** Downsamples the full, unbounded metering history captured over the whole recording into a fixed-length bar array (averaged per bucket) for storage/playback — independent of how long the recording ran or how many raw 100ms samples that produced. */
+function resampleToFixedBars(raw: number[], targetCount: number): number[] {
+  if (raw.length === 0) return new Array(targetCount).fill(0.05);
+  const bucketSize = raw.length / targetCount;
+  const bars: number[] = [];
+  for (let i = 0; i < targetCount; i++) {
+    const start = Math.floor(i * bucketSize);
+    const end = Math.max(start + 1, Math.floor((i + 1) * bucketSize));
+    let sum = 0;
+    let count = 0;
+    for (let j = start; j < end && j < raw.length; j++) {
+      sum += raw[j];
+      count++;
+    }
+    bars.push(count > 0 ? sum / count : 0.05);
+  }
+  return bars;
+}
+
+/** Comma-separated 0-100 ints — compact and trivial to parse back on either platform, no JSON-in-a-column needed. */
+function encodeWaveform(bars: number[]): string {
+  return bars.map((v) => Math.round(Math.min(1, Math.max(0, v)) * 100)).join(',');
 }
 
 function formatDuration(ms: number): string {
@@ -30,7 +58,7 @@ function formatDuration(ms: number): string {
 }
 
 type VoiceRecorderProps = {
-  onSend: (objectKey: string, durationMs: number) => void;
+  onSend: (objectKey: string, durationMs: number, waveform: string) => void;
   onCancel: () => void;
 };
 
@@ -45,6 +73,11 @@ export function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) {
   const [bars, setBars] = useState<number[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const startedRef = useRef(false);
+  // Unbounded, unlike `bars` (which is trimmed to MAX_BARS for the live
+  // display) — every metering sample across the whole recording, so the
+  // final stored waveform reflects the entire clip, not just its last few
+  // seconds.
+  const fullMeteringRef = useRef<number[]>([]);
 
   useEffect(() => {
     if (startedRef.current) return;
@@ -64,7 +97,9 @@ export function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) {
 
   useEffect(() => {
     if (!state.isRecording) return;
-    setBars((prev) => [...prev.slice(-(MAX_BARS - 1)), normalizeMetering(state.metering)]);
+    const normalized = normalizeMetering(state.metering);
+    fullMeteringRef.current.push(normalized);
+    setBars((prev) => [...prev.slice(-(MAX_BARS - 1)), normalized]);
   }, [state.metering, state.isRecording]);
 
   async function handleDiscard() {
@@ -87,7 +122,8 @@ export function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) {
       const uri = recorder.uri;
       if (!uri) throw new Error('No recording produced');
       const objectKey = await uploadMedia(uri, 'audio/m4a');
-      onSend(objectKey, state.durationMillis);
+      const waveform = encodeWaveform(resampleToFixedBars(fullMeteringRef.current, FINAL_BAR_COUNT));
+      onSend(objectKey, state.durationMillis, waveform);
     } catch (e) {
       console.warn('[VoiceRecorder] send failed', e);
       Alert.alert(t('voiceRecorder.sendFailedTitle'), t('voiceRecorder.sendFailedBody'));

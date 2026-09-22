@@ -19,6 +19,8 @@ export type MessageEnvelope = {
   mediaObjectKey?: string | null;
   mediaFileName?: string | null;
   mediaDurationMs?: number | null;
+  /** Comma-separated normalized amplitude samples (0-100 ints) for an AUDIO message — real data captured live during recording, not derived server-side. Null for every non-voice message and for voice messages sent before this field existed. */
+  waveform?: string | null;
   edited?: boolean;
   deleted?: boolean;
   /** Set only for a group message — absent/null for 1:1. */

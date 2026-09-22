@@ -1011,11 +1011,11 @@ export default function ChatThreadScreen() {
     }
   }
 
-  async function handleSendVoice(objectKey: string, durationMs: number) {
+  async function handleSendVoice(objectKey: string, durationMs: number, waveform: string) {
     setIsRecording(false);
     const reply = replyDraft ?? undefined;
     setReplyDraft(null);
-    await sendMessage('', { type: 'AUDIO', objectKey, durationMs }, undefined, reply);
+    await sendMessage('', { type: 'AUDIO', objectKey, durationMs, waveform }, undefined, reply);
   }
 
   return (
@@ -1356,6 +1356,7 @@ export default function ChatThreadScreen() {
                   <VoiceMessageBubble
                     objectKey={item.media_object_key ?? ''}
                     durationMs={item.media_duration_ms}
+                    waveform={item.media_waveform}
                     tintColor={isMine ? '#ffffff' : colors.brand600}
                     // colors.tint2 IS the incoming bubble's own background
                     // (see its own doc comment in theme.ts) — using it here

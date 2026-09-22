@@ -6,7 +6,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
  * half of the "local-first sync" approach from the architecture proposal —
  * the UI always reads from SQLite, never waits on the network round trip.
  */
-const CURRENT_VERSION = 12;
+const CURRENT_VERSION = 13;
 
 export async function migrateDbIfNeeded(db: SQLiteDatabase) {
   const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
@@ -190,6 +190,16 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
       ALTER TABLE messages ADD COLUMN reply_to_status_owner_id TEXT;
     `);
     version = 12;
+  }
+
+  if (version === 12) {
+    // Real per-message voice waveform — comma-separated normalized amplitude
+    // samples captured live during recording (see VoiceRecorder's metering),
+    // replacing the fake per-objectKey pattern VoiceMessageBubble previously
+    // synthesized. Null for every message sent before this column existed;
+    // those fall back to the old synthesized pattern client-side.
+    await db.execAsync(`ALTER TABLE messages ADD COLUMN media_waveform TEXT;`);
+    version = 13;
   }
 
   await db.execAsync(`PRAGMA user_version = ${CURRENT_VERSION}`);

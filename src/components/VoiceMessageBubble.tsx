@@ -18,6 +18,7 @@ function formatSeconds(totalSeconds: number): string {
   return `${minutes}:${(seconds % 60).toString().padStart(2, '0')}`;
 }
 
+/** Only used for a voice message sent before the real-waveform field existed (waveform is null) — never for anything recorded since. */
 function pseudoWaveform(seed: string): number[] {
   let h = 0;
   for (let i = 0; i < seed.length; i++) {
@@ -34,23 +35,31 @@ function pseudoWaveform(seed: string): number[] {
 type VoiceMessageBubbleProps = {
   objectKey: string;
   durationMs: number | null;
+  /** Comma-separated 0-100 ints captured live during recording — see VoiceRecorder's resampleToFixedBars/encodeWaveform. Null for a message sent before this field existed, in which case the bars fall back to a synthesized placeholder pattern. */
+  waveform?: string | null;
   tintColor: string;
   trackColor: string;
   iconColor: string;
 };
 
-export function VoiceMessageBubble({ objectKey, durationMs, tintColor, trackColor, iconColor }: VoiceMessageBubbleProps) {
+export function VoiceMessageBubble({ objectKey, durationMs, waveform, tintColor, trackColor, iconColor }: VoiceMessageBubbleProps) {
   const url = useMediaUrl(objectKey);
   const player = useAudioPlayer(url ?? undefined);
   const status = useAudioPlayerStatus(player);
-  const bars = useMemo(() => pseudoWaveform(objectKey), [objectKey]);
+  const bars = useMemo(() => {
+    if (waveform) {
+      const parsed = waveform.split(',').map((v) => Math.max(0, Math.min(100, parseInt(v, 10) || 0)) / 100);
+      if (parsed.length > 0) return parsed;
+    }
+    return pseudoWaveform(objectKey);
+  }, [waveform, objectKey]);
   const [speed, setSpeed] = useState<Speed>(1);
   const waveformWidthRef = useRef<number>(0);
 
   const duration = status.duration || (durationMs ? durationMs / 1000 : 0);
   const progress = duration > 0 ? Math.min(1, status.currentTime / duration) : 0;
   const remaining = status.playing ? duration - status.currentTime : duration;
-  const playedBars = Math.round(progress * BAR_COUNT);
+  const playedBars = Math.round(progress * bars.length);
 
   function cycleSpeed() {
     const nextIndex = (SPEEDS.indexOf(speed) + 1) % SPEEDS.length;

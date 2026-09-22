@@ -34,6 +34,8 @@ export type OutgoingMedia = {
   objectKey: string;
   fileName?: string | null;
   durationMs?: number | null;
+  /** Comma-separated normalized amplitude samples (0-100 ints) — AUDIO only, see VoiceRecorder. */
+  waveform?: string | null;
 };
 
 export type UseConversationParams = {
@@ -65,6 +67,7 @@ function envelopeToLocalMessage(envelope: messagingApi.MessageEnvelope): LocalMe
     media_object_key: envelope.mediaObjectKey ?? null,
     media_file_name: envelope.mediaFileName ?? null,
     media_duration_ms: envelope.mediaDurationMs ?? null,
+    media_waveform: envelope.waveform ?? null,
     edited: envelope.edited ? 1 : 0,
     deleted: envelope.deleted ? 1 : 0,
     forwarded: envelope.forwarded ? 1 : 0,
@@ -410,6 +413,7 @@ export function useConversation({
         mediaObjectKey: media?.objectKey,
         mediaFileName: media?.fileName,
         mediaDurationMs: media?.durationMs,
+        waveform: media?.waveform,
         attachments: attachmentDtos,
         replyToMessageId: replyTo?.messageId ?? null,
         replyToConversationId: replyTo?.conversationId ?? null,
@@ -431,6 +435,7 @@ export function useConversation({
         media_object_key: media?.objectKey ?? null,
         media_file_name: media?.fileName ?? null,
         media_duration_ms: media?.durationMs ?? null,
+        media_waveform: media?.waveform ?? null,
         edited: 0,
         deleted: 0,
         forwarded: 0,

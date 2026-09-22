@@ -47,6 +47,7 @@ export async function forwardMessage(
     mediaObjectKey: source.media_object_key ?? undefined,
     mediaFileName: source.media_file_name ?? undefined,
     mediaDurationMs: source.media_duration_ms ?? undefined,
+    waveform: source.media_waveform ?? undefined,
     forwarded: true,
     attachments: attachments.length > 0 ? attachments : undefined,
   };
@@ -63,6 +64,7 @@ export async function forwardMessage(
     media_object_key: source.media_object_key,
     media_file_name: source.media_file_name,
     media_duration_ms: source.media_duration_ms,
+    media_waveform: source.media_waveform,
     edited: 0,
     deleted: 0,
     forwarded: 1,

@@ -51,6 +51,7 @@ export async function sendStatusReply(
     media_object_key: null,
     media_file_name: null,
     media_duration_ms: null,
+    media_waveform: null,
     edited: 0,
     deleted: 0,
     forwarded: 0,

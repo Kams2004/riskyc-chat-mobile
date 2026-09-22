@@ -124,6 +124,7 @@ export function useInboxSocket() {
           media_object_key: envelope.mediaObjectKey ?? null,
           media_file_name: envelope.mediaFileName ?? null,
           media_duration_ms: envelope.mediaDurationMs ?? null,
+          media_waveform: envelope.waveform ?? null,
           edited: envelope.edited ? 1 : 0,
           deleted: envelope.deleted ? 1 : 0,
           forwarded: envelope.forwarded ? 1 : 0,
