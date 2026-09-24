@@ -10,6 +10,8 @@ export type AttachmentItem = {
   mediaObjectKey: string;
   mediaFileName: string | null;
   mediaDurationMs: number | null;
+  /** Bytes, client-supplied at send time — feeds the combined-size download gate shown before a multi-item gallery has been fetched. Null for an item sent before this field existed. */
+  mediaFileSize?: number | null;
 };
 
 export type LocalMessage = {

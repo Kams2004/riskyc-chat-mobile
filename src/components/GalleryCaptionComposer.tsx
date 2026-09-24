@@ -8,7 +8,7 @@ import { useTranslation } from 'react-i18next';
 import { useTheme } from '../features/theme/ThemeContext';
 import { fonts, gradients, type Palette } from '../theme';
 
-export type PendingGalleryItem = { uri: string; type: 'IMAGE' | 'VIDEO'; mimeType?: string };
+export type PendingGalleryItem = { uri: string; type: 'IMAGE' | 'VIDEO'; mimeType?: string; fileSize?: number };
 
 type GalleryCaptionComposerProps = {
   items: PendingGalleryItem[] | null;

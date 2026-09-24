@@ -38,6 +38,8 @@ export type OutgoingMedia = {
   waveform?: string | null;
   /** IMAGE only — drawing/text overlay created in ImageEditor. See components/StatusOverlayView.ts. */
   overlayJson?: string | null;
+  /** Bytes — gallery items only, feeds the combined-size download gate. */
+  fileSize?: number | null;
 };
 
 export type UseConversationParams = {
@@ -400,6 +402,7 @@ export function useConversation({
               mediaObjectKey: a.objectKey,
               mediaFileName: a.fileName ?? null,
               mediaDurationMs: a.durationMs ?? null,
+              mediaFileSize: a.fileSize ?? null,
             }))
           : undefined;
       const envelope = {

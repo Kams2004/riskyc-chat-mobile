@@ -981,6 +981,7 @@ export default function ChatThreadScreen() {
         uri: asset.uri,
         type: asset.type === 'video' ? 'VIDEO' : 'IMAGE',
         mimeType: asset.mimeType,
+        fileSize: asset.fileSize,
       }))
     );
   }
@@ -1041,7 +1042,7 @@ export default function ChatThreadScreen() {
       const uploaded = await Promise.all(
         items.map(async (item) => {
           const objectKey = await uploadMedia(item.uri, item.mimeType ?? (item.type === 'VIDEO' ? 'video/mp4' : 'image/jpeg'));
-          return { type: item.type, objectKey };
+          return { type: item.type, objectKey, fileSize: item.fileSize };
         })
       );
       await sendMessage(caption, undefined, uploaded, reply);
