@@ -31,6 +31,7 @@ import Svg, { Path, Rect } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
 
 import { AttachmentSheet } from '../../../components/AttachmentSheet';
+import { Spinner } from '../../../components/Spinner';
 import { StickerMessage } from '../../../components/StickerMessage';
 import { StickerPicker } from '../../../components/StickerPicker';
 import { Avatar } from '../../../components/Avatar';
@@ -50,7 +51,7 @@ import { getGroup, SYSTEM_MEMBER_JOINED } from '../../../features/groups/api';
 import { uploadMedia } from '../../../features/media/api';
 import { saveSticker } from '../../../features/stickers/api';
 import { invalidateSavedStickerKeys } from '../../../features/stickers/savedKeysCache';
-import { useMediaUrl } from '../../../features/media/useMediaUrl';
+import { useMediaUrl, useMediaUrlWithStatus } from '../../../features/media/useMediaUrl';
 import {
   conversationIdFor,
   looksLikeUnresolvedName,
@@ -209,24 +210,47 @@ function MessageTicks({ status }: { status: LocalMessage['status'] }) {
 }
 
 function MessageImage({ objectKey, onPress }: { objectKey: string | null; onPress?: () => void }) {
-  const url = useMediaUrl(objectKey);
+  const { url, status, retry } = useMediaUrlWithStatus(objectKey);
+  const [imgFailed, setImgFailed] = useState(false);
+  useEffect(() => setImgFailed(false), [url]);
+  const effectiveStatus = imgFailed ? 'error' : status;
+
+  if (effectiveStatus === 'error') {
+    return (
+      <TouchableOpacity
+        style={imageStyles.placeholder}
+        onPress={() => {
+          setImgFailed(false);
+          retry();
+        }}
+        activeOpacity={0.7}
+      >
+        <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+          <Path d="M21 12a9 9 0 1 1-3-6.7M21 4v5h-5" />
+        </Svg>
+        <Text style={imageStyles.retryText}>Retry</Text>
+      </TouchableOpacity>
+    );
+  }
+
   if (!url) {
     return (
       <View style={imageStyles.placeholder}>
-        <ActivityIndicator color="#ffffff" />
+        <Spinner size={40} color="#ffffff" />
       </View>
     );
   }
   return (
     <TouchableOpacity onPress={onPress} disabled={!onPress} activeOpacity={0.9}>
-      <Image source={{ uri: url }} style={imageStyles.image} />
+      <Image source={{ uri: url }} style={imageStyles.image} onError={() => setImgFailed(true)} />
     </TouchableOpacity>
   );
 }
 
 const imageStyles = StyleSheet.create({
-  placeholder: { width: 220, height: 220, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.15)' },
+  placeholder: { width: 220, height: 220, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.15)', gap: 6 },
   image: { width: 220, height: 220, borderRadius: 12 },
+  retryText: { color: '#ffffff', fontFamily: fonts.sansSemiBold, fontSize: 12 },
 });
 
 /**
@@ -237,15 +261,26 @@ const imageStyles = StyleSheet.create({
  * actual playback, so there's only one video-playback implementation.
  */
 function MessageVideo({ objectKey, durationMs, onPress }: { objectKey: string | null; durationMs: number | null; onPress?: () => void }) {
-  const url = useMediaUrl(objectKey);
+  const { url, status, retry } = useMediaUrlWithStatus(objectKey);
   const player = useVideoPlayer(url ?? '', (p) => {
     p.muted = true;
   });
 
+  if (status === 'error') {
+    return (
+      <TouchableOpacity style={imageStyles.placeholder} onPress={retry} activeOpacity={0.7}>
+        <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+          <Path d="M21 12a9 9 0 1 1-3-6.7M21 4v5h-5" />
+        </Svg>
+        <Text style={imageStyles.retryText}>Retry</Text>
+      </TouchableOpacity>
+    );
+  }
+
   if (!url) {
     return (
       <View style={imageStyles.placeholder}>
-        <ActivityIndicator color="#ffffff" />
+        <Spinner size={40} color="#ffffff" />
       </View>
     );
   }
