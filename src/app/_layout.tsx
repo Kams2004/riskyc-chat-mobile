@@ -20,19 +20,18 @@ import { AuthProvider, useAuth } from '../features/auth/AuthContext';
 import { initI18n } from '../i18n';
 import { CallProvider } from '../features/calls/CallContext';
 import { GroupCallProvider } from '../features/calls/GroupCallContext';
-import { useAppVersionCheck } from '../features/appVersion/useAppVersionCheck';
 import { useContactsSync } from '../features/contacts/useContactsSync';
 import { useInboxSocket } from '../features/messaging/inboxSocket';
 import { usePushNotifications } from '../features/notifications/usePushNotifications';
 import { usePresenceHeartbeat } from '../features/presence/usePresenceHeartbeat';
 import { ThemeProvider, useTheme } from '../features/theme/ThemeContext';
 import { WallpaperProvider } from '../features/wallpaper/WallpaperContext';
+import { checkForInAppUpdate } from '../lib/inAppUpdate';
 import { loadPreferences } from '../lib/preferences';
 import { CallOverlay } from '../components/CallOverlay';
 import { GroupCallOverlay } from '../components/GroupCallOverlay';
 import { IncomingGroupCallBanner } from '../components/IncomingGroupCallBanner';
 import { MinimizedCallBubble } from '../components/MinimizedCallBubble';
-import { UpdatePromptModal } from '../components/UpdatePromptModal';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -96,8 +95,12 @@ function Root() {
   usePresenceHeartbeat();
   usePushNotifications();
   useContactsSync();
-  const updatePromptState = useAppVersionCheck();
-  const [updatePromptDismissed, setUpdatePromptDismissed] = useState(false);
+
+  // Nudges toward the latest Play Store version instead of relying purely
+  // on Android's own background auto-update schedule — see inAppUpdate.ts.
+  useEffect(() => {
+    checkForInAppUpdate();
+  }, []);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -106,10 +109,6 @@ function Root() {
       <GroupCallOverlay />
       <IncomingGroupCallBanner />
       <MinimizedCallBubble />
-      <UpdatePromptModal
-        state={updatePromptDismissed ? null : updatePromptState}
-        onDismiss={() => setUpdatePromptDismissed(true)}
-      />
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       {/* Android-only (no-ops elsewhere) — without this the system nav bar
           never follows this app's OWN theme preference (which can differ
