@@ -17,6 +17,7 @@ export default {
     video: '🎥 Vidéo',
     voiceMessage: '🎤 Message vocal',
     document: '📎 Document',
+    sticker: 'Autocollant',
     typing: 'écrit',
     tabChats: 'Discussions',
     tabArchived: 'Archivées',
@@ -60,6 +61,7 @@ export default {
       video: '🎥 Vidéo',
       voiceMessage: '🎤 Message vocal',
       document: '📎 Document',
+      sticker: 'Autocollant',
       photosCount: '📷 {{count}} photos',
     },
     reportSender: {

@@ -68,6 +68,7 @@ function lastMessagePreview(
   if (type === 'VIDEO') return { text: `${prefix}${t('list.video')}`, isMedia: true };
   if (type === 'AUDIO') return { text: `${prefix}${t('list.voiceMessage')}`, isMedia: true };
   if (type === 'FILE') return { text: `${prefix}${t('list.document')}`, isMedia: true };
+  if (type === 'STICKER') return { text: `${prefix}${t('list.sticker')}`, isMedia: true };
   if (item.last_message_snippet) return { text: `${prefix}${item.last_message_snippet}`, isMedia: false };
   return { text: '', isMedia: false };
 }

@@ -17,6 +17,7 @@ export default {
     video: '🎥 Video',
     voiceMessage: '🎤 Voice message',
     document: '📎 Document',
+    sticker: 'Sticker',
     typing: 'typing',
     tabChats: 'Chats',
     tabArchived: 'Archived',
@@ -60,6 +61,7 @@ export default {
       video: '🎥 Video',
       voiceMessage: '🎤 Voice message',
       document: '📎 Document',
+      sticker: 'Sticker',
       photosCount: '📷 {{count}} photos',
     },
     reportSender: {

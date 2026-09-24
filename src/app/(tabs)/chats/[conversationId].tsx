@@ -31,6 +31,8 @@ import Svg, { Path, Rect } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
 
 import { AttachmentSheet } from '../../../components/AttachmentSheet';
+import { StickerMessage } from '../../../components/StickerMessage';
+import { StickerPicker } from '../../../components/StickerPicker';
 import { Avatar } from '../../../components/Avatar';
 import { ChatOverflowMenu } from '../../../components/ChatOverflowMenu';
 import { ChatWallpaper } from '../../../components/ChatWallpaper';
@@ -46,6 +48,8 @@ import { useCall } from '../../../features/calls/CallContext';
 import { useGroupCall } from '../../../features/calls/GroupCallContext';
 import { getGroup, SYSTEM_MEMBER_JOINED } from '../../../features/groups/api';
 import { uploadMedia } from '../../../features/media/api';
+import { saveSticker } from '../../../features/stickers/api';
+import { invalidateSavedStickerKeys } from '../../../features/stickers/savedKeysCache';
 import { useMediaUrl } from '../../../features/media/useMediaUrl';
 import {
   conversationIdFor,
@@ -576,6 +580,7 @@ export default function ChatThreadScreen() {
   const [isRecording, setIsRecording] = useState(false);
   const [viewer, setViewer] = useState<{ items: AttachmentItem[]; index: number } | null>(null);
   const [attachmentSheetVisible, setAttachmentSheetVisible] = useState(false);
+  const [stickerPickerVisible, setStickerPickerVisible] = useState(false);
   const [overflowMenuVisible, setOverflowMenuVisible] = useState(false);
   const [pendingMedia, setPendingMedia] = useState<PendingMedia | null>(null);
   const [pendingMediaMimeType, setPendingMediaMimeType] = useState<string | undefined>(undefined);
@@ -612,6 +617,7 @@ export default function ChatThreadScreen() {
     if (message.media_type === 'VIDEO') return t('thread.snippet.video');
     if (message.media_type === 'AUDIO') return t('thread.snippet.voiceMessage');
     if (message.media_type === 'FILE') return t('thread.snippet.document');
+    if (message.media_type === 'STICKER') return t('thread.snippet.sticker');
     const attachments = parseAttachments(message);
     if (attachments.length > 0) return t('thread.snippet.photosCount', { count: attachments.length });
     return message.ciphertext.length > 80 ? message.ciphertext.slice(0, 77) + '...' : message.ciphertext;
@@ -1018,6 +1024,13 @@ export default function ChatThreadScreen() {
     await sendMessage('', { type: 'AUDIO', objectKey, durationMs, waveform }, undefined, reply);
   }
 
+  async function handleStickerSend(objectKey: string) {
+    setStickerPickerVisible(false);
+    const reply = replyDraft ?? undefined;
+    setReplyDraft(null);
+    await sendMessage('', { type: 'STICKER', objectKey }, undefined, reply);
+  }
+
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
@@ -1107,6 +1120,25 @@ export default function ChatThreadScreen() {
                 <Path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
               </Svg>
             </TouchableOpacity>
+            {selected.media_type === 'STICKER' && selected.media_object_key && (
+              <TouchableOpacity
+                style={styles.selectionAction}
+                onPress={async () => {
+                  const objectKey = selected.media_object_key!;
+                  setSelectedMessageId(null);
+                  try {
+                    await saveSticker(objectKey);
+                    invalidateSavedStickerKeys();
+                  } catch {
+                    // best-effort
+                  }
+                }}
+              >
+                <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={colors.textPrimary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <Path d="M12 3v13m0 0l-4-4m4 4l4-4M5 21h14" />
+                </Svg>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               style={styles.selectionAction}
               onPress={() => (selectedIsMine ? confirmDeleteMine(selected.message_id) : confirmDeleteForMe(selected.message_id))}
@@ -1238,9 +1270,10 @@ export default function ChatThreadScreen() {
                 isMine ? styles.outgoing : styles.incoming,
                 isSelected && styles.bubbleSelected,
                 highlightedMessageId === item.message_id && styles.bubbleHighlighted,
+                item.media_type === 'STICKER' && styles.stickerBubble,
               ]}
             >
-              {isMine ? (
+              {isMine && item.media_type !== 'STICKER' ? (
                 <LinearGradient colors={gradients.brand} style={StyleSheet.absoluteFill} />
               ) : null}
               {isGroup && !isMine && (
@@ -1370,6 +1403,9 @@ export default function ChatThreadScreen() {
                   />
                 </Pressable>
               )}
+              {item.media_type === 'STICKER' && item.media_object_key && (
+                <StickerMessage objectKey={item.media_object_key} />
+              )}
               {!!item.ciphertext && (
                 <Text style={isMine ? styles.outgoingText : styles.incomingText}>{item.ciphertext}</Text>
               )}
@@ -1491,6 +1527,14 @@ export default function ChatThreadScreen() {
               multiline
             />
             {!draft.trim() && (
+              <TouchableOpacity style={styles.iconTouchable} onPress={() => setStickerPickerVisible(true)}>
+                <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={colors.brand500} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <Path d="M12 3a9 9 0 1 0 9 9c0-.34-.02-.67-.05-1H16a4 4 0 0 1-4-4V3.05C11.67 3.02 11.34 3 12 3z" />
+                  <Path d="M8.5 11a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM13.5 15a1 1 0 1 0 0-2 1 1 0 0 0 0 2z" />
+                </Svg>
+              </TouchableOpacity>
+            )}
+            {!draft.trim() && (
               <TouchableOpacity style={styles.iconTouchable} onPress={pickFromCamera}>
                 <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={colors.brand500} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                   <Path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
@@ -1527,6 +1571,12 @@ export default function ChatThreadScreen() {
         onPickPhotos={pickFromLibrary}
         onPickCamera={pickFromCamera}
         onPickDocument={pickDocument}
+      />
+
+      <StickerPicker
+        visible={stickerPickerVisible}
+        onClose={() => setStickerPickerVisible(false)}
+        onPick={handleStickerSend}
       />
 
       <MediaCaptionComposer media={pendingMedia} onCancel={() => setPendingMedia(null)} onSend={handleSendMedia} />
@@ -1698,6 +1748,9 @@ function makeStyles(colors: Palette) {
     bubbleHighlighted: { borderWidth: 2, borderColor: colors.gold500 },
     outgoing: { alignSelf: 'flex-end', borderBottomRightRadius: 4 },
     incoming: { alignSelf: 'flex-start', backgroundColor: colors.tint2, borderBottomLeftRadius: 4 },
+    // WhatsApp renders a sticker with no bubble chrome at all — image only,
+    // floating on the wallpaper — unlike every other message type.
+    stickerBubble: { backgroundColor: 'transparent', padding: 0, borderRadius: 0, maxWidth: 160 },
     deletedBubble: { backgroundColor: colors.tint1 },
     deletedText: { fontFamily: fonts.sans, fontStyle: 'italic', fontSize: 13.5, color: colors.textMuted },
     systemMessageRow: { alignSelf: 'center', marginVertical: 6, paddingHorizontal: 14, paddingVertical: 6, borderRadius: 10, backgroundColor: colors.tint1, maxWidth: '80%' },

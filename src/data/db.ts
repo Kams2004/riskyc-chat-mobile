@@ -2,7 +2,7 @@ import { useSQLiteContext, type SQLiteDatabase } from 'expo-sqlite';
 
 export const DATABASE_NAME = 'riskyc.db';
 
-export type MediaType = 'IMAGE' | 'VIDEO' | 'FILE' | 'AUDIO' | 'CALL';
+export type MediaType = 'IMAGE' | 'VIDEO' | 'FILE' | 'AUDIO' | 'CALL' | 'STICKER';
 
 export type AttachmentItem = {
   position: number;
