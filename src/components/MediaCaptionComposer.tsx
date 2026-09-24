@@ -1,5 +1,5 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, KeyboardAvoidingView, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
@@ -7,6 +7,8 @@ import { useTranslation } from 'react-i18next';
 
 import { useTheme } from '../features/theme/ThemeContext';
 import { fonts, gradients, type Palette } from '../theme';
+import { ImageEditor } from './ImageEditor';
+import { EMPTY_OVERLAY, serializeOverlay, StatusOverlayView, type StatusOverlay } from './StatusOverlayView';
 
 export type PendingMedia = { kind: 'image'; uri: string } | { kind: 'file'; uri: string; name: string; size?: number | null };
 
@@ -19,10 +21,11 @@ function formatFileSize(bytes?: number | null): string {
 type MediaCaptionComposerProps = {
   media: PendingMedia | null;
   onCancel: () => void;
-  onSend: (caption: string) => Promise<boolean>;
+  /** Receives the (possibly crop/rotate-edited) uri and any drawing overlay, not just the original media.uri — see ImageEditor's own comment on why crop/rotate bake into new image bytes while drawing stays a separate overlay. */
+  onSend: (caption: string, uri: string, overlayJson: string | null) => Promise<boolean>;
 };
 
-/** WhatsApp-style preview-with-caption screen shown before actually sending a picked photo or document. */
+/** WhatsApp-style preview-with-caption screen shown before actually sending a picked photo or document. An image additionally gets an "Edit" button opening ImageEditor for crop/rotate/draw. */
 export function MediaCaptionComposer({ media, onCancel, onSend }: MediaCaptionComposerProps) {
   const { colors } = useTheme();
   const { t } = useTranslation('media');
@@ -30,14 +33,24 @@ export function MediaCaptionComposer({ media, onCancel, onSend }: MediaCaptionCo
   const styles = makeStyles(colors);
   const [caption, setCaption] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [workingUri, setWorkingUri] = useState<string | null>(null);
+  const [overlay, setOverlay] = useState<StatusOverlay>(EMPTY_OVERLAY);
+  const [editorVisible, setEditorVisible] = useState(false);
+  const [previewSize, setPreviewSize] = useState({ width: 1, height: 1 });
 
-  if (!media) return null;
+  useEffect(() => {
+    setCaption('');
+    setOverlay(EMPTY_OVERLAY);
+    setWorkingUri(media?.uri ?? null);
+  }, [media]);
+
+  if (!media || !workingUri) return null;
 
   async function handleSend() {
-    if (isSending) return;
+    if (isSending || !workingUri) return;
     setIsSending(true);
     try {
-      const succeeded = await onSend(caption);
+      const succeeded = await onSend(caption, workingUri, serializeOverlay(overlay));
       if (succeeded) setCaption('');
     } finally {
       setIsSending(false);
@@ -47,15 +60,30 @@ export function MediaCaptionComposer({ media, onCancel, onSend }: MediaCaptionCo
   return (
     <Modal visible animationType="slide" onRequestClose={onCancel}>
       <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
-        <TouchableOpacity style={styles.closeTouchable} onPress={onCancel}>
-          <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={colors.textPrimary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-            <Path d="M18 6L6 18M6 6l12 12" />
-          </Svg>
-        </TouchableOpacity>
+        <View style={styles.headerRow}>
+          <TouchableOpacity style={styles.closeTouchable} onPress={onCancel}>
+            <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={colors.textPrimary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <Path d="M18 6L6 18M6 6l12 12" />
+            </Svg>
+          </TouchableOpacity>
+          {media.kind === 'image' && (
+            <TouchableOpacity style={styles.editTouchable} onPress={() => setEditorVisible(true)}>
+              <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={colors.textPrimary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <Path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z" />
+              </Svg>
+            </TouchableOpacity>
+          )}
+        </View>
 
         <View style={styles.previewArea}>
           {media.kind === 'image' ? (
-            <Image source={{ uri: media.uri }} style={styles.imagePreview} resizeMode="contain" />
+            <View
+              style={styles.imagePreviewWrap}
+              onLayout={(e) => setPreviewSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
+            >
+              <Image source={{ uri: workingUri }} style={styles.imagePreview} resizeMode="contain" />
+              <StatusOverlayView overlay={overlay} width={previewSize.width} height={previewSize.height} />
+            </View>
           ) : (
             <View style={styles.filePreview}>
               <View style={styles.fileIconCircle}>
@@ -94,6 +122,20 @@ export function MediaCaptionComposer({ media, onCancel, onSend }: MediaCaptionCo
           </View>
         </KeyboardAvoidingView>
       </View>
+
+      {media.kind === 'image' && (
+        <ImageEditor
+          visible={editorVisible}
+          uri={workingUri}
+          initialOverlay={overlay}
+          onCancel={() => setEditorVisible(false)}
+          onConfirm={({ uri, overlay: nextOverlay }) => {
+            setWorkingUri(uri);
+            setOverlay(nextOverlay);
+            setEditorVisible(false);
+          }}
+        />
+      )}
     </Modal>
   );
 }
@@ -101,8 +143,11 @@ export function MediaCaptionComposer({ media, onCancel, onSend }: MediaCaptionCo
 function makeStyles(colors: Palette) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
+    headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     closeTouchable: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginLeft: 6 },
+    editTouchable: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginRight: 6 },
     previewArea: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20 },
+    imagePreviewWrap: { width: '100%', height: '100%' },
     imagePreview: { width: '100%', height: '100%' },
     filePreview: { alignItems: 'center', gap: 12 },
     fileIconCircle: { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.brand600, alignItems: 'center', justifyContent: 'center' },

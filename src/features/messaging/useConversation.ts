@@ -36,6 +36,8 @@ export type OutgoingMedia = {
   durationMs?: number | null;
   /** Comma-separated normalized amplitude samples (0-100 ints) — AUDIO only, see VoiceRecorder. */
   waveform?: string | null;
+  /** IMAGE only — drawing/text overlay created in ImageEditor. See components/StatusOverlayView.ts. */
+  overlayJson?: string | null;
 };
 
 export type UseConversationParams = {
@@ -68,6 +70,7 @@ function envelopeToLocalMessage(envelope: messagingApi.MessageEnvelope): LocalMe
     media_file_name: envelope.mediaFileName ?? null,
     media_duration_ms: envelope.mediaDurationMs ?? null,
     media_waveform: envelope.waveform ?? null,
+    media_overlay_json: envelope.overlayJson ?? null,
     edited: envelope.edited ? 1 : 0,
     deleted: envelope.deleted ? 1 : 0,
     forwarded: envelope.forwarded ? 1 : 0,
@@ -414,6 +417,7 @@ export function useConversation({
         mediaFileName: media?.fileName,
         mediaDurationMs: media?.durationMs,
         waveform: media?.waveform,
+        overlayJson: media?.overlayJson,
         attachments: attachmentDtos,
         replyToMessageId: replyTo?.messageId ?? null,
         replyToConversationId: replyTo?.conversationId ?? null,
@@ -436,6 +440,7 @@ export function useConversation({
         media_file_name: media?.fileName ?? null,
         media_duration_ms: media?.durationMs ?? null,
         media_waveform: media?.waveform ?? null,
+        media_overlay_json: media?.overlayJson ?? null,
         edited: 0,
         deleted: 0,
         forwarded: 0,

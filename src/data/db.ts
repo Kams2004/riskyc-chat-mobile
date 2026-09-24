@@ -29,6 +29,11 @@ export type LocalMessage = {
   // metering), not synthesized. Null for every non-voice message and for a
   // voice message sent before this column existed.
   media_waveform: string | null;
+  // Opaque drawing/text-overlay JSON for an IMAGE message — created in
+  // ImageEditor, composited via StatusOverlayView, never parsed here. Null
+  // for every non-image message and for an image sent before this column
+  // existed.
+  media_overlay_json: string | null;
   // SQLite hands INTEGER columns back as 0|1, not real booleans — truthy
   // checks in the UI work fine either way, so this is left as-is rather
   // than converted.
@@ -101,11 +106,11 @@ export type LocalGroupMember = {
 export async function upsertMessage(db: SQLiteDatabase, message: LocalMessage) {
   await db.runAsync(
     `INSERT INTO messages (message_id, conversation_id, sender_id, recipient_id, ciphertext, sent_at, status,
-       media_type, media_object_key, media_file_name, media_duration_ms, media_waveform, edited, deleted, forwarded, attachments_json,
+       media_type, media_object_key, media_file_name, media_duration_ms, media_waveform, media_overlay_json, edited, deleted, forwarded, attachments_json,
        reply_to_message_id, reply_to_conversation_id, reply_to_sender_id, reply_to_snippet, pinned,
        is_system, reply_to_status_id, reply_to_status_owner_id)
      VALUES ($messageId, $conversationId, $senderId, $recipientId, $ciphertext, $sentAt, $status,
-       $mediaType, $mediaObjectKey, $mediaFileName, $mediaDurationMs, $mediaWaveform, $edited, $deleted, $forwarded, $attachmentsJson,
+       $mediaType, $mediaObjectKey, $mediaFileName, $mediaDurationMs, $mediaWaveform, $mediaOverlayJson, $edited, $deleted, $forwarded, $attachmentsJson,
        $replyToMessageId, $replyToConversationId, $replyToSenderId, $replyToSnippet, $pinned,
        $isSystem, $replyToStatusId, $replyToStatusOwnerId)
      ON CONFLICT(message_id) DO UPDATE SET status = excluded.status`,
@@ -122,6 +127,7 @@ export async function upsertMessage(db: SQLiteDatabase, message: LocalMessage) {
       $mediaFileName: message.media_file_name,
       $mediaDurationMs: message.media_duration_ms,
       $mediaWaveform: message.media_waveform,
+      $mediaOverlayJson: message.media_overlay_json,
       $attachmentsJson: message.attachments_json,
       $edited: message.edited,
       $deleted: message.deleted,

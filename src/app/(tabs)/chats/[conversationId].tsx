@@ -32,6 +32,7 @@ import { useTranslation } from 'react-i18next';
 
 import { AttachmentSheet } from '../../../components/AttachmentSheet';
 import { Spinner } from '../../../components/Spinner';
+import { parseOverlay, StatusOverlayView } from '../../../components/StatusOverlayView';
 import { StickerMessage } from '../../../components/StickerMessage';
 import { StickerPicker } from '../../../components/StickerPicker';
 import { Avatar } from '../../../components/Avatar';
@@ -209,7 +210,7 @@ function MessageTicks({ status }: { status: LocalMessage['status'] }) {
   );
 }
 
-function MessageImage({ objectKey, onPress }: { objectKey: string | null; onPress?: () => void }) {
+function MessageImage({ objectKey, overlayJson, onPress }: { objectKey: string | null; overlayJson?: string | null; onPress?: () => void }) {
   const { url, status, retry } = useMediaUrlWithStatus(objectKey);
   const [imgFailed, setImgFailed] = useState(false);
   useEffect(() => setImgFailed(false), [url]);
@@ -240,9 +241,11 @@ function MessageImage({ objectKey, onPress }: { objectKey: string | null; onPres
       </View>
     );
   }
+  const overlay = parseOverlay(overlayJson);
   return (
     <TouchableOpacity onPress={onPress} disabled={!onPress} activeOpacity={0.9}>
       <Image source={{ uri: url }} style={imageStyles.image} onError={() => setImgFailed(true)} />
+      {overlay && <StatusOverlayView overlay={overlay} width={220} height={220} />}
     </TouchableOpacity>
   );
 }
@@ -1004,16 +1007,16 @@ export default function ChatThreadScreen() {
     }
   }
 
-  async function handleSendMedia(caption: string): Promise<boolean> {
+  async function handleSendMedia(caption: string, uri: string, overlayJson: string | null): Promise<boolean> {
     if (!pendingMedia) return false;
     const media = pendingMedia;
     const reply = replyDraft ?? undefined;
     try {
       if (media.kind === 'image') {
-        const objectKey = await uploadMedia(media.uri, pendingMediaMimeType ?? 'image/jpeg');
-        await sendMessage(caption, { type: 'IMAGE', objectKey }, undefined, reply);
+        const objectKey = await uploadMedia(uri, pendingMediaMimeType ?? 'image/jpeg');
+        await sendMessage(caption, { type: 'IMAGE', objectKey, overlayJson }, undefined, reply);
       } else {
-        const objectKey = await uploadMedia(media.uri, pendingMediaMimeType ?? 'application/octet-stream');
+        const objectKey = await uploadMedia(uri, pendingMediaMimeType ?? 'application/octet-stream');
         await sendMessage(caption, { type: 'FILE', objectKey, fileName: media.name }, undefined, reply);
       }
       // Only close the preview once the upload+send actually succeeded — closing
@@ -1355,6 +1358,7 @@ export default function ChatThreadScreen() {
                 <View style={styles.mediaWrap}>
                   <MessageImage
                     objectKey={item.media_object_key}
+                    overlayJson={item.media_overlay_json}
                     onPress={
                       item.media_object_key
                         ? () =>

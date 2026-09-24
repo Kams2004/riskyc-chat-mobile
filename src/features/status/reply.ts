@@ -52,6 +52,7 @@ export async function sendStatusReply(
     media_file_name: null,
     media_duration_ms: null,
     media_waveform: null,
+    media_overlay_json: null,
     edited: 0,
     deleted: 0,
     forwarded: 0,

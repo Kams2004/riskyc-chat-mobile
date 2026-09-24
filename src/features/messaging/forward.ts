@@ -48,6 +48,7 @@ export async function forwardMessage(
     mediaFileName: source.media_file_name ?? undefined,
     mediaDurationMs: source.media_duration_ms ?? undefined,
     waveform: source.media_waveform ?? undefined,
+    overlayJson: source.media_overlay_json ?? undefined,
     forwarded: true,
     attachments: attachments.length > 0 ? attachments : undefined,
   };
@@ -65,6 +66,7 @@ export async function forwardMessage(
     media_file_name: source.media_file_name,
     media_duration_ms: source.media_duration_ms,
     media_waveform: source.media_waveform,
+    media_overlay_json: source.media_overlay_json,
     edited: 0,
     deleted: 0,
     forwarded: 1,

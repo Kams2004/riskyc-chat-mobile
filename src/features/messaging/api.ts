@@ -21,6 +21,8 @@ export type MessageEnvelope = {
   mediaDurationMs?: number | null;
   /** Comma-separated normalized amplitude samples (0-100 ints) for an AUDIO message — real data captured live during recording, not derived server-side. Null for every non-voice message and for voice messages sent before this field existed. */
   waveform?: string | null;
+  /** Opaque drawing/text-overlay JSON for an IMAGE message — see components/StatusOverlayView.ts. Null for every message without one. */
+  overlayJson?: string | null;
   edited?: boolean;
   deleted?: boolean;
   /** Set only for a group message — absent/null for 1:1. */

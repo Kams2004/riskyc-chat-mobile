@@ -6,7 +6,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
  * half of the "local-first sync" approach from the architecture proposal —
  * the UI always reads from SQLite, never waits on the network round trip.
  */
-const CURRENT_VERSION = 13;
+const CURRENT_VERSION = 14;
 
 export async function migrateDbIfNeeded(db: SQLiteDatabase) {
   const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
@@ -200,6 +200,16 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
     // those fall back to the old synthesized pattern client-side.
     await db.execAsync(`ALTER TABLE messages ADD COLUMN media_waveform TEXT;`);
     version = 13;
+  }
+
+  if (version === 13) {
+    // Opaque drawing/text-overlay JSON for an IMAGE message — created in
+    // the new ImageEditor (crop/rotate bake into the uploaded image itself;
+    // drawing stays this separate, non-destructive overlay, composited at
+    // view time via StatusOverlayView), same storage convention already
+    // proven on StatusPost.overlay_json.
+    await db.execAsync(`ALTER TABLE messages ADD COLUMN media_overlay_json TEXT;`);
+    version = 14;
   }
 
   await db.execAsync(`PRAGMA user_version = ${CURRENT_VERSION}`);
