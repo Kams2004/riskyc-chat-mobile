@@ -137,13 +137,24 @@ export default function NewStatusScreen() {
       Alert.alert(t('composer.permissionNeededTitle'), t('composer.galleryPermissionBody'));
       return;
     }
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images', 'videos'], quality: 0.8 });
-    if (!result.canceled && result.assets[0]) {
-      const asset = result.assets[0];
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images', 'videos'],
+      allowsMultipleSelection: true,
+      selectionLimit: 10,
+      quality: 0.8,
+    });
+    if (result.canceled || result.assets.length === 0) return;
+    // Each picked asset becomes its own carousel item (swipe between them,
+    // same as an existing multi-item status already worked) — previously
+    // only assets[0] was ever read, silently dropping the rest even though
+    // the picker itself let you multi-select.
+    let firstVideoId: string | null = null;
+    for (const asset of result.assets) {
       const item = newMediaItem(asset.uri, asset.type === 'video' ? 'VIDEO' : 'IMAGE', asset.mimeType);
       addItem(item);
-      if (item.media?.type === 'VIDEO') setTrimmerTargetId(item.id);
+      if (item.media?.type === 'VIDEO' && !firstVideoId) firstVideoId = item.id;
     }
+    if (firstVideoId) setTrimmerTargetId(firstVideoId);
   }
 
   function addTextItem() {
