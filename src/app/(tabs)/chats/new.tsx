@@ -1,4 +1,4 @@
-import * as Contacts from 'expo-contacts';
+import { getPermissionsAsync as getContactsPermissionsAsync, requestPermissionsAsync as requestContactsPermissionsAsync } from 'expo-contacts';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -24,6 +24,7 @@ import { conversationIdFor } from '../../../features/messaging/conversationId';
 import { useTheme } from '../../../features/theme/ThemeContext';
 import { config } from '../../../lib/config';
 import { COUNTRIES, type Country } from '../../../lib/countries';
+import { readDeviceContacts } from '../../../features/contacts/sync';
 import { lookupByPhone, matchContacts, type UserResult } from '../../../features/users/api';
 import { getAllLocalContacts, upsertLocalContact, useSQLiteContext } from '../../../data/db';
 import { fonts, type Palette } from '../../../theme';
@@ -92,15 +93,13 @@ export default function NewConversationScreen() {
   // dialog again, so the "Grant access" button also offers Settings.
   const loadContacts = useCallback(
     async (cancelled: { value: boolean }) => {
-      const permission = await Contacts.requestPermissionsAsync();
+      const permission = await requestContactsPermissionsAsync();
       if (!permission.granted) {
         if (!cancelled.value) setLoadState('denied');
         return;
       }
       try {
-        const { data } = await Contacts.getContactsAsync({
-          fields: [Contacts.Fields.PhoneNumbers, Contacts.Fields.Emails, Contacts.Fields.Name],
-        });
+        const data = await readDeviceContacts();
 
         const phoneNumbers = new Set<string>();
         const emails = new Set<string>();
@@ -141,8 +140,11 @@ export default function NewConversationScreen() {
           setContactUsers(enriched);
           setLoadState('granted');
         }
-      } catch {
-        // Always the translated fallback, never the raw exception.
+      } catch (e) {
+        // UI always shows the translated fallback, never the raw exception —
+        // but logging it is what actually made this diagnosable, see
+        // readDeviceContacts' own doc comment for the bug this caught.
+        console.warn('[NewConversationScreen] loadContacts failed', e);
         if (!cancelled.value) {
           setError(t('newChat.loadErrorFallback'));
           setLoadState('granted');
@@ -165,7 +167,7 @@ export default function NewConversationScreen() {
   );
 
   async function retryContactsPermission() {
-    const current = await Contacts.getPermissionsAsync();
+    const current = await getContactsPermissionsAsync();
     if (!current.canAskAgain && !current.granted) {
       await Linking.openSettings();
       return;

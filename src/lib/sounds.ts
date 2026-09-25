@@ -23,7 +23,19 @@ let notificationPlayer: ReturnType<typeof createAudioPlayer> | null = null;
 let ringtonePlayer: ReturnType<typeof createAudioPlayer> | null = null;
 let audioModeReady = false;
 
-async function ensureAudioMode() {
+/**
+ * Exported so any audio playback path in the app (not just the bundled
+ * notification/ringtone sounds below) can guarantee the session is
+ * audible before calling .play() — see VoiceMessageBubble, which hit this
+ * exact gap: recording a voice note implicitly activates an audible
+ * playAndRecord session as a side effect, which is why a just-sent message
+ * played back fine, but a thread that only ever *received* voice messages
+ * never activated the session at all, leaving playback silent (not
+ * erroring, just inaudible) on any device with the hardware silent switch
+ * on — the same "silent by default" behavior this function exists to work
+ * around for alert sounds.
+ */
+export async function ensureAudioMode() {
   if (audioModeReady) return;
   audioModeReady = true;
   // Alert sounds should play even if the device's ringer is on "silent" via

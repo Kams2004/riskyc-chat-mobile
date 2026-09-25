@@ -1,4 +1,4 @@
-import * as Contacts from 'expo-contacts';
+import { Contact, ContactField, getPermissionsAsync } from 'expo-contacts';
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import { getAllLocalContacts, getKnownMatchedContactIds, markContactsAsKnown, upsertLocalContact } from '../../data/db';
@@ -10,6 +10,34 @@ function normalizePhone(raw: string): string {
   const trimmed = raw.trim();
   const plus = trimmed.startsWith('+') ? '+' : '';
   return plus + trimmed.replace(/[^\d]/g, '');
+}
+
+export type DeviceContact = {
+  name: string | null;
+  phoneNumbers: { number: string }[];
+  emails: { email: string }[];
+};
+
+/**
+ * This SDK's expo-contacts rewrote its whole API to a class-based
+ * Contact.getAll()/getAllDetails() shape — the old top-level
+ * getContactsAsync()/Fields this app was written against still exist for
+ * back-compat, but are now a deprecated shim that unconditionally throws at
+ * runtime (see expo-contacts' own legacyWarnings.d.ts: "This method will
+ * throw in runtime"), which is exactly why every screen that reads device
+ * contacts failed with "Could not load your contacts" regardless of what
+ * was actually saved on the device — the read itself never had a chance to
+ * succeed. This wraps the new API and reshapes its result back to the old
+ * {name, phoneNumbers, emails} shape so every call site's own downstream
+ * matching logic didn't need touching, just the one broken fetch call.
+ */
+export async function readDeviceContacts(): Promise<DeviceContact[]> {
+  const details = await Contact.getAllDetails([ContactField.FULL_NAME, ContactField.PHONES, ContactField.EMAILS]);
+  return details.map((c) => ({
+    name: c.fullName ?? null,
+    phoneNumbers: (c.phones ?? []).filter((p) => !!p.number).map((p) => ({ number: p.number as string })),
+    emails: (c.emails ?? []).filter((e) => !!e.address).map((e) => ({ email: e.address as string })),
+  }));
 }
 
 export type SyncResult = {
@@ -29,14 +57,12 @@ export type SyncResult = {
  * calling this.
  */
 export async function syncDeviceContacts(db: SQLiteDatabase): Promise<SyncResult> {
-  const permission = await Contacts.getPermissionsAsync();
+  const permission = await getPermissionsAsync();
   if (!permission.granted) {
     return { matched: [], newlyJoined: [] };
   }
 
-  const { data } = await Contacts.getContactsAsync({
-    fields: [Contacts.Fields.PhoneNumbers, Contacts.Fields.Emails, Contacts.Fields.Name],
-  });
+  const data = await readDeviceContacts();
 
   const phoneNumbers = new Set<string>();
   const emails = new Set<string>();

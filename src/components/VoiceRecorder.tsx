@@ -121,7 +121,17 @@ export function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) {
       await recorder.stop();
       const uri = recorder.uri;
       if (!uri) throw new Error('No recording produced');
-      const objectKey = await uploadMedia(uri, 'audio/m4a');
+      // 'audio/m4a' isn't a registered MIME type — MinIO stored it verbatim,
+      // and since the download URL's object key is a bare UUID (no file
+      // extension), that bogus Content-Type was the ONLY signal a native
+      // player had to identify the container. AVPlayer in particular treats
+      // an unrecognized type as fatal for a remote URL and refuses to play
+      // it at all, whereas a browser's <audio> element sniffs the actual
+      // bytes and mostly ignores Content-Type — the exact reason this only
+      // ever showed up as "voice messages don't play" on mobile, not web.
+      // 'audio/mp4' is the correct IANA type for the AAC-in-MPEG-4 container
+      // RecordingPresets.HIGH_QUALITY actually produces.
+      const objectKey = await uploadMedia(uri, 'audio/mp4');
       const waveform = encodeWaveform(resampleToFixedBars(fullMeteringRef.current, FINAL_BAR_COUNT));
       onSend(objectKey, state.durationMillis, waveform);
     } catch (e) {

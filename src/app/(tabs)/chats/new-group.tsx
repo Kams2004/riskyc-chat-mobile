@@ -1,4 +1,4 @@
-import * as Contacts from 'expo-contacts';
+import { requestPermissionsAsync as requestContactsPermissionsAsync } from 'expo-contacts';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next';
 import { Avatar } from '../../../components/Avatar';
 import { KeyboardScreen } from '../../../components/KeyboardScreen';
 import { useAuth } from '../../../features/auth/AuthContext';
+import { readDeviceContacts } from '../../../features/contacts/sync';
 import { createGroup } from '../../../features/groups/api';
 import { looksLikeUnresolvedName, otherPartyFrom } from '../../../features/messaging/conversationId';
 import { useTheme } from '../../../features/theme/ThemeContext';
@@ -77,11 +78,9 @@ export default function NewGroupScreen() {
         }
 
         try {
-          const permission = await Contacts.requestPermissionsAsync();
+          const permission = await requestContactsPermissionsAsync();
           if (permission.granted) {
-            const { data } = await Contacts.getContactsAsync({
-              fields: [Contacts.Fields.PhoneNumbers, Contacts.Fields.Emails, Contacts.Fields.Name],
-            });
+            const data = await readDeviceContacts();
 
             const phoneNumbers = new Set<string>();
             const emails = new Set<string>();
@@ -119,9 +118,10 @@ export default function NewGroupScreen() {
               byId.set(user.userId, { ...user, localName: localNames.get(user.userId) });
             }
           }
-        } catch {
+        } catch (e) {
           // Contacts matching failed/denied — the conversation-derived
           // entries collected above still stand on their own.
+          console.warn('[NewGroupScreen] contacts matching failed', e);
         }
 
         if (!cancelled) {

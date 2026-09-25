@@ -6,6 +6,7 @@ import type { PanGestureHandlerGestureEvent } from 'react-native-gesture-handler
 import Svg, { Path, Rect } from 'react-native-svg';
 
 import { useMediaUrl } from '../features/media/useMediaUrl';
+import { ensureAudioMode } from '../lib/sounds';
 import { fonts } from '../theme';
 
 const BAR_COUNT = 28;
@@ -107,7 +108,19 @@ export function VoiceMessageBubble({ objectKey, durationMs, waveform, tintColor,
         // with this hitSlop plays the file through to completion with no
         // errors, for both sent and received messages.
         hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
-        onPress={() => (status.playing ? player.pause() : player.play())}
+        onPress={async () => {
+          if (status.playing) {
+            player.pause();
+            return;
+          }
+          // Recording a voice note implicitly activates an audible session
+          // as a side effect (which is why a just-sent message plays fine
+          // right after) — a thread that's only ever received voice
+          // messages never does, so without this the player would run
+          // silently on a device with the hardware silent switch on.
+          await ensureAudioMode();
+          player.play();
+        }}
         disabled={!url}
       >
         <Svg width={16} height={16} viewBox="0 0 24 24" fill={iconColor}>
