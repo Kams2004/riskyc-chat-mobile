@@ -14,6 +14,8 @@ export default {
     addMembers: 'Add members',
     addSearchPlaceholder: 'Search people to add',
     mediaLinksDocs: 'Media, links, and docs',
+    autoDownloadMedia: 'Auto-download media',
+    autoDownloadMediaDescription: 'When off, photos and videos in this group stay behind a tap-to-download button showing the file size, instead of loading automatically.',
     onlyAdminsCanMessage: 'Only admins can send messages',
     onlyAdminsDescription: 'Like an announcement group — other members can still read but not post.',
     leaveGroup: 'Leave group',

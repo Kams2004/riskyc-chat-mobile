@@ -151,6 +151,7 @@ export function useConversation({
   const [reactions, setReactions] = useState<Map<string, Map<string, string>>>(new Map());
   const [disappearingSeconds, setDisappearingSecondsState] = useState<number | null>(null);
   const [muted, setMutedState] = useState(false);
+  const [autoDownloadMedia, setAutoDownloadMediaState] = useState(true);
 
   const [typingUserIds, setTypingUserIds] = useState<string[]>([]);
   // Safety net for the receiving side: if a "stopped typing" update is ever
@@ -263,6 +264,7 @@ export function useConversation({
       if (!cancelled) {
         setDisappearingSecondsState(s.disappearingMessageSeconds);
         setMutedState(s.muted);
+        setAutoDownloadMediaState(s.autoDownloadMedia);
       }
     }).catch((e) => {
       console.warn('[useConversation] fetchConversationSettings failed', e);
@@ -560,6 +562,7 @@ export function useConversation({
     setDisappearing,
     muted,
     setMuted,
+    autoDownloadMedia,
     // Exposed so screens that mutate SQLite directly (e.g. "Clear chat",
     // which deletes rows outside this hook's own action functions) can make
     // this hook's in-memory `messages` state reflect it — otherwise the

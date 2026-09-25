@@ -119,17 +119,28 @@ function GridBody({ items, onOpen }: { items: AttachmentItem[]; onOpen: (index: 
 
 /**
  * WhatsApp-style collage — 1 item fills the space, 2-4 split evenly, 5+
- * shows the first 4 with a "+N" overlay on the last tile. A single item
- * auto-loads as before; 2+ items (a real gallery send) stay behind a
- * download gate showing the combined size and item count until explicitly
- * tapped, instead of every tile silently fetching the moment it renders —
- * a lone photo was never batched this way, matching how it isn't merged
- * with an unrelated one sent separately.
+ * shows the first 4 with a "+N" overlay on the last tile. With auto-download
+ * on (the default), a single item still auto-loads and 2+ items (a real
+ * gallery send) stay behind a download gate showing the combined size and
+ * item count until explicitly tapped, instead of every tile silently
+ * fetching the moment it renders — a lone photo was never batched this way,
+ * matching how it isn't merged with an unrelated one sent separately. With
+ * autoDownloadMedia off (see group-info.tsx's toggle, backed by
+ * ConversationController#setAutoDownload), that gate applies to every item,
+ * single or not.
  */
-export function MessageAttachmentGrid({ items, onOpen }: { items: AttachmentItem[]; onOpen: (index: number) => void }) {
+export function MessageAttachmentGrid({
+  items,
+  onOpen,
+  autoDownloadMedia = true,
+}: {
+  items: AttachmentItem[];
+  onOpen: (index: number) => void;
+  autoDownloadMedia?: boolean;
+}) {
   const { colors } = useTheme();
   const gateStyles = makeGateStyles(colors);
-  const [revealed, setRevealed] = useState(items.length <= 1);
+  const [revealed, setRevealed] = useState(autoDownloadMedia && items.length <= 1);
 
   if (items.length === 0) return null;
   if (revealed) return <GridBody items={items} onOpen={onOpen} />;

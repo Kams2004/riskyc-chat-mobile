@@ -112,9 +112,9 @@ export function listConversationSummaries(): Promise<ConversationSummary[]> {
   return apiFetch(`${config.messagingServiceUrl}/api/conversations`);
 }
 
-export type ConversationSettingsResult = { muted: boolean; disappearingMessageSeconds: number | null };
+export type ConversationSettingsResult = { muted: boolean; disappearingMessageSeconds: number | null; autoDownloadMedia: boolean };
 
-/** The thread screen's own initial fetch for mute/disappearing state, rather than searching listConversationSummaries() for one entry. */
+/** The thread screen's own initial fetch for mute/disappearing/auto-download state, rather than searching listConversationSummaries() for one entry. */
 export function fetchConversationSettings(conversationId: string): Promise<ConversationSettingsResult> {
   return apiFetch(`${config.messagingServiceUrl}/api/conversations/${conversationId}/settings`);
 }
@@ -132,6 +132,14 @@ export function setDisappearingMessages(conversationId: string, seconds: number 
   return apiFetch(`${config.messagingServiceUrl}/api/conversations/${conversationId}/disappearing`, {
     method: 'PUT',
     body: JSON.stringify({ seconds }),
+  });
+}
+
+/** Per-viewer, per-conversation — see AutoDownloadDisabled's own doc comment backend-side. false gates every image/video (not just multi-item galleries) behind the tap-to-download button. */
+export function setAutoDownloadMedia(conversationId: string, autoDownloadMedia: boolean): Promise<void> {
+  return apiFetch(`${config.messagingServiceUrl}/api/conversations/${conversationId}/auto-download`, {
+    method: 'PUT',
+    body: JSON.stringify({ autoDownloadMedia }),
   });
 }
 

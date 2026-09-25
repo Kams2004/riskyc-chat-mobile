@@ -1,4 +1,4 @@
-import * as Contacts from 'expo-contacts';
+import { requestPermissionsAsync as requestContactsPermissionsAsync } from 'expo-contacts';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -9,7 +9,9 @@ import { useTranslation } from 'react-i18next';
 import { Avatar } from '../../../components/Avatar';
 import { deleteConversation, getAllLocalContacts, upsertLocalContact, useSQLiteContext } from '../../../data/db';
 import { useAuth } from '../../../features/auth/AuthContext';
+import { readDeviceContacts } from '../../../features/contacts/sync';
 import { addMembers, changeMemberRole, getGroup, removeMember, renameGroup, type GroupResult } from '../../../features/groups/api';
+import { fetchConversationSettings, setAutoDownloadMedia as setAutoDownloadMediaApi } from '../../../features/messaging/api';
 import { useTheme } from '../../../features/theme/ThemeContext';
 import { getUser, matchContacts, type UserResult } from '../../../features/users/api';
 import { fonts, type Palette } from '../../../theme';
@@ -43,8 +45,20 @@ export default function GroupInfoScreen() {
   // locally as the user types instead of hitting a system-wide search API.
   const [addCandidates, setAddCandidates] = useState<AddCandidate[]>([]);
   const [isLoadingCandidates, setIsLoadingCandidates] = useState(false);
+  const [autoDownloadMedia, setAutoDownloadMediaState] = useState(true);
 
   const isAdmin = members.find((m) => m.userId === userId)?.role === 'ADMIN';
+
+  useEffect(() => {
+    fetchConversationSettings(groupId)
+      .then((settings) => setAutoDownloadMediaState(settings.autoDownloadMedia))
+      .catch((e) => console.warn('[GroupInfo] fetchConversationSettings failed', e));
+  }, [groupId]);
+
+  function handleToggleAutoDownload(value: boolean) {
+    setAutoDownloadMediaState(value);
+    setAutoDownloadMediaApi(groupId, value).catch((e) => console.warn('[GroupInfo] setAutoDownloadMedia failed', e));
+  }
 
   const load = useCallback(async () => {
     const result = await getGroup(groupId);
@@ -82,14 +96,19 @@ export default function GroupInfoScreen() {
     let cancelled = false;
     setIsLoadingCandidates(true);
     (async () => {
-      const permission = await Contacts.requestPermissionsAsync();
+      const permission = await requestContactsPermissionsAsync();
       if (!permission.granted) {
         if (!cancelled) setIsLoadingCandidates(false);
         return;
       }
-      const { data } = await Contacts.getContactsAsync({
-        fields: [Contacts.Fields.PhoneNumbers, Contacts.Fields.Emails, Contacts.Fields.Name],
-      });
+      let data: Awaited<ReturnType<typeof readDeviceContacts>>;
+      try {
+        data = await readDeviceContacts();
+      } catch (e) {
+        console.warn('[GroupInfo] readDeviceContacts failed', e);
+        if (!cancelled) setIsLoadingCandidates(false);
+        return;
+      }
       const phoneNumbers = new Set<string>();
       const emails = new Set<string>();
       const phoneToName = new Map<string, string>();
@@ -263,6 +282,19 @@ export default function GroupInfoScreen() {
           <Path d="M9 18l6-6-6-6" />
         </Svg>
       </TouchableOpacity>
+
+      <View style={styles.toggleRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.mediaLabel}>{t('groupInfo.autoDownloadMedia')}</Text>
+          <Text style={styles.toggleDescription}>{t('groupInfo.autoDownloadMediaDescription')}</Text>
+        </View>
+        <Switch
+          value={autoDownloadMedia}
+          onValueChange={handleToggleAutoDownload}
+          trackColor={{ false: colors.hairline, true: colors.brand400 }}
+          thumbColor="#ffffff"
+        />
+      </View>
 
       {isAdmin && (
         <View style={styles.toggleRow}>

@@ -14,6 +14,8 @@ export default {
     addMembers: 'Ajouter des membres',
     addSearchPlaceholder: 'Rechercher des personnes à ajouter',
     mediaLinksDocs: 'Médias, liens et documents',
+    autoDownloadMedia: 'Téléchargement automatique des médias',
+    autoDownloadMediaDescription: 'Désactivé, les photos et vidéos de ce groupe restent derrière un bouton de téléchargement affichant la taille du fichier, au lieu de se charger automatiquement.',
     onlyAdminsCanMessage: 'Seuls les admins peuvent envoyer des messages',
     onlyAdminsDescription: 'Comme un groupe d’annonces — les autres membres peuvent toujours lire mais pas publier.',
     leaveGroup: 'Quitter le groupe',

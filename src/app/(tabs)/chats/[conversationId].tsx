@@ -210,11 +210,29 @@ function MessageTicks({ status }: { status: LocalMessage['status'] }) {
   );
 }
 
-function MessageImage({ objectKey, overlayJson, onPress }: { objectKey: string | null; overlayJson?: string | null; onPress?: () => void }) {
-  const { url, status, retry } = useMediaUrlWithStatus(objectKey);
+function MessageImage({
+  objectKey,
+  overlayJson,
+  onPress,
+  autoDownloadMedia = true,
+}: {
+  objectKey: string | null;
+  overlayJson?: string | null;
+  onPress?: () => void;
+  autoDownloadMedia?: boolean;
+}) {
+  const [revealed, setRevealed] = useState(autoDownloadMedia);
+  // Gated only until resolved — objectKey is always non-null for a real
+  // IMAGE message, so this hook call is unconditional either way (rules of
+  // hooks), it just doesn't do anything until revealed.
+  const { url, status, retry } = useMediaUrlWithStatus(revealed ? objectKey : null);
   const [imgFailed, setImgFailed] = useState(false);
   useEffect(() => setImgFailed(false), [url]);
   const effectiveStatus = imgFailed ? 'error' : status;
+
+  if (!revealed) {
+    return <DownloadGate onPress={() => setRevealed(true)} />;
+  }
 
   if (effectiveStatus === 'error') {
     return (
@@ -257,17 +275,50 @@ const imageStyles = StyleSheet.create({
 });
 
 /**
+ * Same tap-to-download gate as MessageAttachmentGrid's own gallery gate,
+ * for a single (non-gallery) image/video message when auto-download is off.
+ * No size label here — unlike a gallery item, a single-attachment message
+ * has no per-message byte count in local SQLite today, so this only gates
+ * the fetch, not the size display gallery items get.
+ */
+function DownloadGate({ onPress }: { onPress: () => void }) {
+  return (
+    <TouchableOpacity style={imageStyles.placeholder} onPress={onPress} activeOpacity={0.8}>
+      <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+        <Path d="M12 3v13m0 0l-4-4m4 4l4-4M5 21h14" />
+      </Svg>
+      <Text style={imageStyles.retryText}>Tap to download</Text>
+    </TouchableOpacity>
+  );
+}
+
+/**
  * A single (non-gallery) video message — same 220x220 footprint as
  * MessageImage. The paused VideoView itself renders the video's own first
  * frame as a real thumbnail (no separate thumbnail-extraction pipeline
  * needed); tapping opens the same MediaViewer a gallery video uses for
  * actual playback, so there's only one video-playback implementation.
  */
-function MessageVideo({ objectKey, durationMs, onPress }: { objectKey: string | null; durationMs: number | null; onPress?: () => void }) {
-  const { url, status, retry } = useMediaUrlWithStatus(objectKey);
+function MessageVideo({
+  objectKey,
+  durationMs,
+  onPress,
+  autoDownloadMedia = true,
+}: {
+  objectKey: string | null;
+  durationMs: number | null;
+  onPress?: () => void;
+  autoDownloadMedia?: boolean;
+}) {
+  const [revealed, setRevealed] = useState(autoDownloadMedia);
+  const { url, status, retry } = useMediaUrlWithStatus(revealed ? objectKey : null);
   const player = useVideoPlayer(url ?? '', (p) => {
     p.muted = true;
   });
+
+  if (!revealed) {
+    return <DownloadGate onPress={() => setRevealed(true)} />;
+  }
 
   if (status === 'error') {
     return (
@@ -602,6 +653,7 @@ export default function ChatThreadScreen() {
     setDisappearing,
     muted,
     setMuted,
+    autoDownloadMedia,
     reloadMessages,
   } = useConversation({
     conversationId,
@@ -1351,7 +1403,7 @@ export default function ChatThreadScreen() {
                 if (attachments.length === 0) return null;
                 return (
                   <View style={styles.mediaWrap}>
-                    <MessageAttachmentGrid items={attachments} onOpen={(index) => setViewer({ items: attachments, index })} />
+                    <MessageAttachmentGrid items={attachments} onOpen={(index) => setViewer({ items: attachments, index })} autoDownloadMedia={autoDownloadMedia} />
                   </View>
                 );
               })()}
@@ -1360,6 +1412,7 @@ export default function ChatThreadScreen() {
                   <MessageImage
                     objectKey={item.media_object_key}
                     overlayJson={item.media_overlay_json}
+                    autoDownloadMedia={autoDownloadMedia}
                     onPress={
                       item.media_object_key
                         ? () =>
@@ -1385,6 +1438,7 @@ export default function ChatThreadScreen() {
                   <MessageVideo
                     objectKey={item.media_object_key}
                     durationMs={item.media_duration_ms}
+                    autoDownloadMedia={autoDownloadMedia}
                     onPress={
                       item.media_object_key
                         ? () =>
