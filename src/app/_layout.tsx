@@ -12,14 +12,14 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 
 import { DATABASE_NAME } from '../data/db';
 import { migrateDbIfNeeded } from '../data/schema';
 import { AuthProvider, useAuth } from '../features/auth/AuthContext';
 import { initI18n } from '../i18n';
-import { CallProvider } from '../features/calls/CallContext';
-import { GroupCallProvider } from '../features/calls/GroupCallContext';
+import { CallProvider, useCall } from '../features/calls/CallContext';
+import { GroupCallProvider, useGroupCall } from '../features/calls/GroupCallContext';
 import { useContactsSync } from '../features/contacts/useContactsSync';
 import { useInboxSocket } from '../features/messaging/inboxSocket';
 import { usePushNotifications } from '../features/notifications/usePushNotifications';
@@ -71,7 +71,15 @@ export default function RootLayout() {
     // it establishes the native gesture event surface for the whole tree.
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SQLiteProvider databaseName={DATABASE_NAME} onInit={migrateDbIfNeeded}>
-        <SafeAreaProvider>
+        {/* Without initialWindowMetrics, useSafeAreaInsets() returns all
+            zeroes on the very first render (before native measurement
+            lands) and then snaps to the real value a frame later — visible
+            as the floating tab bar/FAB briefly rendering too low/high
+            before jumping into place, worse on some devices than others
+            depending on how many frames that first render sticks around
+            for. Passing it in gives the real native metrics synchronously
+            on mount instead. */}
+        <SafeAreaProvider initialMetrics={initialWindowMetrics}>
           <ThemeProvider>
             <WallpaperProvider>
               <AuthProvider>
@@ -89,12 +97,44 @@ export default function RootLayout() {
   );
 }
 
+/**
+ * Live-confirmed Android bug: after a 1:1 or group call ends, the insets
+ * react-native-safe-area-context measures for the WHOLE app can get stuck
+ * reading 0 for insets.bottom — visible as the floating tab bar suddenly
+ * rendering flush/docked (no rounded corners, no margin, no shadow), and it
+ * stays that way (switching tabs doesn't fix it) until the app is
+ * backgrounded and foregrounded, which is what actually forces Android to
+ * redeliver fresh window insets. This isn't specific to the tab bar or to
+ * one screen — anything reading useSafeAreaInsets() under the SAME provider
+ * is affected, including whatever the NEXT call's own CallOverlay would
+ * read. There's no imperative "re-measure" API on this library; the only
+ * way to force a fresh native measurement from JS is to unmount and remount
+ * the SafeAreaProvider itself. RootLayout's own outer provider (which also
+ * wraps SQLiteProvider/AuthProvider/etc.) is the wrong place to remount —
+ * far too destructive. This nested provider, scoped to exactly the content
+ * that needs correct insets and remounted (via `key`) the moment a call
+ * transitions back to idle, is the narrowest fix that still covers every
+ * screen (not just the tab bar) and every future call.
+ */
 function Root() {
   const { colors, scheme } = useTheme();
   useInboxSocket();
   usePresenceHeartbeat();
   usePushNotifications();
   useContactsSync();
+
+  const { callState } = useCall();
+  const { groupCallState } = useGroupCall();
+  const [insetsRemountKey, setInsetsRemountKey] = useState(0);
+  const prevCallActiveRef = useRef(false);
+
+  useEffect(() => {
+    const callActive = callState !== 'idle' || groupCallState !== 'idle';
+    if (prevCallActiveRef.current && !callActive) {
+      setInsetsRemountKey((k) => k + 1);
+    }
+    prevCallActiveRef.current = callActive;
+  }, [callState, groupCallState]);
 
   // Nudges toward the latest Play Store version instead of relying purely
   // on Android's own background auto-update schedule — see inAppUpdate.ts.
@@ -104,11 +144,13 @@ function Root() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
-      <RootNavigator />
-      <CallOverlay />
-      <GroupCallOverlay />
-      <IncomingGroupCallBanner />
-      <MinimizedCallBubble />
+      <SafeAreaProvider key={insetsRemountKey} initialMetrics={initialWindowMetrics}>
+        <RootNavigator />
+        <CallOverlay />
+        <GroupCallOverlay />
+        <IncomingGroupCallBanner />
+        <MinimizedCallBubble />
+      </SafeAreaProvider>
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       {/* Android-only (no-ops elsewhere) — without this the system nav bar
           never follows this app's OWN theme preference (which can differ

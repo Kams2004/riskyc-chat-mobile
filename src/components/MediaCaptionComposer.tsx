@@ -10,7 +10,9 @@ import { fonts, gradients, type Palette } from '../theme';
 import { ImageEditor } from './ImageEditor';
 import { EMPTY_OVERLAY, serializeOverlay, StatusOverlayView, type StatusOverlay } from './StatusOverlayView';
 
-export type PendingMedia = { kind: 'image'; uri: string } | { kind: 'file'; uri: string; name: string; size?: number | null };
+export type PendingMedia =
+  | { kind: 'image'; uri: string; size?: number | null }
+  | { kind: 'file'; uri: string; name: string; size?: number | null };
 
 function formatFileSize(bytes?: number | null): string {
   if (!bytes) return '';

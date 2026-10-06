@@ -6,7 +6,7 @@ export type CallResult = {
   callerId: string;
   calleeId: string;
   type: 'AUDIO' | 'VIDEO';
-  status: 'RINGING' | 'ACCEPTED' | 'DECLINED' | 'MISSED' | 'ENDED';
+  status: 'RINGING' | 'ACCEPTED' | 'DECLINED' | 'MISSED' | 'BUSY' | 'ENDED';
   startedAt: string;
   answeredAt: string | null;
   endedAt: string | null;

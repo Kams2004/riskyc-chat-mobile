@@ -47,6 +47,7 @@ export async function forwardMessage(
     mediaObjectKey: source.media_object_key ?? undefined,
     mediaFileName: source.media_file_name ?? undefined,
     mediaDurationMs: source.media_duration_ms ?? undefined,
+    mediaFileSize: source.media_file_size ?? undefined,
     waveform: source.media_waveform ?? undefined,
     overlayJson: source.media_overlay_json ?? undefined,
     forwarded: true,
@@ -67,6 +68,7 @@ export async function forwardMessage(
     media_duration_ms: source.media_duration_ms,
     media_waveform: source.media_waveform,
     media_overlay_json: source.media_overlay_json,
+    media_file_size: source.media_file_size,
     edited: 0,
     deleted: 0,
     forwarded: 1,
@@ -83,6 +85,11 @@ export async function forwardMessage(
     is_system: 0,
     reply_to_status_id: null,
     reply_to_status_owner_id: null,
+    invite_group_id: null,
+    invite_group_name: null,
+    invite_group_avatar_object_key: null,
+    invite_invitation_id: null,
+    invite_status: null,
   });
   await upsertConversation(db, target.conversationId, target.title, sentAt, target.avatarObjectKey, !!target.groupId);
   DeviceEventEmitter.emit(CONVERSATIONS_CHANGED_EVENT);

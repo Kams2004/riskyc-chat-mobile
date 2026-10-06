@@ -12,6 +12,7 @@ import type {
 import { useAuth } from '../auth/AuthContext';
 import { config } from '../../lib/config';
 import { setSpeakerphoneEnabled } from '../../lib/sounds';
+import { getActiveCallKind, setActiveCallKind } from './activeCallTracker';
 import { GroupCallSignalingSocket, type GroupCallType } from './groupCallSignaling';
 
 // Required once, before any mediasoup-client Device is constructed — exposes
@@ -91,6 +92,8 @@ export function GroupCallProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const resetState = useCallback(() => {
+    // Only clear it if THIS call claimed it — see activeCallTracker.ts.
+    if (getActiveCallKind() === 'group') setActiveCallKind('none');
     setSpeakerphoneEnabled(false);
     for (const consumer of consumersRef.current.values()) consumer.close();
     consumersRef.current.clear();
@@ -140,12 +143,30 @@ export function GroupCallProvider({ children }: { children: React.ReactNode }) {
 
   const doJoin = useCallback(
     async (targetGroupId: string, targetGroupName: string, targetCallType: GroupCallType, memberIdsToInvite: string[] | null) => {
-      if (!userId || groupCallState !== 'idle') return;
+      // Busy on a 1:1 call too — see activeCallTracker.ts's own doc comment
+      // on why this can't just read CallContext's state directly.
+      if (!userId || groupCallState !== 'idle' || getActiveCallKind() === 'oneToOne') return;
+      setActiveCallKind('group');
       setGroupCallState('connecting');
       setGroupId(targetGroupId);
       setGroupName(targetGroupName);
       setCallType(targetCallType);
 
+      // Nothing below here awaited on had a failure path wired to
+      // resetState before (a rejected getUserMedia, a timed-out signaling
+      // connect, ...) — groupCallState would get stuck on 'connecting'
+      // forever. Harmless on its own before, but now that joining also
+      // claims activeCallTracker, an unhandled failure here would
+      // permanently block every future 1:1 call too, so this needs an
+      // actual failure path, not just the happy one.
+      try {
+        await doJoinInner();
+      } catch (e) {
+        resetState();
+        throw e;
+      }
+
+      async function doJoinInner() {
       const socket = new GroupCallSignalingSocket();
       socketRef.current = socket;
 
@@ -260,6 +281,7 @@ export function GroupCallProvider({ children }: { children: React.ReactNode }) {
 
       setSpeakerphoneEnabled(targetCallType === 'VIDEO');
       setGroupCallState('in-call');
+      }
     },
     [accessToken, consumeProducer, displayName, groupCallState, resetState, upsertParticipant, userId]
   );

@@ -18,12 +18,11 @@ export default {
     voiceMessage: '🎤 Voice message',
     document: '📎 Document',
     sticker: 'Sticker',
+    groupInvitation: '👥 Group invitation',
     typing: 'typing',
     tabChats: 'Chats',
     tabArchived: 'Archived',
     muted: 'Muted',
-    pendingGroupInvitations_one: '{{count}} group invitation',
-    pendingGroupInvitations_other: '{{count}} group invitations',
   },
   thread: {
     status: {
@@ -45,6 +44,8 @@ export default {
       missedTheirs: 'Missed {{label}}',
       declinedMine: '{{label}} · Declined',
       declinedTheirs: '{{label}} · You declined',
+      busyMine: '{{label}} · Busy',
+      busyTheirs: '{{label}} · You were on another call',
     },
     messageInfo: {
       title: 'Message info',
@@ -168,6 +169,8 @@ export default {
   },
   contactDetails: {
     headerTitle: 'Contact info',
+    autoDownloadMedia: 'Auto-download media',
+    autoDownloadMediaDescription: 'When off, photos and videos in this chat stay behind a tap-to-download button showing the file size, instead of loading automatically.',
     clearChatConfirmTitle: 'Clear chat?',
     clearChatConfirmBody: 'This removes the messages from this device only — the other person keeps theirs.',
     defaultPersonName: 'this person',

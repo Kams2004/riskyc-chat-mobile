@@ -24,19 +24,12 @@ import { conversationIdFor } from '../../../features/messaging/conversationId';
 import { useTheme } from '../../../features/theme/ThemeContext';
 import { config } from '../../../lib/config';
 import { COUNTRIES, type Country } from '../../../lib/countries';
-import { readDeviceContacts } from '../../../features/contacts/sync';
+import { dialCodeFor, normalizePhone, readDeviceContacts } from '../../../features/contacts/sync';
 import { lookupByPhone, matchContacts, type UserResult } from '../../../features/users/api';
 import { getAllLocalContacts, upsertLocalContact, useSQLiteContext } from '../../../data/db';
 import { fonts, type Palette } from '../../../theme';
 
 type LoadState = 'loading' | 'granted' | 'denied';
-
-/** Strips everything but a leading + and digits. */
-function normalizePhone(raw: string): string {
-  const trimmed = raw.trim();
-  const plus = trimmed.startsWith('+') ? '+' : '';
-  return plus + trimmed.replace(/[^\d]/g, '');
-}
 
 /** True when the string looks like a phone number the user typed (not a name). */
 function looksLikePhoneQuery(q: string): boolean {
@@ -61,7 +54,7 @@ export default function NewConversationScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = makeStyles(colors);
-  const { userId } = useAuth();
+  const { userId, phoneNumber: ownPhoneNumber } = useAuth();
   const { t } = useTranslation('chats');
   const db = useSQLiteContext();
 
@@ -100,6 +93,7 @@ export default function NewConversationScreen() {
       }
       try {
         const data = await readDeviceContacts();
+        const defaultDialCode = dialCodeFor(ownPhoneNumber);
 
         const phoneNumbers = new Set<string>();
         const emails = new Set<string>();
@@ -109,7 +103,7 @@ export default function NewConversationScreen() {
           const name = contact.name?.trim() || '';
           for (const phone of contact.phoneNumbers ?? []) {
             if (phone.number) {
-              const norm = normalizePhone(phone.number);
+              const norm = normalizePhone(phone.number, defaultDialCode);
               phoneNumbers.add(norm);
               if (name) phoneToName.set(norm, name);
             }
@@ -125,7 +119,7 @@ export default function NewConversationScreen() {
 
         for (const user of matched) {
           if (user.phoneNumber) {
-            const deviceName = phoneToName.get(normalizePhone(user.phoneNumber));
+            const deviceName = phoneToName.get(normalizePhone(user.phoneNumber, defaultDialCode));
             if (deviceName) await upsertLocalContact(db, user.userId, deviceName);
           }
         }
@@ -151,7 +145,7 @@ export default function NewConversationScreen() {
         }
       }
     },
-    [db, t]
+    [db, t, ownPhoneNumber]
   );
 
   useFocusEffect(

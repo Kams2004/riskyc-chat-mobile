@@ -17,15 +17,6 @@ export type GroupResult = {
 /** Sentinel Message.ciphertext for a system "X joined the group" log line — must match GroupController.SYSTEM_MEMBER_JOINED exactly. */
 export const SYSTEM_MEMBER_JOINED = '__SYSTEM_GROUP_JOINED__';
 
-export type GroupInvitationResult = {
-  invitationId: number;
-  groupId: string;
-  groupName: string | null;
-  groupAvatarObjectKey: string | null;
-  inviterId: string;
-  createdAt: string;
-};
-
 export function createGroup(name: string, memberIds: string[], avatarObjectKey?: string | null): Promise<GroupResult> {
   return apiFetch(`${config.messagingServiceUrl}/api/groups`, {
     method: 'POST',
@@ -73,11 +64,7 @@ export function changeMemberRole(groupId: string, userId: string, role: 'ADMIN' 
   });
 }
 
-/** My own outstanding invitations, across every group — feeds a pending-invites badge/list. */
-export function fetchMyGroupInvitations(): Promise<GroupInvitationResult[]> {
-  return apiFetch(`${config.messagingServiceUrl}/api/groups/invitations`);
-}
-
+/** Called from the inline invite card in the inviter/invitee's 1:1 conversation — see chats/[conversationId].tsx. */
 export function acceptGroupInvitation(invitationId: number): Promise<GroupResult> {
   return apiFetch(`${config.messagingServiceUrl}/api/groups/invitations/${invitationId}/accept`, { method: 'POST' });
 }

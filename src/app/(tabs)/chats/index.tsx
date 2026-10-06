@@ -16,6 +16,7 @@ import Svg, { Path } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
 
 import { Avatar } from '../../../components/Avatar';
+import { SwipeBetweenTabs } from '../../../components/SwipeTabs';
 import { TypingDots } from '../../../components/TypingDots';
 import {
   deleteConversation,
@@ -30,7 +31,7 @@ import {
   type LocalConversation,
 } from '../../../data/db';
 import { useAuth } from '../../../features/auth/AuthContext';
-import { fetchMyGroupInvitations, getGroup } from '../../../features/groups/api';
+import { getGroup } from '../../../features/groups/api';
 import { getSystemAccountInfo } from '../../../features/systemAccount/api';
 import { setConversationMuted } from '../../../features/messaging/api';
 import { looksLikeUnresolvedName, otherPartyFrom } from '../../../features/messaging/conversationId';
@@ -69,6 +70,19 @@ function lastMessagePreview(
   if (type === 'AUDIO') return { text: `${prefix}${t('list.voiceMessage')}`, isMedia: true };
   if (type === 'FILE') return { text: `${prefix}${t('list.document')}`, isMedia: true };
   if (type === 'STICKER') return { text: `${prefix}${t('list.sticker')}`, isMedia: true };
+  if (type === 'GROUP_INVITE') return { text: t('list.groupInvitation'), isMedia: true };
+  // last_message_snippet is the raw backend enum name for a CALL message
+  // (ciphertext carries MISSED/DECLINED/ENDED — see CallLogService's own
+  // comment) — without this case it fell through to the generic branch
+  // below and showed that raw string verbatim instead of a real label.
+  if (type === 'CALL') {
+    const outcome = item.last_message_snippet;
+    const label = t('thread.call.voice');
+    if (outcome === 'MISSED') return { text: isMine ? t('thread.call.missedMine', { label }) : t('thread.call.missedTheirs', { label }), isMedia: true };
+    if (outcome === 'DECLINED') return { text: isMine ? t('thread.call.declinedMine', { label }) : t('thread.call.declinedTheirs', { label }), isMedia: true };
+    if (outcome === 'BUSY') return { text: isMine ? t('thread.call.busyMine', { label }) : t('thread.call.busyTheirs', { label }), isMedia: true };
+    return { text: label, isMedia: true };
+  }
   if (item.last_message_snippet) return { text: `${prefix}${item.last_message_snippet}`, isMedia: false };
   return { text: '', isMedia: false };
 }
@@ -91,16 +105,7 @@ export default function ChatListScreen() {
   // conversationId → Set<userId> of who is currently typing
   const [typingMap, setTypingMap] = useState<TypingMap>(new Map());
   const typingTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
-  const [pendingInvitationCount, setPendingInvitationCount] = useState(0);
   const [isSystemAccount, setIsSystemAccount] = useState(false);
-
-  useFocusEffect(
-    useCallback(() => {
-      fetchMyGroupInvitations()
-        .then((invitations) => setPendingInvitationCount(invitations.length))
-        .catch(() => {});
-    }, [])
-  );
 
   useEffect(() => {
     if (!userId) return;
@@ -119,6 +124,18 @@ export default function ChatListScreen() {
   useEffect(() => {
     const sub = DeviceEventEmitter.addListener(CONVERSATIONS_CHANGED_EVENT, reloadConversations);
     return () => sub.remove();
+  }, [reloadConversations]);
+
+  // useFocusEffect below only re-runs on an actual navigation focus event,
+  // not just because userId changed — on a cold launch this tab is already
+  // focused by the time it mounts, so that effect fires once while userId
+  // is still null (AuthContext's session restore is async) and bails out,
+  // then never runs again since the screen never loses/regains focus. This
+  // plain effect catches exactly that transition (null -> real userId) so
+  // the list actually populates on first launch instead of silently
+  // staying "No conversations yet" despite real local data existing.
+  useEffect(() => {
+    reloadConversations();
   }, [reloadConversations]);
 
   // Listen to global typing events from the inbox socket
@@ -299,6 +316,7 @@ export default function ChatListScreen() {
   const inSelectionMode = selectedIds.length > 0;
 
   return (
+    <SwipeBetweenTabs toLeft="/(tabs)/status">
     <View style={[styles.container, { paddingTop: insets.top + 8 }]}>
       {inSelectionMode ? (
         <View style={styles.selectionHeader}>
@@ -368,21 +386,6 @@ export default function ChatListScreen() {
               </TouchableOpacity>
             )}
           </View>
-          {pendingInvitationCount > 0 && (
-            <TouchableOpacity style={styles.invitationBanner} onPress={() => router.push('/(tabs)/chats/group-invitations' as never)}>
-              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={colors.brand600} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                <Path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                <Path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" />
-                <Path d="M19 8v6M22 11h-6" />
-              </Svg>
-              <Text style={styles.invitationBannerText}>
-                {t('list.pendingGroupInvitations', { count: pendingInvitationCount })}
-              </Text>
-              <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={colors.brand600} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                <Path d="M9 18l6-6-6-6" />
-              </Svg>
-            </TouchableOpacity>
-          )}
           <View style={styles.tabRow}>
             <TouchableOpacity style={[styles.tabChip, tab === 'chats' && { backgroundColor: colors.brand500 }]} onPress={() => setTab('chats')}>
               <Text style={[styles.tabChipLabel, tab === 'chats' && { color: '#ffffff' }]}>{t('list.tabChats')}</Text>
@@ -464,20 +467,12 @@ export default function ChatListScreen() {
                     <TypingDots color={colors.brand500} />
                   </View>
                 ) : preview.text ? (
+                  // No separate icon here on purpose — lastMessagePreview()'s
+                  // media strings (list.photo/video/voiceMessage/document)
+                  // already carry their own leading emoji, so an SVG icon
+                  // next to it used to render as two camera icons side by
+                  // side for an IMAGE message (one emoji, one SVG).
                   <View style={styles.previewRow}>
-                    {preview.isMedia && (
-                      <Svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={colors.textMuted} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 3, flexShrink: 0 }}>
-                        {item.last_message_type === 'IMAGE' ? (
-                          <><Path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><Path d="M12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" /></>
-                        ) : item.last_message_type === 'VIDEO' ? (
-                          <><Path d="M23 7l-7 5 7 5V7z" /><Path d="M1 5h15v14H1z" /></>
-                        ) : item.last_message_type === 'AUDIO' ? (
-                          <><Path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><Path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3" stroke={colors.textMuted} strokeWidth={2} strokeLinecap="round" fill="none" /></>
-                        ) : (
-                          <><Path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><Path d="M14 2v6h6" /></>
-                        )}
-                      </Svg>
-                    )}
                     <Text style={styles.previewText} numberOfLines={1}>{preview.text}</Text>
                   </View>
                 ) : null}
@@ -520,6 +515,7 @@ export default function ChatListScreen() {
         </LinearGradient>
       )}
     </View>
+    </SwipeBetweenTabs>
   );
 }
 
@@ -535,17 +531,6 @@ function makeStyles(colors: Palette) {
     filterChipLabel: { fontFamily: fonts.sansMedium, fontSize: 12.5, color: colors.textPrimary },
     searchBar: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.tint1, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 11, marginBottom: 8 },
     searchInput: { flex: 1, fontFamily: fonts.sans, fontSize: 14.5, color: colors.textPrimary },
-    invitationBanner: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 10,
-      backgroundColor: colors.tint1,
-      borderRadius: 12,
-      paddingHorizontal: 14,
-      paddingVertical: 12,
-      marginBottom: 10,
-    },
-    invitationBannerText: { flex: 1, fontFamily: fonts.sansSemiBold, fontSize: 13.5, color: colors.textPrimary },
     tabRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
     tabChip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 16, backgroundColor: colors.tint1 },
     tabChipLabel: { fontFamily: fonts.sansMedium, fontSize: 12.5, color: colors.textPrimary },

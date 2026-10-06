@@ -18,12 +18,11 @@ export default {
     voiceMessage: '🎤 Message vocal',
     document: '📎 Document',
     sticker: 'Autocollant',
+    groupInvitation: '👥 Invitation de groupe',
     typing: 'écrit',
     tabChats: 'Discussions',
     tabArchived: 'Archivées',
     muted: 'Silencieux',
-    pendingGroupInvitations_one: '{{count}} invitation de groupe',
-    pendingGroupInvitations_other: '{{count}} invitations de groupe',
   },
   thread: {
     status: {
@@ -45,6 +44,8 @@ export default {
       missedTheirs: '{{label}} manqué',
       declinedMine: '{{label}} · Refusé',
       declinedTheirs: '{{label}} · Refusé par vous',
+      busyMine: '{{label}} · Occupé',
+      busyTheirs: '{{label}} · Vous étiez sur un autre appel',
     },
     messageInfo: {
       title: 'Infos sur le message',
@@ -168,6 +169,8 @@ export default {
   },
   contactDetails: {
     headerTitle: 'Infos du contact',
+    autoDownloadMedia: 'Téléchargement automatique des médias',
+    autoDownloadMediaDescription: 'Désactivé, les photos et vidéos de cette discussion restent derrière un bouton de téléchargement affichant la taille du fichier, au lieu de se charger automatiquement.',
     clearChatConfirmTitle: 'Effacer la discussion ?',
     clearChatConfirmBody: 'Cela retire les messages de cet appareil uniquement — l’autre personne garde les siens.',
     defaultPersonName: 'cette personne',

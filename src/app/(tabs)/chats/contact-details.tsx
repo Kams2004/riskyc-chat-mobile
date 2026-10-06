@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, DeviceEventEmitter, Image, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, DeviceEventEmitter, Image, Linking, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
@@ -12,7 +12,7 @@ import { clearConversationMessages, getLocalContactName, setFavorite, upsertLoca
 import { useAuth } from '../../../features/auth/AuthContext';
 import { useCall } from '../../../features/calls/CallContext';
 import { getCommonGroups, type GroupResult } from '../../../features/groups/api';
-import { getMediaSummary, type MediaSummaryItem } from '../../../features/messaging/api';
+import { fetchConversationSettings, getMediaSummary, setAutoDownloadMedia as setAutoDownloadMediaApi, type MediaSummaryItem } from '../../../features/messaging/api';
 import { MESSAGES_CLEARED_EVENT } from '../../../features/messaging/inboxSocket';
 import { getSystemAccountInfo, type SystemAccountInfo } from '../../../features/systemAccount/api';
 import { useMediaUrl } from '../../../features/media/useMediaUrl';
@@ -48,6 +48,18 @@ export default function ContactDetailsScreen() {
   const [isBlocked, setIsBlocked] = useState(false);
   const [systemInfo, setSystemInfo] = useState<SystemAccountInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [autoDownloadMedia, setAutoDownloadMediaState] = useState(true);
+
+  useEffect(() => {
+    fetchConversationSettings(conversationId)
+      .then((settings) => setAutoDownloadMediaState(settings.autoDownloadMedia))
+      .catch((e) => console.warn('[ContactDetails] fetchConversationSettings failed', e));
+  }, [conversationId]);
+
+  function handleToggleAutoDownload(value: boolean) {
+    setAutoDownloadMediaState(value);
+    setAutoDownloadMediaApi(conversationId, value).catch((e) => console.warn('[ContactDetails] setAutoDownloadMedia failed', e));
+  }
 
   const load = useCallback(async () => {
     const [userResult, mediaResult, groupsResult, blockedResult, savedName, systemAccountInfo] = await Promise.all([
@@ -246,6 +258,19 @@ export default function ContactDetailsScreen() {
         )}
       </TouchableOpacity>
 
+      <View style={styles.toggleRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.sectionTitle}>{t('contactDetails.autoDownloadMedia')}</Text>
+          <Text style={styles.toggleDescription}>{t('contactDetails.autoDownloadMediaDescription')}</Text>
+        </View>
+        <Switch
+          value={autoDownloadMedia}
+          onValueChange={handleToggleAutoDownload}
+          trackColor={{ false: colors.hairline, true: colors.brand400 }}
+          thumbColor="#ffffff"
+        />
+      </View>
+
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>{t('contactDetails.groupsInCommon')}</Text>
         {groups.length === 0 ? (
@@ -365,6 +390,8 @@ function makeStyles(colors: Palette) {
     circleAction: { alignItems: 'center', gap: 6 },
     circleActionLabel: { fontFamily: fonts.sans, fontSize: 11.5, color: colors.brand600 },
     section: { paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: colors.hairline },
+    toggleRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.hairline },
+    toggleDescription: { fontFamily: fonts.sans, fontSize: 11.5, color: colors.textMuted, marginTop: 2, lineHeight: 15 },
     sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     sectionTitle: { fontFamily: fonts.sansSemiBold, fontSize: 14, color: colors.textPrimary },
     emptyText: { fontFamily: fonts.sans, fontSize: 12.5, color: colors.textMuted, marginTop: 6 },

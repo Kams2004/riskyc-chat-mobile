@@ -111,7 +111,15 @@ export function TAB_BAR_CLEARANCE(insetsBottom: number): number {
   return insetsBottom + tabBarLayout.bottomMargin + tabBarLayout.height + 20;
 }
 
-/** `bottom` offset for a FAB that should float just above the tab bar. */
+/**
+ * `bottom` offset for a FAB that should float just above the tab bar — a
+ * clear, fixed 16px gap above the bar's own top edge, never touching or
+ * overlapping it. (An earlier pass tried shrinking or even overlapping this
+ * gap to fix a "FAB touching the bar" report, which was actually a symptom
+ * of insetsBottom itself reading a stale/inflated value after a call Modal
+ * closed — see CallOverlay.tsx's nested-SafeAreaProvider doc comment for the
+ * real fix. With that fixed, this just needs to be a sane constant gap.)
+ */
 export function fabBottomOffset(insetsBottom: number): number {
-  return insetsBottom + tabBarLayout.bottomMargin + tabBarLayout.height + 6;
+  return insetsBottom + tabBarLayout.bottomMargin + tabBarLayout.height + 16;
 }

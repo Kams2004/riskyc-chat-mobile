@@ -7,6 +7,7 @@ export default {
   status: {
     missed: 'Manqué',
     declined: 'Refusé',
+    busy: 'Occupé',
     outgoing: 'Sortant',
     incoming: 'Entrant',
   },
@@ -14,6 +15,8 @@ export default {
     incomingVideoCall: 'Appel vidéo entrant',
     incomingVoiceCall: 'Appel vocal entrant',
     ringing: 'Sonnerie…',
+    busyTitle: 'Ligne occupée',
+    busyMessage: '{{name}} est déjà en communication.',
     groupCallsTitle: 'Appels de groupe',
     groupCallsComingSoon: "L'ajout de participants en cours d'appel arrive bientôt.",
     qualityTitle: "Qualité d'appel",

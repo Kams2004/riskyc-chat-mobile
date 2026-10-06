@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Alert, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RTCView } from 'react-native-webrtc';
 import Svg, { Path } from 'react-native-svg';
@@ -36,7 +36,33 @@ function IconButton({
   );
 }
 
+/**
+ * Deliberately NOT React Native's <Modal>: on Android, Modal opens a
+ * separate native window from the main Activity's, and that window boundary
+ * is exactly where things went wrong — the insets measured for the main
+ * window didn't reliably apply inside it, AND closing the modal would leave
+ * the main window's OWN insets dispatch corrupted afterward (confirmed live:
+ * the floating tab bar rendered flush/docked, with no rounded corners or
+ * shadow, for the rest of the session after a single call). Rendering this
+ * as a plain full-screen absolutely-positioned View in the SAME window as
+ * everything else — mounted at the app root alongside RootNavigator, see
+ * app/_layout.tsx — sidesteps the whole class of bug: there's only ever one
+ * window, one SafeAreaProvider, one set of insets, for the whole app's
+ * lifetime, call or no call.
+ */
 export function CallOverlay() {
+  const { callState } = useCall();
+  // 'minimized' renders nothing here — MinimizedCallBubble (mounted
+  // alongside this component at the app root) takes over instead.
+  if (callState === 'idle' || callState === 'minimized') return null;
+  return (
+    <View style={styles.modalReplacement}>
+      <CallOverlayContent />
+    </View>
+  );
+}
+
+function CallOverlayContent() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const {
@@ -122,16 +148,11 @@ export function CallOverlay() {
     return () => clearInterval(interval);
   }, [connectedAt]);
 
-  // 'minimized' renders nothing here — MinimizedCallBubble (mounted
-  // alongside this component at the app root) takes over instead.
-  if (callState === 'idle' || callState === 'minimized') return null;
-
   const otherName = incomingCall ? callerName : outgoingCall?.toUserName ?? '';
   const otherAvatar = incomingCall ? callerAvatar : outgoingAvatar;
   const isVideo = callType === 'VIDEO';
 
   return (
-    <Modal visible transparent={false} animationType="slide">
       <ChatWallpaper dark variant="dots">
         <View style={styles.container}>
         {callState === 'connected' && (
@@ -160,8 +181,18 @@ export function CallOverlay() {
             </View>
           </View>
         )}
+        {/* Outgoing video call: the callee hasn't answered yet (no remote
+            stream can exist), but the caller's own camera was already
+            requested back in startCall() before the invite was even sent
+            (see CallContext.tsx) — only this screen was waiting for
+            'connected' to ever show it, which made ringing out on a video
+            call look identical to a voice call. Fills the same role the
+            remote stream takes once answered: full-screen here, demoted to
+            the small PIP below only after the call actually connects. */}
         {isVideo && callState === 'connected' && remoteStream ? (
           <RTCView streamURL={remoteStream.toURL()} style={StyleSheet.absoluteFill} objectFit="cover" />
+        ) : isVideo && callState === 'outgoing-ringing' && localStream && !isCameraOff ? (
+          <RTCView streamURL={localStream.toURL()} style={StyleSheet.absoluteFill} objectFit="cover" mirror />
         ) : null}
 
         {isVideo && callState === 'connected' && localStream && !isCameraOff ? (
@@ -170,7 +201,7 @@ export function CallOverlay() {
           </View>
         ) : null}
 
-        {(!isVideo || callState !== 'connected' || !remoteStream) && (
+        {(!isVideo || (callState !== 'connected' && callState !== 'outgoing-ringing') || (callState === 'connected' && !remoteStream)) && (
           <View style={styles.centerInfo}>
             {/* Avatar's own showIcon fallback (a generic person icon) only
                 fires on a falsy label — passing the literal string '?' here
@@ -184,6 +215,17 @@ export function CallOverlay() {
               {callState === 'outgoing-ringing' && t('overlay.ringing')}
               {callState === 'connected' && formatDuration(elapsed)}
             </Text>
+          </View>
+        )}
+
+        {/* Same name/"Ringing..." text as centerInfo above, but overlaid near
+            the top instead of centered — centerInfo is suppressed here since
+            the self-preview already fills the screen and a big avatar would
+            just sit on top of your own face. */}
+        {isVideo && callState === 'outgoing-ringing' && localStream && !isCameraOff && (
+          <View style={[styles.centerInfo, styles.selfPreviewInfo, { top: insets.top + 24 }]}>
+            <Text style={styles.name}>{otherName}</Text>
+            <Text style={styles.status}>{t('overlay.ringing')}</Text>
           </View>
         )}
 
@@ -262,11 +304,16 @@ export function CallOverlay() {
         </View>
         </View>
       </ChatWallpaper>
-    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  // Fills the whole screen above everything else RootNavigator renders —
+  // elevation is needed in addition to zIndex for Android to actually stack
+  // this above sibling views (zIndex alone isn't reliable cross-sibling on
+  // Android). backgroundColor matches ChatWallpaper's own dark backdrop
+  // (#1a0d10) so there's no transparent flash before it mounts underneath.
+  modalReplacement: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 999, elevation: 999, backgroundColor: '#1a0d10' },
   container: { flex: 1, alignItems: 'center' },
   topBar: {
     position: 'absolute',
@@ -297,6 +344,11 @@ const styles = StyleSheet.create({
   },
   qualityButtonLabel: { fontFamily: fonts.sansSemiBold, fontSize: 12, color: '#ffffff' },
   centerInfo: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 },
+  // Overrides centerInfo's flex-centered layout when it's laid over the
+  // caller's own full-screen camera preview instead of a plain background —
+  // name/status sit near the top, out of the way of the face filling the
+  // rest of the screen.
+  selfPreviewInfo: { position: 'absolute', left: 0, right: 0, flex: 0, gap: 2 },
   name: { fontFamily: fonts.sansSemiBold, fontSize: 22, color: '#ffffff', marginTop: 8 },
   status: { fontFamily: fonts.sans, fontSize: 15, color: 'rgba(255,255,255,0.7)' },
   overlayTimer: {

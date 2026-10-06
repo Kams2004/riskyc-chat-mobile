@@ -27,11 +27,10 @@ import {
 import { PanGestureHandler } from 'react-native-gesture-handler';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Path, Rect } from 'react-native-svg';
+import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
 
 import { AttachmentSheet } from '../../../components/AttachmentSheet';
-import { Spinner } from '../../../components/Spinner';
 import { parseOverlay, StatusOverlayView } from '../../../components/StatusOverlayView';
 import { StickerMessage } from '../../../components/StickerMessage';
 import { StickerPicker } from '../../../components/StickerPicker';
@@ -48,7 +47,7 @@ import { VoiceRecorder } from '../../../components/VoiceRecorder';
 import { useAuth } from '../../../features/auth/AuthContext';
 import { useCall } from '../../../features/calls/CallContext';
 import { useGroupCall } from '../../../features/calls/GroupCallContext';
-import { getGroup, SYSTEM_MEMBER_JOINED } from '../../../features/groups/api';
+import { acceptGroupInvitation, declineGroupInvitation, getGroup, SYSTEM_MEMBER_JOINED } from '../../../features/groups/api';
 import { uploadMedia } from '../../../features/media/api';
 import { saveSticker } from '../../../features/stickers/api';
 import { invalidateSavedStickerKeys } from '../../../features/stickers/savedKeysCache';
@@ -76,8 +75,10 @@ import {
   getStarredMessageIds,
   listGroupMembers,
   parseAttachments,
+  setInviteStatusLocally,
   starMessage,
   unstarMessage,
+  upsertConversation,
   upsertGroupMembers,
   useSQLiteContext,
   type AttachmentItem,
@@ -148,7 +149,15 @@ function SwipeableMessage({ onReply, children }: { onReply: () => void; children
 
   return (
     <PanGestureHandler
-      activeOffsetX={[10, 9999]}
+      // RNGH requires [negative, positive] — a dead-zone around 0 that
+      // activation must exit. [10, 9999] (both positive) is invalid and
+      // throws a render error at runtime on this RNGH version ("First
+      // element of activeOffsetX should be negative..."), crashing the
+      // whole message list the moment any received message tries to
+      // render — the swipe-right-only intent is still right-only here
+      // since the negative bound (-9999) is effectively unreachable, so a
+      // leftward swipe never activates it.
+      activeOffsetX={[-9999, 10]}
       failOffsetY={[-10, 10]}
       onGestureEvent={({ nativeEvent }) => {
         const x = Math.max(0, nativeEvent.translationX);
@@ -215,23 +224,28 @@ function MessageImage({
   overlayJson,
   onPress,
   autoDownloadMedia = true,
+  fileSize,
+  isMine = false,
 }: {
   objectKey: string | null;
   overlayJson?: string | null;
   onPress?: () => void;
   autoDownloadMedia?: boolean;
+  fileSize?: number | null;
+  /** The download gate only ever applies to media received FROM someone else — your own just-sent photo/video shows immediately, same as WhatsApp, regardless of the conversation's auto-download setting (that setting is about what you pull down, not what you already have on-device from having sent it). */
+  isMine?: boolean;
 }) {
-  const [revealed, setRevealed] = useState(autoDownloadMedia);
+  const [revealed, setRevealed] = useState(isMine || autoDownloadMedia);
   // Gated only until resolved — objectKey is always non-null for a real
   // IMAGE message, so this hook call is unconditional either way (rules of
   // hooks), it just doesn't do anything until revealed.
-  const { url, status, retry } = useMediaUrlWithStatus(revealed ? objectKey : null);
+  const { url, status, progress, retry } = useMediaUrlWithStatus(revealed ? objectKey : null);
   const [imgFailed, setImgFailed] = useState(false);
   useEffect(() => setImgFailed(false), [url]);
   const effectiveStatus = imgFailed ? 'error' : status;
 
   if (!revealed) {
-    return <DownloadGate onPress={() => setRevealed(true)} />;
+    return <CircularDownloadButton onPress={() => setRevealed(true)} fileSize={fileSize} progress={0} active={false} />;
   }
 
   if (effectiveStatus === 'error') {
@@ -253,11 +267,7 @@ function MessageImage({
   }
 
   if (!url) {
-    return (
-      <View style={imageStyles.placeholder}>
-        <Spinner size={40} color="#ffffff" />
-      </View>
-    );
+    return <CircularDownloadButton onPress={() => {}} fileSize={fileSize} progress={progress} active />;
   }
   const overlay = parseOverlay(overlayJson);
   return (
@@ -275,19 +285,56 @@ const imageStyles = StyleSheet.create({
 });
 
 /**
- * Same tap-to-download gate as MessageAttachmentGrid's own gallery gate,
- * for a single (non-gallery) image/video message when auto-download is off.
- * No size label here — unlike a gallery item, a single-attachment message
- * has no per-message byte count in local SQLite today, so this only gates
- * the fetch, not the size display gallery items get.
+ * WhatsApp-style download affordance for a single (non-gallery) image/video
+ * message when auto-download is off: a plain circular icon button, no
+ * explanatory sentence — the download arrow already says what tapping it
+ * does. Once tapped (`active`), the icon is ringed by a real progress arc
+ * driven by useMediaUrlWithStatus's byte-level progress (see
+ * useMediaUrl.ts's resolveLocalUri/onProgress), and the file size sits
+ * underneath as a short caption throughout, not folded into button text.
  */
-function DownloadGate({ onPress }: { onPress: () => void }) {
+function CircularDownloadButton({
+  onPress,
+  fileSize,
+  progress,
+  active,
+}: {
+  onPress: () => void;
+  fileSize?: number | null;
+  /** 0-1 — only meaningful while `active`; the server's Content-Length is sometimes missing, in which case this just sits at 0 and the ring stays empty rather than lying about progress. */
+  progress: number;
+  /** True once a fetch is actually in flight (post-tap), vs. idle/not-yet-tapped. */
+  active: boolean;
+}) {
+  const size = formatFileSize(fileSize);
+  const ringSize = 44;
+  const strokeWidth = 3;
+  const radius = (ringSize - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
   return (
-    <TouchableOpacity style={imageStyles.placeholder} onPress={onPress} activeOpacity={0.8}>
-      <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-        <Path d="M12 3v13m0 0l-4-4m4 4l4-4M5 21h14" />
-      </Svg>
-      <Text style={imageStyles.retryText}>Tap to download</Text>
+    <TouchableOpacity style={imageStyles.placeholder} onPress={onPress} activeOpacity={0.8} disabled={active}>
+      <View style={{ width: ringSize, height: ringSize, alignItems: 'center', justifyContent: 'center' }}>
+        {active && (
+          <Svg width={ringSize} height={ringSize} style={{ position: 'absolute', transform: [{ rotate: '-90deg' }] }}>
+            <Circle cx={ringSize / 2} cy={ringSize / 2} r={radius} fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth={strokeWidth} />
+            <Circle
+              cx={ringSize / 2}
+              cy={ringSize / 2}
+              r={radius}
+              fill="none"
+              stroke="#ffffff"
+              strokeWidth={strokeWidth}
+              strokeLinecap="round"
+              strokeDasharray={`${circumference} ${circumference}`}
+              strokeDashoffset={circumference * (1 - progress)}
+            />
+          </Svg>
+        )}
+        <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+          <Path d="M12 3v13m0 0l-4-4m4 4l4-4M5 21h14" />
+        </Svg>
+      </View>
+      {!!size && <Text style={imageStyles.retryText}>{size}</Text>}
     </TouchableOpacity>
   );
 }
@@ -304,20 +351,25 @@ function MessageVideo({
   durationMs,
   onPress,
   autoDownloadMedia = true,
+  fileSize,
+  isMine = false,
 }: {
   objectKey: string | null;
   durationMs: number | null;
   onPress?: () => void;
   autoDownloadMedia?: boolean;
+  fileSize?: number | null;
+  /** See MessageImage's own comment — only received media is ever gated. */
+  isMine?: boolean;
 }) {
-  const [revealed, setRevealed] = useState(autoDownloadMedia);
-  const { url, status, retry } = useMediaUrlWithStatus(revealed ? objectKey : null);
+  const [revealed, setRevealed] = useState(isMine || autoDownloadMedia);
+  const { url, status, progress, retry } = useMediaUrlWithStatus(revealed ? objectKey : null);
   const player = useVideoPlayer(url ?? '', (p) => {
     p.muted = true;
   });
 
   if (!revealed) {
-    return <DownloadGate onPress={() => setRevealed(true)} />;
+    return <CircularDownloadButton onPress={() => setRevealed(true)} fileSize={fileSize} progress={0} active={false} />;
   }
 
   if (status === 'error') {
@@ -332,11 +384,7 @@ function MessageVideo({
   }
 
   if (!url) {
-    return (
-      <View style={imageStyles.placeholder}>
-        <Spinner size={40} color="#ffffff" />
-      </View>
-    );
+    return <CircularDownloadButton onPress={() => {}} fileSize={fileSize} progress={progress} active />;
   }
 
   const seconds = durationMs ? Math.round(durationMs / 1000) : 0;
@@ -426,11 +474,13 @@ function CallLogRow({
   const isVideo = callType === 'VIDEO';
   const missed = outcome === 'MISSED';
   const declined = outcome === 'DECLINED';
-  const iconColor = missed || declined ? '#e53935' : colors.brand600;
+  const busy = outcome === 'BUSY';
+  const iconColor = missed || declined || busy ? '#e53935' : colors.brand600;
 
   let label = isVideo ? t('thread.call.video') : t('thread.call.voice');
   if (missed) label = isMine ? t('thread.call.missedMine', { label }) : t('thread.call.missedTheirs', { label });
   else if (declined) label = isMine ? t('thread.call.declinedMine', { label }) : t('thread.call.declinedTheirs', { label });
+  else if (busy) label = isMine ? t('thread.call.busyMine', { label }) : t('thread.call.busyTheirs', { label });
 
   return (
     <TouchableOpacity
@@ -465,6 +515,110 @@ const callLogStyles = StyleSheet.create({
   label: { fontFamily: fonts.sansMedium, fontSize: 13 },
   duration: { fontFamily: fonts.sans, fontSize: 12 },
 });
+
+/**
+ * The invitation itself IS this card — no separate screen (see
+ * GroupInvitationMessageService backend-side). Accept/decline only show for
+ * the invitee on a still-PENDING card; every other state is read-only,
+ * including on the inviter's own copy of the same card.
+ */
+function GroupInvitationCard({
+  groupName,
+  groupAvatarObjectKey,
+  status,
+  isMine,
+  busy,
+  colors,
+  onAccept,
+  onDecline,
+  onOpen,
+}: {
+  groupName: string | null;
+  groupAvatarObjectKey: string | null;
+  status: 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'EXPIRED' | null;
+  isMine: boolean;
+  busy: boolean;
+  colors: Palette;
+  onAccept: () => void;
+  onDecline: () => void;
+  onOpen: () => void;
+}) {
+  const { t } = useTranslation('groups');
+  const styles = invitationCardStyles(colors);
+  const canRespond = !isMine && status === 'PENDING';
+  const canOpen = status === 'ACCEPTED';
+
+  let statusLabel: string | null = null;
+  if (status === 'ACCEPTED') statusLabel = t('invitations.statusAccepted');
+  else if (status === 'DECLINED') statusLabel = t('invitations.statusDeclined');
+  else if (status === 'EXPIRED') statusLabel = t('invitations.statusExpired');
+  else if (status === 'PENDING' && isMine) statusLabel = t('invitations.youInvited');
+
+  return (
+    <TouchableOpacity
+      style={styles.card}
+      activeOpacity={canOpen ? 0.7 : 1}
+      disabled={!canOpen}
+      onPress={canOpen ? onOpen : undefined}
+    >
+      <View style={styles.header}>
+        <Avatar objectKey={groupAvatarObjectKey} label={groupName || t('invitations.unnamedGroup')} size={44} />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.groupName} numberOfLines={1}>{groupName || t('invitations.unnamedGroup')}</Text>
+          <Text style={styles.sub}>{isMine ? '' : t('invitations.invitedYou')}</Text>
+        </View>
+      </View>
+
+      {canRespond ? (
+        busy ? (
+          <ActivityIndicator color={colors.brand500} style={{ marginTop: 10 }} />
+        ) : (
+          <View style={styles.actions}>
+            <TouchableOpacity style={styles.declineButton} onPress={onDecline}>
+              <Text style={styles.declineLabel}>{t('invitations.decline')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.acceptButton} onPress={onAccept}>
+              <Text style={styles.acceptLabel}>{t('invitations.accept')}</Text>
+            </TouchableOpacity>
+          </View>
+        )
+      ) : (
+        !!statusLabel && (
+          <Text style={[styles.statusText, status === 'ACCEPTED' && styles.statusAccepted]}>
+            {statusLabel}
+            {canOpen ? ` · ${t('invitations.joinedTapToOpen')}` : ''}
+          </Text>
+        )
+      )}
+      {status === 'EXPIRED' && isMine && <Text style={styles.hint}>{t('invitations.expiredRetry')}</Text>}
+    </TouchableOpacity>
+  );
+}
+
+function invitationCardStyles(colors: Palette) {
+  return StyleSheet.create({
+    card: {
+      alignSelf: 'center',
+      width: '82%',
+      backgroundColor: colors.tint1,
+      borderRadius: 14,
+      padding: 14,
+      marginVertical: 4,
+      gap: 10,
+    },
+    header: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    groupName: { fontFamily: fonts.sansSemiBold, fontSize: 15, color: colors.textPrimary },
+    sub: { fontFamily: fonts.sans, fontSize: 12.5, color: colors.textMuted, marginTop: 2 },
+    actions: { flexDirection: 'row', gap: 8, justifyContent: 'flex-end' },
+    declineButton: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 16, backgroundColor: colors.surface },
+    declineLabel: { fontFamily: fonts.sansSemiBold, fontSize: 13, color: colors.textMuted },
+    acceptButton: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 16, backgroundColor: colors.brand600 },
+    acceptLabel: { fontFamily: fonts.sansSemiBold, fontSize: 13, color: '#ffffff' },
+    statusText: { fontFamily: fonts.sansMedium, fontSize: 13, color: colors.textMuted },
+    statusAccepted: { color: colors.brand600 },
+    hint: { fontFamily: fonts.sans, fontSize: 12, color: colors.textMuted },
+  });
+}
 
 type ReceiptRow = { userId: string; displayName: string; status: string };
 
@@ -545,7 +699,13 @@ function QuotedBlock({
 }
 
 const quotedStyles = StyleSheet.create({
-  block: { flexDirection: 'row', gap: 8, borderRadius: 8, padding: 7, marginBottom: 6, alignItems: 'stretch' },
+  // minWidth matters more than it looks: the bubble itself has no minWidth
+  // (see styles.bubble) and shrink-wraps to its shortest content, so a
+  // short reply like "Nice" squeezed the quote block down to almost
+  // nothing — sender label and snippet both clipped to a sliver instead of
+  // reading like WhatsApp's reply preview. Forcing the quote block itself
+  // to a sane minimum width drags the whole bubble out to match.
+  block: { flexDirection: 'row', gap: 8, borderRadius: 8, padding: 7, marginBottom: 6, alignItems: 'stretch', minWidth: 180 },
   bar: { width: 3, borderRadius: 2 },
   sender: { fontFamily: fonts.sansSemiBold, fontSize: 12 },
   snippet: { fontFamily: fonts.sans, fontSize: 12.5, marginTop: 1 },
@@ -666,6 +826,7 @@ export default function ChatThreadScreen() {
   const [draft, setDraft] = useState('');
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
+  const [respondingInvitationMessageId, setRespondingInvitationMessageId] = useState<string | null>(null);
   const [messageInfoRows, setMessageInfoRows] = useState<ReceiptRow[] | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [viewer, setViewer] = useState<{ items: AttachmentItem[]; index: number } | null>(null);
@@ -789,6 +950,44 @@ export default function ChatThreadScreen() {
     setSelectedMessageId(null);
     setMoreMenuMessage(null);
     await pinMessage(message.message_id, !message.pinned);
+  }
+
+  /**
+   * Accept/decline from the inline invite card. The invitee is always the
+   * one calling this (see GroupInvitationCard's own canRespond check), so —
+   * same convention as GroupInvitationMessageService not echoing the
+   * mutation back to the acting side — this applies the new status locally
+   * right away rather than waiting on a round trip.
+   */
+  async function respondToInvitation(message: LocalMessage, accept: boolean) {
+    if (!message.invite_invitation_id || !message.invite_group_id) return;
+    setRespondingInvitationMessageId(message.message_id);
+    try {
+      if (accept) {
+        const group = await acceptGroupInvitation(message.invite_invitation_id);
+        await setInviteStatusLocally(db, message.message_id, 'ACCEPTED');
+        // The backend's own "X joined the group" system-message broadcast
+        // excludes the acting member (see GroupController#postSystemMessage)
+        // — without this, the group you just joined never appears in your
+        // own chat list until someone else happens to post in it.
+        await upsertConversation(db, group.id, group.name, null, group.avatarObjectKey, true);
+        router.push({ pathname: '/(tabs)/chats/[conversationId]', params: { conversationId: group.id, groupId: group.id } });
+      } else {
+        await declineGroupInvitation(message.invite_invitation_id);
+        await setInviteStatusLocally(db, message.message_id, 'DECLINED');
+      }
+      await reloadMessages();
+    } finally {
+      setRespondingInvitationMessageId(null);
+    }
+  }
+
+  function openInvitedGroup(message: LocalMessage) {
+    if (!message.invite_group_id) return;
+    router.push({
+      pathname: '/(tabs)/chats/[conversationId]',
+      params: { conversationId: message.invite_group_id, groupId: message.invite_group_id },
+    });
   }
 
   async function toggleStar(messageId: string) {
@@ -1024,7 +1223,7 @@ export default function ChatThreadScreen() {
     if (result.assets.length === 1 && result.assets[0].type !== 'video') {
       const asset = result.assets[0];
       setPendingMediaMimeType(asset.mimeType);
-      setPendingMedia({ kind: 'image', uri: asset.uri });
+      setPendingMedia({ kind: 'image', uri: asset.uri, size: asset.fileSize });
       return;
     }
 
@@ -1047,7 +1246,7 @@ export default function ChatThreadScreen() {
     const result = await ImagePicker.launchCameraAsync({ quality: 0.8 });
     if (!result.canceled && result.assets[0]) {
       setPendingMediaMimeType(result.assets[0].mimeType);
-      setPendingMedia({ kind: 'image', uri: result.assets[0].uri });
+      setPendingMedia({ kind: 'image', uri: result.assets[0].uri, size: result.assets[0].fileSize });
     }
   }
 
@@ -1067,10 +1266,15 @@ export default function ChatThreadScreen() {
     try {
       if (media.kind === 'image') {
         const objectKey = await uploadMedia(uri, pendingMediaMimeType ?? 'image/jpeg');
-        await sendMessage(caption, { type: 'IMAGE', objectKey, overlayJson }, undefined, reply);
+        // media.size is the ORIGINAL picked file's size — if ImageEditor
+        // cropped/rotated it, the actually-uploaded `uri` is a re-encoded
+        // file of a slightly different size, but re-stat-ing it here isn't
+        // worth the complexity for what's just an approximate label on the
+        // recipient's download gate.
+        await sendMessage(caption, { type: 'IMAGE', objectKey, overlayJson, fileSize: media.size }, undefined, reply);
       } else {
         const objectKey = await uploadMedia(uri, pendingMediaMimeType ?? 'application/octet-stream');
-        await sendMessage(caption, { type: 'FILE', objectKey, fileName: media.name }, undefined, reply);
+        await sendMessage(caption, { type: 'FILE', objectKey, fileName: media.name, fileSize: media.size }, undefined, reply);
       }
       // Only close the preview once the upload+send actually succeeded — closing
       // immediately on tap left the screen showing nothing while a slow/failed
@@ -1313,7 +1517,7 @@ export default function ChatThreadScreen() {
           // Both own and received messages are selectable now — a received
           // message just gets a smaller action set (delete-for-me, forward)
           // in the selection bar above, rather than being excluded entirely.
-          const canSelect = !item.deleted && item.media_type !== 'CALL' && !item.is_system;
+          const canSelect = !item.deleted && item.media_type !== 'CALL' && item.media_type !== 'GROUP_INVITE' && !item.is_system;
 
           if (item.is_system) {
             const label =
@@ -1332,6 +1536,22 @@ export default function ChatThreadScreen() {
               <View style={[styles.bubble, isMine ? styles.outgoing : styles.incoming, styles.deletedBubble]}>
                 <Text style={styles.deletedText}>{t('thread.deletedMessage')}</Text>
               </View>
+            );
+          }
+
+          if (item.media_type === 'GROUP_INVITE') {
+            return (
+              <GroupInvitationCard
+                groupName={item.invite_group_name}
+                groupAvatarObjectKey={item.invite_group_avatar_object_key}
+                status={item.invite_status}
+                isMine={isMine}
+                busy={respondingInvitationMessageId === item.message_id}
+                colors={colors}
+                onAccept={() => respondToInvitation(item, true)}
+                onDecline={() => respondToInvitation(item, false)}
+                onOpen={() => openInvitedGroup(item)}
+              />
             );
           }
 
@@ -1386,7 +1606,7 @@ export default function ChatThreadScreen() {
               {!!item.reply_to_status_id && (
                 <QuotedBlock
                   senderLabel={t('thread.statusReplyLabel')}
-                  snippet={memberName(item.reply_to_status_owner_id || '')}
+                  snippet={item.reply_to_snippet || memberName(item.reply_to_status_owner_id || '')}
                   onPress={() =>
                     router.push({
                       pathname: '/(tabs)/status/viewer',
@@ -1403,7 +1623,7 @@ export default function ChatThreadScreen() {
                 if (attachments.length === 0) return null;
                 return (
                   <View style={styles.mediaWrap}>
-                    <MessageAttachmentGrid items={attachments} onOpen={(index) => setViewer({ items: attachments, index })} autoDownloadMedia={autoDownloadMedia} />
+                    <MessageAttachmentGrid items={attachments} onOpen={(index) => setViewer({ items: attachments, index })} autoDownloadMedia={autoDownloadMedia} isMine={isMine} />
                   </View>
                 );
               })()}
@@ -1413,6 +1633,8 @@ export default function ChatThreadScreen() {
                     objectKey={item.media_object_key}
                     overlayJson={item.media_overlay_json}
                     autoDownloadMedia={autoDownloadMedia}
+                    fileSize={item.media_file_size}
+                    isMine={isMine}
                     onPress={
                       item.media_object_key
                         ? () =>
@@ -1439,6 +1661,8 @@ export default function ChatThreadScreen() {
                     objectKey={item.media_object_key}
                     durationMs={item.media_duration_ms}
                     autoDownloadMedia={autoDownloadMedia}
+                    fileSize={item.media_file_size}
+                    isMine={isMine}
                     onPress={
                       item.media_object_key
                         ? () =>

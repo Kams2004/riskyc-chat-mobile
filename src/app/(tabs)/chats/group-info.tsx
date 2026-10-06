@@ -1,7 +1,8 @@
+import * as ImagePicker from 'expo-image-picker';
 import { requestPermissionsAsync as requestContactsPermissionsAsync } from 'expo-contacts';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
@@ -9,8 +10,9 @@ import { useTranslation } from 'react-i18next';
 import { Avatar } from '../../../components/Avatar';
 import { deleteConversation, getAllLocalContacts, upsertLocalContact, useSQLiteContext } from '../../../data/db';
 import { useAuth } from '../../../features/auth/AuthContext';
-import { readDeviceContacts } from '../../../features/contacts/sync';
+import { dialCodeFor, normalizePhone, readDeviceContacts } from '../../../features/contacts/sync';
 import { addMembers, changeMemberRole, getGroup, removeMember, renameGroup, type GroupResult } from '../../../features/groups/api';
+import { uploadImage } from '../../../features/media/api';
 import { fetchConversationSettings, setAutoDownloadMedia as setAutoDownloadMediaApi } from '../../../features/messaging/api';
 import { useTheme } from '../../../features/theme/ThemeContext';
 import { getUser, matchContacts, type UserResult } from '../../../features/users/api';
@@ -19,18 +21,12 @@ import { fonts, type Palette } from '../../../theme';
 type MemberRow = { userId: string; role: 'ADMIN' | 'MEMBER'; user: UserResult | null; localName?: string };
 type AddCandidate = UserResult & { localName?: string };
 
-function normalizePhone(raw: string): string {
-  const trimmed = raw.trim();
-  const plus = trimmed.startsWith('+') ? '+' : '';
-  return plus + trimmed.replace(/[^\d]/g, '');
-}
-
 export default function GroupInfoScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = makeStyles(colors);
   const db = useSQLiteContext();
-  const { userId } = useAuth();
+  const { userId, phoneNumber: ownPhoneNumber } = useAuth();
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const { t } = useTranslation('groups');
 
@@ -109,6 +105,7 @@ export default function GroupInfoScreen() {
         if (!cancelled) setIsLoadingCandidates(false);
         return;
       }
+      const defaultDialCode = dialCodeFor(ownPhoneNumber);
       const phoneNumbers = new Set<string>();
       const emails = new Set<string>();
       const phoneToName = new Map<string, string>();
@@ -116,7 +113,7 @@ export default function GroupInfoScreen() {
         const name = contact.name?.trim() || '';
         for (const phone of contact.phoneNumbers ?? []) {
           if (phone.number) {
-            const norm = normalizePhone(phone.number);
+            const norm = normalizePhone(phone.number, defaultDialCode);
             phoneNumbers.add(norm);
             if (name) phoneToName.set(norm, name);
           }
@@ -128,7 +125,7 @@ export default function GroupInfoScreen() {
       const matched = await matchContacts([...phoneNumbers], [...emails]).catch(() => []);
       for (const user of matched) {
         if (user.phoneNumber) {
-          const deviceName = phoneToName.get(normalizePhone(user.phoneNumber));
+          const deviceName = phoneToName.get(normalizePhone(user.phoneNumber, defaultDialCode));
           if (deviceName) await upsertLocalContact(db, user.userId, deviceName);
         }
       }
@@ -141,7 +138,7 @@ export default function GroupInfoScreen() {
     return () => {
       cancelled = true;
     };
-  }, [isAddingOpen, addCandidates.length, db]);
+  }, [isAddingOpen, addCandidates.length, db, ownPhoneNumber]);
 
   const addResults = addCandidates.filter((u) => {
     if (members.some((m) => m.userId === u.userId)) return false;
@@ -228,6 +225,31 @@ export default function GroupInfoScreen() {
     await load();
   }
 
+  /** Admin-only — mirrors edit-profile.tsx's own pick → upload → persist pattern for a personal avatar. */
+  async function handlePickGroupAvatar() {
+    if (!group || !isAdmin) return;
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert(t('groupInfo.photoPermissionTitle'), t('groupInfo.photoPermissionBody'));
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (result.canceled) return;
+    try {
+      const avatarObjectKey = await uploadImage(result.assets[0].uri);
+      await renameGroup(groupId, group.name, avatarObjectKey);
+      await load();
+    } catch (e) {
+      console.warn('[GroupInfo] avatar upload failed', e);
+      Alert.alert(t('groupInfo.photoUploadErrorTitle'), t('common:checkConnectionAndRetry'));
+    }
+  }
+
   if (isLoading || !group) {
     return (
       <View style={[styles.container, styles.centered]}>
@@ -249,7 +271,19 @@ export default function GroupInfoScreen() {
       </View>
 
       <View style={styles.groupHeader}>
-        <Avatar objectKey={group.avatarObjectKey} label={group.name} size={72} />
+        {isAdmin ? (
+          <TouchableOpacity style={styles.groupAvatarTouchable} onPress={handlePickGroupAvatar} activeOpacity={0.8}>
+            <Avatar objectKey={group.avatarObjectKey} label={group.name} size={72} />
+            <View style={styles.groupAvatarBadge}>
+              <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <Path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                <Path d="M12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" />
+              </Svg>
+            </View>
+          </TouchableOpacity>
+        ) : (
+          <Avatar objectKey={group.avatarObjectKey} label={group.name} size={72} />
+        )}
         {isAdmin ? (
           <TextInput
             style={styles.groupNameInput}
@@ -331,11 +365,10 @@ export default function GroupInfoScreen() {
         </View>
       )}
 
-      <FlatList
-        data={members}
-        keyExtractor={(item) => item.userId}
-        renderItem={({ item }) => (
+      <ScrollView style={{ flex: 1 }}>
+        {members.map((item) => (
           <TouchableOpacity
+            key={item.userId}
             style={styles.memberRow}
             onLongPress={() => openMemberActions(item)}
           >
@@ -345,33 +378,31 @@ export default function GroupInfoScreen() {
             </View>
             {item.role === 'ADMIN' && <Text style={styles.roleLabel}>{t('groupInfo.roleAdmin')}</Text>}
           </TouchableOpacity>
-        )}
-        ListFooterComponent={
-          pendingInvitees.length > 0 ? (
-            <View>
-              <Text style={styles.pendingSectionLabel}>{t('groupInfo.pendingInvitations')}</Text>
-              {pendingInvitees.map((item) => (
-                <View key={item.userId} style={styles.memberRow}>
-                  <Avatar objectKey={item.user?.avatarObjectKey} label={item.localName || item.user?.displayName || '?'} size={40} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.memberName}>{item.localName || item.user?.displayName || t('groupInfo.unknownUser')}</Text>
-                  </View>
-                  <Text style={styles.pendingLabel}>{t('groupInfo.pendingBadge')}</Text>
+        ))}
+        {pendingInvitees.length > 0 && (
+          <View>
+            <Text style={styles.pendingSectionLabel}>{t('groupInfo.pendingInvitations')}</Text>
+            {pendingInvitees.map((item) => (
+              <View key={item.userId} style={styles.memberRow}>
+                <Avatar objectKey={item.user?.avatarObjectKey} label={item.localName || item.user?.displayName || '?'} size={40} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.memberName}>{item.localName || item.user?.displayName || t('groupInfo.unknownUser')}</Text>
                 </View>
-              ))}
-            </View>
-          ) : null
-        }
-      />
+                <Text style={styles.pendingLabel}>{t('groupInfo.pendingBadge')}</Text>
+              </View>
+            ))}
+          </View>
+        )}
 
-      <TouchableOpacity style={styles.leaveButton} onPress={confirmLeave}>
-        <Text style={styles.leaveLabel}>{t('groupInfo.leaveGroup')}</Text>
-      </TouchableOpacity>
-      {isAdmin && (
-        <Text style={styles.leaveHint}>
-          {t('groupInfo.leaveHint')}
-        </Text>
-      )}
+        <TouchableOpacity style={styles.leaveButton} onPress={confirmLeave}>
+          <Text style={styles.leaveLabel}>{t('groupInfo.leaveGroup')}</Text>
+        </TouchableOpacity>
+        {isAdmin && (
+          <Text style={styles.leaveHint}>
+            {t('groupInfo.leaveHint')}
+          </Text>
+        )}
+      </ScrollView>
     </View>
   );
 }
@@ -384,6 +415,20 @@ function makeStyles(colors: Palette) {
     iconTouchable: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
     headerTitle: { fontFamily: fonts.sansSemiBold, fontSize: 16.5, color: colors.textPrimary },
     groupHeader: { alignItems: 'center', gap: 6, paddingVertical: 16 },
+    groupAvatarTouchable: { width: 72, height: 72 },
+    groupAvatarBadge: {
+      position: 'absolute',
+      right: -2,
+      bottom: -2,
+      width: 26,
+      height: 26,
+      borderRadius: 13,
+      backgroundColor: colors.brand600,
+      borderWidth: 2,
+      borderColor: colors.surface,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
     groupName: { fontFamily: fonts.display, fontSize: 20, color: colors.textPrimary, marginTop: 8 },
     groupNameInput: {
       fontFamily: fonts.display,

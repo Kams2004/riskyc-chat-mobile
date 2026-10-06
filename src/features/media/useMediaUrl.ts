@@ -18,12 +18,26 @@ const urlCache = new Map<string, string>();
 // Cache Storage API (see useMediaUrl.ts there).
 const MEDIA_CACHE_DIR = new Directory(Paths.cache, 'riskyc-media');
 
-async function resolveLocalUri(objectKey: string, presignedUrl: string): Promise<string> {
+async function resolveLocalUri(
+  objectKey: string,
+  presignedUrl: string,
+  onProgress?: (fraction: number) => void
+): Promise<string> {
   const file = new File(MEDIA_CACHE_DIR, objectKey);
   try {
     if (!MEDIA_CACHE_DIR.exists) MEDIA_CACHE_DIR.create({ idempotent: true, intermediates: true });
     if (file.exists) return file.uri;
-    const downloaded = await File.downloadFileAsync(presignedUrl, file, { idempotent: true });
+    const downloaded = await File.downloadFileAsync(presignedUrl, file, {
+      idempotent: true,
+      onProgress: onProgress
+        ? ({ bytesWritten, totalBytes }) => {
+            // totalBytes is -1 when the server didn't send Content-Length —
+            // nothing to divide by, so just leave the ring wherever it was
+            // rather than feeding it NaN/Infinity.
+            if (totalBytes > 0) onProgress(bytesWritten / totalBytes);
+          }
+        : undefined,
+    });
     return downloaded.uri;
   } catch (e) {
     // On Android specifically, a failed download can leave a partially
@@ -92,10 +106,13 @@ export type MediaUrlStatus = 'loading' | 'error' | 'ready';
 export function useMediaUrlWithStatus(objectKey?: string | null): {
   url: string | null;
   status: MediaUrlStatus;
+  /** 0-1 while actively downloading fresh bytes; 0 otherwise (cache hit, error, or not started) — drives DownloadGate's progress ring. */
+  progress: number;
   retry: () => void;
 } {
   const [url, setUrl] = useState<string | null>(objectKey ? urlCache.get(objectKey) ?? null : null);
   const [status, setStatus] = useState<MediaUrlStatus>(url ? 'ready' : 'loading');
+  const [progress, setProgress] = useState(0);
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
@@ -111,10 +128,13 @@ export function useMediaUrlWithStatus(objectKey?: string | null): {
       return;
     }
     setStatus('loading');
+    setProgress(0);
     let cancelled = false;
     createDownloadUrl(objectKey)
       .then(async ({ downloadUrl }) => {
-        const localUri = await resolveLocalUri(objectKey, downloadUrl);
+        const localUri = await resolveLocalUri(objectKey, downloadUrl, (fraction) => {
+          if (!cancelled) setProgress(fraction);
+        });
         urlCache.set(objectKey, localUri);
         if (!cancelled) {
           setUrl(localUri);
@@ -137,7 +157,7 @@ export function useMediaUrlWithStatus(objectKey?: string | null): {
     setAttempt((a) => a + 1);
   }, [objectKey]);
 
-  return { url, status, retry };
+  return { url, status, progress, retry };
 }
 
 /**

@@ -19,6 +19,8 @@ export type MessageEnvelope = {
   mediaObjectKey?: string | null;
   mediaFileName?: string | null;
   mediaDurationMs?: number | null;
+  /** Bytes, client-supplied at send time — feeds DownloadGate's size label for a single (non-gallery) IMAGE/VIDEO/FILE message. See AttachmentItem.mediaFileSize for the gallery-send equivalent. */
+  mediaFileSize?: number | null;
   /** Comma-separated normalized amplitude samples (0-100 ints) for an AUDIO message — real data captured live during recording, not derived server-side. Null for every non-voice message and for voice messages sent before this field existed. */
   waveform?: string | null;
   /** Opaque drawing/text-overlay JSON for an IMAGE message — see components/StatusOverlayView.ts. Null for every message without one. */
@@ -47,10 +49,24 @@ export type MessageEnvelope = {
   /** Both null/absent unless this message is a reply to a status — see Message.java's own comment. */
   replyToStatusId?: string | null;
   replyToStatusOwnerId?: string | null;
+  /** All five null/absent for every message except mediaType='GROUP_INVITE' — see Message.java's own field comments. */
+  inviteGroupId?: string | null;
+  inviteGroupName?: string | null;
+  inviteGroupAvatarObjectKey?: string | null;
+  inviteInvitationId?: number | null;
+  inviteStatus?: 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'EXPIRED' | null;
 };
 
-export function fetchHistory(conversationId: string): Promise<MessageEnvelope[]> {
-  return apiFetch(`${config.messagingServiceUrl}/api/messages/${conversationId}`);
+/**
+ * `since` is optional and additive (see MessageHistoryController's own
+ * comment) — passing the newest sent_at this device already has for the
+ * conversation turns this into an incremental sync instead of re-pulling
+ * the entire history on every open, which is what calling this with no
+ * `since` always did.
+ */
+export function fetchHistory(conversationId: string, since?: string | null): Promise<MessageEnvelope[]> {
+  const query = since ? `?since=${encodeURIComponent(since)}` : '';
+  return apiFetch(`${config.messagingServiceUrl}/api/messages/${conversationId}${query}`);
 }
 
 export type MediaSummaryItem = { messageId: string; mediaType: string; mediaObjectKey: string; mediaFileName: string | null; sentAt: string | null };
@@ -79,6 +95,8 @@ export type MessageMutation = {
   edited: boolean;
   deleted: boolean;
   pinned: boolean;
+  /** Null for every ordinary edit/delete/pin — set only when a GROUP_INVITE card's status changes. See Message.java's own field comment. */
+  inviteStatus: 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'EXPIRED' | null;
 };
 
 export type MessageEditRequest = { conversationId: string; messageId: string; newCiphertext: string };

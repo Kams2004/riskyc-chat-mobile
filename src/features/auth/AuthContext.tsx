@@ -1,8 +1,9 @@
 import { createContext, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react';
 
 import { currentDeviceLabel } from '../../lib/deviceLabel';
-import { profile, session } from '../../lib/secureStore';
+import { identity, profile, session } from '../../lib/secureStore';
 import { unregisterCurrentDevicePushToken } from '../notifications/api';
+import { listSessions, revokeSession } from '../sessions/api';
 import * as authApi from './api';
 import type { Identifier, VerifyOtpResponse } from './api';
 
@@ -49,11 +50,13 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [phoneNumber, setPhoneNumber] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([session.load(), profile.load()]).then(([storedSession, storedProfile]) => {
+    Promise.all([session.load(), profile.load(), identity.load()]).then(([storedSession, storedProfile, storedIdentity]) => {
       setUserId(storedSession?.userId ?? null);
       setAccessToken(storedSession?.accessToken ?? null);
       setDisplayName(storedProfile.displayName);
       setAvatarObjectKey(storedProfile.avatarObjectKey);
+      setEmail(storedIdentity.email);
+      setPhoneNumber(storedIdentity.phoneNumber);
       setIsLoading(false);
     });
   }, []);
@@ -68,6 +71,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     }
     await session.save(res.accessToken, res.userId);
     await profile.save(res.displayName, res.avatarObjectKey);
+    await identity.save(res.email, res.phoneNumber);
     setUserId(res.userId);
     setAccessToken(res.accessToken);
     setDisplayName(res.displayName);
@@ -115,8 +119,24 @@ export function AuthProvider({ children }: PropsWithChildren) {
       async signOut() {
         // Must run before session.clear() below — apiFetch reads the access
         // token from secureStore itself (not from this closure's state), so
-        // clearing it first would send the unregister request unauthenticated.
+        // clearing it first would send these requests unauthenticated.
         await unregisterCurrentDevicePushToken();
+        // Revokes this device's own session server-side — without this,
+        // signing out only ever cleared local storage, leaving the session
+        // row's revoked flag false forever. AuthController's one-active-
+        // mobile-session-per-account check (see its own doc comment) then
+        // found that still-active row on the very next sign-in attempt —
+        // even back on this exact same device — and wrongly treated it as
+        // a device conflict ("already signed in elsewhere"). Best-effort:
+        // a network hiccup here shouldn't block the user from signing out
+        // locally, same fail-soft stance as the push-token unregister above.
+        try {
+          const sessions = await listSessions();
+          const current = sessions.find((s) => s.isCurrent);
+          if (current) await revokeSession(current.id);
+        } catch (e) {
+          console.warn('[signOut] failed to revoke current session', e);
+        }
         await session.clear();
         setUserId(null);
         setAccessToken(null);

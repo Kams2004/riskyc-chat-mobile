@@ -20,7 +20,7 @@ const SYNC_INTERVAL_MS = 15 * 60_000;
  * permission it already has, it never prompts.
  */
 export function useContactsSync() {
-  const { userId } = useAuth();
+  const { userId, phoneNumber } = useAuth();
   const db = useSQLiteContext();
 
   useEffect(() => {
@@ -30,7 +30,7 @@ export function useContactsSync() {
 
     const runSync = async () => {
       try {
-        const { newlyJoined } = await syncDeviceContacts(db);
+        const { newlyJoined } = await syncDeviceContacts(db, phoneNumber);
         if (cancelled) return;
         for (const user of newlyJoined) {
           const name = user.localName || user.displayName || user.phoneNumber || i18n.t('chats:contactDetails.unnamedUser');
@@ -63,5 +63,5 @@ export function useContactsSync() {
       clearInterval(intervalId);
       appStateSub.remove();
     };
-  }, [db, userId]);
+  }, [db, userId, phoneNumber]);
 }

@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Avatar } from '../../components/Avatar';
 import { PhoneIcon, VideoIcon } from '../../components/icons';
+import { SwipeBetweenTabs } from '../../components/SwipeTabs';
 import { listCallHistory, type CallResult } from '../../features/calls/api';
 import { useCall } from '../../features/calls/CallContext';
 import { useAuth } from '../../features/auth/AuthContext';
@@ -28,6 +29,7 @@ function formatWhen(iso: string): string {
 function statusLabel(row: CallRow, t: (key: string) => string): string {
   if (row.status === 'MISSED') return t('status.missed');
   if (row.status === 'DECLINED') return t('status.declined');
+  if (row.status === 'BUSY') return t('status.busy');
   return row.isOutgoing ? t('status.outgoing') : t('status.incoming');
 }
 
@@ -81,6 +83,7 @@ export default function CallsScreen() {
   }
 
   return (
+    <SwipeBetweenTabs toLeft="/(tabs)/settings" toRight="/(tabs)/status">
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <Text style={styles.title}>{t('screen.title')}</Text>
@@ -112,10 +115,10 @@ export default function CallsScreen() {
             <View style={{ flex: 1 }}>
               <Text style={styles.name} numberOfLines={1}>{item.otherName}</Text>
               <View style={styles.subRow}>
-                <Svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={item.status === 'MISSED' ? '#e53935' : colors.textMuted} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+                <Svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={item.status === 'MISSED' || item.status === 'BUSY' ? '#e53935' : colors.textMuted} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
                   {item.isOutgoing ? <Path d="M7 17L17 7M17 7H9M17 7v8" /> : <Path d="M17 7L7 17M7 17h8M7 17V9" />}
                 </Svg>
-                <Text style={[styles.sub, item.status === 'MISSED' && { color: '#e53935' }]}>
+                <Text style={[styles.sub, (item.status === 'MISSED' || item.status === 'BUSY') && { color: '#e53935' }]}>
                   {statusLabel(item, t)} · {formatWhen(item.startedAt)}
                 </Text>
               </View>
@@ -137,6 +140,7 @@ export default function CallsScreen() {
         }}
       />
     </View>
+    </SwipeBetweenTabs>
   );
 }
 

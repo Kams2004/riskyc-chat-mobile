@@ -2,14 +2,38 @@ import { Contact, ContactField, getPermissionsAsync } from 'expo-contacts';
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import { getAllLocalContacts, getKnownMatchedContactIds, markContactsAsKnown, upsertLocalContact } from '../../data/db';
+import { COUNTRIES } from '../../lib/countries';
 import { matchContacts, type UserResult } from '../users/api';
 
 export type EnrichedUser = UserResult & { localName?: string };
 
-function normalizePhone(raw: string): string {
+/**
+ * Device contacts saved the normal way — a local number with no country
+ * code, e.g. "641482013" rather than "+237641482013" — used to normalize to
+ * themselves here, digits-only with no '+'. Every registered account's
+ * phoneNumber is always the full international form (see login.tsx's
+ * fullPhone), so that bare local number could never exact-match anything
+ * server-side: a contact saved the ordinary way (the overwhelming majority
+ * of entries in anyone's address book) silently never matched, even when
+ * the person it belongs to really is on RiskyC Chat. defaultDialCode (the
+ * signed-in user's own, via dialCodeFor below — same-country contacts are
+ * by far the common case) gets prepended whenever raw has no explicit '+'.
+ */
+export function normalizePhone(raw: string, defaultDialCode = ''): string {
   const trimmed = raw.trim();
-  const plus = trimmed.startsWith('+') ? '+' : '';
-  return plus + trimmed.replace(/[^\d]/g, '');
+  if (trimmed.startsWith('+')) {
+    return '+' + trimmed.replace(/[^\d]/g, '');
+  }
+  const digits = trimmed.replace(/[^\d]/g, '');
+  return defaultDialCode ? `${defaultDialCode}${digits}` : digits;
+}
+
+/** The signed-in user's own dial code (e.g. "+237699999999" -> "+237"), used as normalizePhone's default — longest match first since some dial codes are prefixes of others (+1 vs +1xxx isn't in this list, but future entries could be). */
+export function dialCodeFor(phoneNumber: string | null | undefined): string {
+  if (!phoneNumber) return '';
+  const match = [...COUNTRIES].sort((a, b) => b.dialCode.length - a.dialCode.length)
+    .find((c) => phoneNumber.startsWith(c.dialCode));
+  return match?.dialCode ?? '';
 }
 
 export type DeviceContact = {
@@ -54,14 +78,17 @@ export type SyncResult = {
  * duplicate this exact logic. Requires contacts permission to already be
  * granted (or grantable without prompting the user mid-background-sync) —
  * callers that need to prompt first should do that themselves before
- * calling this.
+ * calling this. ownPhoneNumber (the signed-in user's own, e.g. from
+ * useAuth()) seeds normalizePhone's default-dial-code fallback — see its
+ * own doc comment for why that's needed at all.
  */
-export async function syncDeviceContacts(db: SQLiteDatabase): Promise<SyncResult> {
+export async function syncDeviceContacts(db: SQLiteDatabase, ownPhoneNumber?: string | null): Promise<SyncResult> {
   const permission = await getPermissionsAsync();
   if (!permission.granted) {
     return { matched: [], newlyJoined: [] };
   }
 
+  const defaultDialCode = dialCodeFor(ownPhoneNumber);
   const data = await readDeviceContacts();
 
   const phoneNumbers = new Set<string>();
@@ -72,7 +99,7 @@ export async function syncDeviceContacts(db: SQLiteDatabase): Promise<SyncResult
     const name = contact.name?.trim() || '';
     for (const phone of contact.phoneNumbers ?? []) {
       if (phone.number) {
-        const norm = normalizePhone(phone.number);
+        const norm = normalizePhone(phone.number, defaultDialCode);
         phoneNumbers.add(norm);
         if (name) phoneToName.set(norm, name);
       }
@@ -86,7 +113,7 @@ export async function syncDeviceContacts(db: SQLiteDatabase): Promise<SyncResult
 
   for (const user of matched) {
     if (user.phoneNumber) {
-      const deviceName = phoneToName.get(normalizePhone(user.phoneNumber));
+      const deviceName = phoneToName.get(normalizePhone(user.phoneNumber, defaultDialCode));
       if (deviceName) await upsertLocalContact(db, user.userId, deviceName);
     }
   }

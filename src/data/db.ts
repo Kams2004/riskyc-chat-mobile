@@ -2,7 +2,7 @@ import { useSQLiteContext, type SQLiteDatabase } from 'expo-sqlite';
 
 export const DATABASE_NAME = 'riskyc.db';
 
-export type MediaType = 'IMAGE' | 'VIDEO' | 'FILE' | 'AUDIO' | 'CALL' | 'STICKER';
+export type MediaType = 'IMAGE' | 'VIDEO' | 'FILE' | 'AUDIO' | 'CALL' | 'STICKER' | 'GROUP_INVITE';
 
 export type AttachmentItem = {
   position: number;
@@ -36,6 +36,12 @@ export type LocalMessage = {
   // for every non-image message and for an image sent before this column
   // existed.
   media_overlay_json: string | null;
+  // Bytes, client-supplied at send time — feeds DownloadGate's "Tap to
+  // download · 1.2 MB" label for a single (non-gallery) IMAGE/VIDEO/FILE
+  // message. Null for a message sent before this column existed, or for
+  // any media type that doesn't carry a size (AUDIO's own waveform/duration
+  // already covers what the user needs to decide there).
+  media_file_size: number | null;
   // SQLite hands INTEGER columns back as 0|1, not real booleans — truthy
   // checks in the UI work fine either way, so this is left as-is rather
   // than converted.
@@ -69,6 +75,15 @@ export type LocalMessage = {
   // StatusReplyBar and Message.java's own field comment.
   reply_to_status_id: string | null;
   reply_to_status_owner_id: string | null;
+  // All null except for a mediaType=GROUP_INVITE card — see Message.java's
+  // own field comments. invite_status is kept current by incoming
+  // mutations whenever the invitation is accepted/declined/expires (see
+  // applyMessageMutation and useConversation.ts).
+  invite_group_id: string | null;
+  invite_group_name: string | null;
+  invite_group_avatar_object_key: string | null;
+  invite_invitation_id: number | null;
+  invite_status: 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'EXPIRED' | null;
 };
 
 /** Never throws on malformed/missing JSON — a display concern, not worth crashing the message list over. */
@@ -108,13 +123,15 @@ export type LocalGroupMember = {
 export async function upsertMessage(db: SQLiteDatabase, message: LocalMessage) {
   await db.runAsync(
     `INSERT INTO messages (message_id, conversation_id, sender_id, recipient_id, ciphertext, sent_at, status,
-       media_type, media_object_key, media_file_name, media_duration_ms, media_waveform, media_overlay_json, edited, deleted, forwarded, attachments_json,
+       media_type, media_object_key, media_file_name, media_duration_ms, media_waveform, media_overlay_json, media_file_size, edited, deleted, forwarded, attachments_json,
        reply_to_message_id, reply_to_conversation_id, reply_to_sender_id, reply_to_snippet, pinned,
-       is_system, reply_to_status_id, reply_to_status_owner_id)
+       is_system, reply_to_status_id, reply_to_status_owner_id,
+       invite_group_id, invite_group_name, invite_group_avatar_object_key, invite_invitation_id, invite_status)
      VALUES ($messageId, $conversationId, $senderId, $recipientId, $ciphertext, $sentAt, $status,
-       $mediaType, $mediaObjectKey, $mediaFileName, $mediaDurationMs, $mediaWaveform, $mediaOverlayJson, $edited, $deleted, $forwarded, $attachmentsJson,
+       $mediaType, $mediaObjectKey, $mediaFileName, $mediaDurationMs, $mediaWaveform, $mediaOverlayJson, $mediaFileSize, $edited, $deleted, $forwarded, $attachmentsJson,
        $replyToMessageId, $replyToConversationId, $replyToSenderId, $replyToSnippet, $pinned,
-       $isSystem, $replyToStatusId, $replyToStatusOwnerId)
+       $isSystem, $replyToStatusId, $replyToStatusOwnerId,
+       $inviteGroupId, $inviteGroupName, $inviteGroupAvatarObjectKey, $inviteInvitationId, $inviteStatus)
      ON CONFLICT(message_id) DO UPDATE SET status = excluded.status`,
     {
       $messageId: message.message_id,
@@ -130,6 +147,7 @@ export async function upsertMessage(db: SQLiteDatabase, message: LocalMessage) {
       $mediaDurationMs: message.media_duration_ms,
       $mediaWaveform: message.media_waveform,
       $mediaOverlayJson: message.media_overlay_json,
+      $mediaFileSize: message.media_file_size,
       $attachmentsJson: message.attachments_json,
       $edited: message.edited,
       $deleted: message.deleted,
@@ -142,6 +160,11 @@ export async function upsertMessage(db: SQLiteDatabase, message: LocalMessage) {
       $isSystem: message.is_system,
       $replyToStatusId: message.reply_to_status_id,
       $replyToStatusOwnerId: message.reply_to_status_owner_id,
+      $inviteGroupId: message.invite_group_id,
+      $inviteGroupName: message.invite_group_name,
+      $inviteGroupAvatarObjectKey: message.invite_group_avatar_object_key,
+      $inviteInvitationId: message.invite_invitation_id,
+      $inviteStatus: message.invite_status,
     }
   );
 }
@@ -155,14 +178,15 @@ export async function markDeletedForMe(db: SQLiteDatabase, messageId: string) {
 export async function applyMessageMutation(
   db: SQLiteDatabase,
   messageId: string,
-  mutation: { ciphertext: string | null; edited: boolean; deleted: boolean; pinned?: boolean }
+  mutation: { ciphertext: string | null; edited: boolean; deleted: boolean; pinned?: boolean; inviteStatus?: string | null }
 ) {
   await db.runAsync(
     `UPDATE messages SET
        ciphertext = COALESCE($ciphertext, ciphertext),
        edited = $edited,
        deleted = $deleted,
-       pinned = COALESCE($pinned, pinned)
+       pinned = COALESCE($pinned, pinned),
+       invite_status = COALESCE($inviteStatus, invite_status)
      WHERE message_id = $messageId`,
     {
       $messageId: messageId,
@@ -170,8 +194,17 @@ export async function applyMessageMutation(
       $edited: mutation.edited ? 1 : 0,
       $deleted: mutation.deleted ? 1 : 0,
       $pinned: mutation.pinned === undefined ? null : mutation.pinned ? 1 : 0,
+      $inviteStatus: mutation.inviteStatus ?? null,
     }
   );
+}
+
+/** Optimistic local update for the acting side (the invitee tapping Accept/Decline) — the server never echoes this back to them, see GroupInvitationMessageService's own doc comment. */
+export async function setInviteStatusLocally(db: SQLiteDatabase, messageId: string, status: LocalMessage['invite_status']) {
+  await db.runAsync('UPDATE messages SET invite_status = $status WHERE message_id = $messageId', {
+    $messageId: messageId,
+    $status: status,
+  });
 }
 
 /** Local-only optimistic pin toggle — doesn't touch edited/deleted, unlike applyMessageMutation. */
@@ -221,6 +254,25 @@ export async function listMessages(db: SQLiteDatabase, conversationId: string): 
     'SELECT * FROM messages WHERE conversation_id = $conversationId AND deleted_for_me = 0 ORDER BY sent_at ASC',
     { $conversationId: conversationId }
   );
+}
+
+/**
+ * The newest sent_at this device already has for a conversation — feeds
+ * fetchHistory's `since` param so re-opening an already-synced thread only
+ * pulls what's new instead of the entire history every time (see that
+ * function's own comment on the tradeoff: an edit/delete to a message
+ * older than this, made while this device was offline, won't be caught by
+ * a since-bounded fetch — same accepted tradeoff the backend's web-paging
+ * support already has). Null for a thread with no local messages yet,
+ * which keeps the caller's existing unbounded-fetch behavior for a first
+ * open.
+ */
+export async function getLatestMessageSentAt(db: SQLiteDatabase, conversationId: string): Promise<string | null> {
+  const row = await db.getFirstAsync<{ sent_at: string }>(
+    'SELECT sent_at FROM messages WHERE conversation_id = $conversationId ORDER BY sent_at DESC LIMIT 1',
+    { $conversationId: conversationId }
+  );
+  return row?.sent_at ?? null;
 }
 
 export async function getUnreadMessageIds(db: SQLiteDatabase, conversationId: string, myUserId: string): Promise<string[]> {

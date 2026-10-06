@@ -8,6 +8,7 @@ import {
   applyMessageMutation,
   applyReactionUpdate,
   applyReceipt,
+  getLatestMessageSentAt,
   getReactionsForConversation,
   markDeletedForMe,
   recomputeGroupMessageStatus,
@@ -38,7 +39,7 @@ export type OutgoingMedia = {
   waveform?: string | null;
   /** IMAGE only — drawing/text overlay created in ImageEditor. See components/StatusOverlayView.ts. */
   overlayJson?: string | null;
-  /** Bytes — gallery items only, feeds the combined-size download gate. */
+  /** Bytes — feeds DownloadGate's "Tap to download · 1.2 MB" label. */
   fileSize?: number | null;
 };
 
@@ -73,6 +74,7 @@ function envelopeToLocalMessage(envelope: messagingApi.MessageEnvelope): LocalMe
     media_duration_ms: envelope.mediaDurationMs ?? null,
     media_waveform: envelope.waveform ?? null,
     media_overlay_json: envelope.overlayJson ?? null,
+    media_file_size: envelope.mediaFileSize ?? null,
     edited: envelope.edited ? 1 : 0,
     deleted: envelope.deleted ? 1 : 0,
     forwarded: envelope.forwarded ? 1 : 0,
@@ -90,6 +92,11 @@ function envelopeToLocalMessage(envelope: messagingApi.MessageEnvelope): LocalMe
     is_system: envelope.system ? 1 : 0,
     reply_to_status_id: envelope.replyToStatusId ?? null,
     reply_to_status_owner_id: envelope.replyToStatusOwnerId ?? null,
+    invite_group_id: envelope.inviteGroupId ?? null,
+    invite_group_name: envelope.inviteGroupName ?? null,
+    invite_group_avatar_object_key: envelope.inviteGroupAvatarObjectKey ?? null,
+    invite_invitation_id: envelope.inviteInvitationId ?? null,
+    invite_status: envelope.inviteStatus ?? null,
   };
 }
 
@@ -183,12 +190,23 @@ export function useConversation({
   }, [conversationId, reload]);
 
   // Keeps the stored title/avatar current as they resolve, independent of
-  // the socket lifecycle below.
+  // the socket lifecycle below. Must pass isGroup here too: is_group is only
+  // ever set on the row's FIRST insert and deliberately left untouched by
+  // every later upsertConversation call (see that function's own comment),
+  // so when this effect runs before the one below — which it reliably does,
+  // for example on a brand-new group's very first visit right after
+  // new-group.tsx's redirect, which arrives with recipientName already set
+  // — omitting isGroup here permanently stamped is_group=0 on a real group,
+  // with nothing downstream ever able to correct it. That miscategorized
+  // the conversation as 1:1 everywhere it's read (openConversation in
+  // chats/index.tsx in particular), which fed the group's own id through
+  // otherPartyFrom() as if it were a userId and sent a doomed getUser(groupId)
+  // request — confirmed via a live repro that produced exactly that 404.
   useEffect(() => {
     if (recipientName || recipientAvatarObjectKey) {
-      upsertConversation(db, conversationId, recipientName || titleRef.current, null, recipientAvatarObjectKey);
+      upsertConversation(db, conversationId, recipientName || titleRef.current, null, recipientAvatarObjectKey, isGroup);
     }
-  }, [conversationId, db, recipientAvatarObjectKey, recipientName]);
+  }, [conversationId, db, recipientAvatarObjectKey, recipientName, isGroup]);
 
   const ackIfNotMine = useCallback(
     (messageId: string, senderId: string, recipient: string) => {
@@ -248,7 +266,7 @@ export function useConversation({
       })
       .catch(() => {});
 
-    messagingApi.fetchHistory(conversationId).then(async (history) => {
+    getLatestMessageSentAt(db, conversationId).then((since) => messagingApi.fetchHistory(conversationId, since)).then(async (history) => {
       for (const envelope of history) {
         await upsertMessage(db, envelopeToLocalMessage(envelope));
         ackIfNotMine(envelope.messageId, envelope.senderId, envelope.recipientId);
@@ -310,6 +328,7 @@ export function useConversation({
           edited: mutation.edited,
           deleted: mutation.deleted,
           pinned: mutation.pinned,
+          inviteStatus: mutation.inviteStatus,
         });
         if (!cancelled) await reload();
       });
@@ -421,6 +440,7 @@ export function useConversation({
         mediaObjectKey: media?.objectKey,
         mediaFileName: media?.fileName,
         mediaDurationMs: media?.durationMs,
+        mediaFileSize: media?.fileSize,
         waveform: media?.waveform,
         overlayJson: media?.overlayJson,
         attachments: attachmentDtos,
@@ -446,6 +466,7 @@ export function useConversation({
         media_duration_ms: media?.durationMs ?? null,
         media_waveform: media?.waveform ?? null,
         media_overlay_json: media?.overlayJson ?? null,
+        media_file_size: media?.fileSize ?? null,
         edited: 0,
         deleted: 0,
         forwarded: 0,
@@ -459,6 +480,11 @@ export function useConversation({
         is_system: 0,
         reply_to_status_id: envelope.replyToStatusId,
         reply_to_status_owner_id: envelope.replyToStatusOwnerId,
+        invite_group_id: null,
+        invite_group_name: null,
+        invite_group_avatar_object_key: null,
+        invite_invitation_id: null,
+        invite_status: null,
       });
       await upsertConversation(db, conversationId, titleRef.current, envelope.sentAt, avatarRef.current, isGroup);
       await reload();

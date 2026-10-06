@@ -133,14 +133,17 @@ export function MessageAttachmentGrid({
   items,
   onOpen,
   autoDownloadMedia = true,
+  isMine = false,
 }: {
   items: AttachmentItem[];
   onOpen: (index: number) => void;
   autoDownloadMedia?: boolean;
+  /** The download gate never applies to your own just-sent gallery — see MessageImage's own comment on the same rule. */
+  isMine?: boolean;
 }) {
   const { colors } = useTheme();
   const gateStyles = makeGateStyles(colors);
-  const [revealed, setRevealed] = useState(autoDownloadMedia && items.length <= 1);
+  const [revealed, setRevealed] = useState(isMine || (autoDownloadMedia && items.length <= 1));
 
   if (items.length === 0) return null;
   if (revealed) return <GridBody items={items} onOpen={onOpen} />;

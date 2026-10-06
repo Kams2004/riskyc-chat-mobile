@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Avatar } from '../../../components/Avatar';
 import { PersonIcon } from '../../../components/icons';
+import { SwipeBetweenTabs } from '../../../components/SwipeTabs';
 import { useAuth } from '../../../features/auth/AuthContext';
 import { useTheme, type ThemePreference } from '../../../features/theme/ThemeContext';
 import { getUser } from '../../../features/users/api';
@@ -113,6 +114,7 @@ export default function SettingsScreen() {
   }
 
   return (
+    <SwipeBetweenTabs toRight="/(tabs)/calls">
     <ScrollView
       style={styles.container}
       contentContainerStyle={[styles.content, { paddingTop: insets.top + 8, paddingBottom: TAB_BAR_CLEARANCE(insets.bottom) }]}
@@ -257,6 +259,7 @@ export default function SettingsScreen() {
         />
       </View>
     </ScrollView>
+    </SwipeBetweenTabs>
   );
 }
 

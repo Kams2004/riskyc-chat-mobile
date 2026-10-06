@@ -6,7 +6,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
  * half of the "local-first sync" approach from the architecture proposal —
  * the UI always reads from SQLite, never waits on the network round trip.
  */
-const CURRENT_VERSION = 14;
+const CURRENT_VERSION = 16;
 
 export async function migrateDbIfNeeded(db: SQLiteDatabase) {
   const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
@@ -210,6 +210,33 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
     // proven on StatusPost.overlay_json.
     await db.execAsync(`ALTER TABLE messages ADD COLUMN media_overlay_json TEXT;`);
     version = 14;
+  }
+
+  if (version === 14) {
+    // The backend's Message entity/MessageEnvelope already carry
+    // mediaFileSize (used by the gallery multi-attachment composer's
+    // combined-download-button sizing) but it was never persisted for a
+    // single (non-gallery) IMAGE/VIDEO/FILE message, so DownloadGate had no
+    // byte count to show next to "Tap to download" for the common
+    // single-item send/receive path.
+    await db.execAsync(`ALTER TABLE messages ADD COLUMN media_file_size INTEGER;`);
+    version = 15;
+  }
+
+  if (version === 15) {
+    // A GROUP_INVITE card (mediaType) — renders inline in the inviter/
+    // invitee's own 1:1 conversation instead of a dedicated invitations
+    // screen. invite_status is kept in sync by incoming mutations (see
+    // useConversation.ts) whenever the invitation is accepted/declined/
+    // expires, on both the inviter's and invitee's device.
+    await db.execAsync(`
+      ALTER TABLE messages ADD COLUMN invite_group_id TEXT;
+      ALTER TABLE messages ADD COLUMN invite_group_name TEXT;
+      ALTER TABLE messages ADD COLUMN invite_group_avatar_object_key TEXT;
+      ALTER TABLE messages ADD COLUMN invite_invitation_id INTEGER;
+      ALTER TABLE messages ADD COLUMN invite_status TEXT;
+    `);
+    version = 16;
   }
 
   await db.execAsync(`PRAGMA user_version = ${CURRENT_VERSION}`);

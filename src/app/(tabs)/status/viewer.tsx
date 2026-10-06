@@ -168,14 +168,17 @@ export default function StatusViewerScreen() {
   const current = items[index];
 
   const goNext = useCallback(() => {
-    setIndex((i) => {
-      if (i + 1 >= items.length) {
-        router.back();
-        return i;
-      }
-      return i + 1;
-    });
-  }, [items.length]);
+    // router.back() must not run inside the setIndex updater below — that
+    // updater executes during React's render phase, and triggering a
+    // different component's (navigation's) state update from there is
+    // exactly the "Cannot update a component while rendering a different
+    // component" violation, reproducible on every single-item status view.
+    if (index + 1 >= items.length) {
+      router.back();
+      return;
+    }
+    setIndex((i) => i + 1);
+  }, [index, items.length]);
 
   const goPrev = useCallback(() => {
     setIndex((i) => (i > 0 ? i - 1 : i));

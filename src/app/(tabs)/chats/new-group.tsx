@@ -9,7 +9,7 @@ import { useTranslation } from 'react-i18next';
 import { Avatar } from '../../../components/Avatar';
 import { KeyboardScreen } from '../../../components/KeyboardScreen';
 import { useAuth } from '../../../features/auth/AuthContext';
-import { readDeviceContacts } from '../../../features/contacts/sync';
+import { dialCodeFor, normalizePhone, readDeviceContacts } from '../../../features/contacts/sync';
 import { createGroup } from '../../../features/groups/api';
 import { looksLikeUnresolvedName, otherPartyFrom } from '../../../features/messaging/conversationId';
 import { useTheme } from '../../../features/theme/ThemeContext';
@@ -20,17 +20,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 type EnrichedUser = UserResult & { localName?: string };
 
-function normalizePhone(raw: string): string {
-  const trimmed = raw.trim();
-  const plus = trimmed.startsWith('+') ? '+' : '';
-  return plus + trimmed.replace(/[^\d]/g, '');
-}
-
 export default function NewGroupScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = makeStyles(colors);
-  const { userId } = useAuth();
+  const { userId, phoneNumber: ownPhoneNumber } = useAuth();
   const { t } = useTranslation('groups');
   const db = useSQLiteContext();
 
@@ -81,6 +75,7 @@ export default function NewGroupScreen() {
           const permission = await requestContactsPermissionsAsync();
           if (permission.granted) {
             const data = await readDeviceContacts();
+            const defaultDialCode = dialCodeFor(ownPhoneNumber);
 
             const phoneNumbers = new Set<string>();
             const emails = new Set<string>();
@@ -90,7 +85,7 @@ export default function NewGroupScreen() {
               const name = contact.name?.trim() || '';
               for (const phone of contact.phoneNumbers ?? []) {
                 if (phone.number) {
-                  const norm = normalizePhone(phone.number);
+                  const norm = normalizePhone(phone.number, defaultDialCode);
                   phoneNumbers.add(norm);
                   if (name) phoneToName.set(norm, name);
                 }
@@ -104,7 +99,7 @@ export default function NewGroupScreen() {
 
             for (const user of matched) {
               if (user.phoneNumber) {
-                const norm = normalizePhone(user.phoneNumber);
+                const norm = normalizePhone(user.phoneNumber, defaultDialCode);
                 const deviceName = phoneToName.get(norm);
                 if (deviceName) await upsertLocalContact(db, user.userId, deviceName);
               }
@@ -131,7 +126,7 @@ export default function NewGroupScreen() {
       })();
 
       return () => { cancelled = true; };
-    }, [db, userId])
+    }, [db, userId, ownPhoneNumber])
   );
 
   const results = useMemo(() => {

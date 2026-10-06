@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MediaStream, RTCView } from 'react-native-webrtc';
 import Svg, { Path } from 'react-native-svg';
@@ -46,7 +46,18 @@ function ParticipantTile({ participant, isVideo }: { participant: GroupCallParti
   );
 }
 
+/** Same plain-full-screen-View approach as CallOverlay.tsx — see its own doc comment for why this deliberately avoids React Native's <Modal>. */
 export function GroupCallOverlay() {
+  const { groupCallState } = useGroupCall();
+  if (groupCallState === 'idle') return null;
+  return (
+    <View style={styles.modalReplacement}>
+      <GroupCallOverlayContent />
+    </View>
+  );
+}
+
+function GroupCallOverlayContent() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const {
@@ -63,13 +74,10 @@ export function GroupCallOverlay() {
   } = useGroupCall();
   const { t } = useTranslation('calls');
 
-  if (groupCallState === 'idle') return null;
-
   const isVideo = callType === 'VIDEO';
   const localVideoStream = isVideo && localStream ? localStream : null;
 
   return (
-    <Modal visible transparent={false} animationType="slide">
       <ChatWallpaper dark variant="dots">
         <View style={styles.container}>
           <View style={[styles.topBar, { paddingTop: insets.top + 12 }]}>
@@ -135,11 +143,11 @@ export function GroupCallOverlay() {
           </View>
         </View>
       </ChatWallpaper>
-    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  modalReplacement: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 999, elevation: 999, backgroundColor: '#1a0d10' },
   container: { flex: 1 },
   topBar: { paddingHorizontal: 20, paddingBottom: 12, alignItems: 'center' },
   topBarTitle: { fontFamily: fonts.sansSemiBold, fontSize: 17, color: '#ffffff' },

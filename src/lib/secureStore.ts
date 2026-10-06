@@ -4,6 +4,8 @@ const ACCESS_TOKEN_KEY = 'riskyc.accessToken';
 const USER_ID_KEY = 'riskyc.userId';
 const DISPLAY_NAME_KEY = 'riskyc.displayName';
 const AVATAR_OBJECT_KEY_KEY = 'riskyc.avatarObjectKey';
+const EMAIL_KEY = 'riskyc.email';
+const PHONE_NUMBER_KEY = 'riskyc.phoneNumber';
 
 export const session = {
   async save(accessToken: string, userId: string) {
@@ -21,6 +23,44 @@ export const session = {
     await SecureStore.deleteItemAsync(ACCESS_TOKEN_KEY);
     await SecureStore.deleteItemAsync(USER_ID_KEY);
     await profile.clear();
+    await identity.clear();
+  },
+};
+
+/**
+ * email/phoneNumber from the server's own OTP-verify response — kept
+ * separate from `profile` below (rather than widening its save() signature)
+ * since those two are set once at sign-in and never change via
+ * updateProfile, unlike displayName/avatarObjectKey. Previously only ever
+ * held in AuthContext's in-memory state, never persisted: useAuth().phoneNumber
+ * silently went back to null after every cold start (session.load() restored
+ * the token fine, this never did), which quietly broke anything relying on
+ * it post-restart — contacts-sync's own-number-derived default dial code
+ * (see features/contacts/sync.ts) included.
+ */
+export const identity = {
+  async save(email: string | null, phoneNumber: string | null) {
+    if (email) {
+      await SecureStore.setItemAsync(EMAIL_KEY, email);
+    } else {
+      await SecureStore.deleteItemAsync(EMAIL_KEY);
+    }
+    if (phoneNumber) {
+      await SecureStore.setItemAsync(PHONE_NUMBER_KEY, phoneNumber);
+    } else {
+      await SecureStore.deleteItemAsync(PHONE_NUMBER_KEY);
+    }
+  },
+  async load() {
+    const [email, phoneNumber] = await Promise.all([
+      SecureStore.getItemAsync(EMAIL_KEY),
+      SecureStore.getItemAsync(PHONE_NUMBER_KEY),
+    ]);
+    return { email, phoneNumber };
+  },
+  async clear() {
+    await SecureStore.deleteItemAsync(EMAIL_KEY);
+    await SecureStore.deleteItemAsync(PHONE_NUMBER_KEY);
   },
 };
 

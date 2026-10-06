@@ -110,7 +110,14 @@ export function useInboxSocket() {
         // message (recipientId !== callerId = userId), and the call log
         // never shows up in the caller's conversation.
         const isCallLog = envelope.mediaType === 'CALL';
-        if (cancelled || (!envelope.groupId && !isCallLog && envelope.recipientId !== userId)) return;
+        // A GROUP_INVITE card is pushed to BOTH the inviter and invitee's
+        // own queue (see GroupInvitationMessageService#postInviteMessage —
+        // unlike a normal send, neither side already has this message
+        // locally), with recipientId always the invitee regardless of which
+        // of the two queues delivered it — same asymmetric-recipientId
+        // carve-out as a CALL log above.
+        const isInviteCard = envelope.mediaType === 'GROUP_INVITE';
+        if (cancelled || (!envelope.groupId && !isCallLog && !isInviteCard && envelope.recipientId !== userId)) return;
 
         await upsertMessage(db, {
           message_id: envelope.messageId,
@@ -126,6 +133,7 @@ export function useInboxSocket() {
           media_duration_ms: envelope.mediaDurationMs ?? null,
           media_waveform: envelope.waveform ?? null,
           media_overlay_json: envelope.overlayJson ?? null,
+          media_file_size: envelope.mediaFileSize ?? null,
           edited: envelope.edited ? 1 : 0,
           deleted: envelope.deleted ? 1 : 0,
           forwarded: envelope.forwarded ? 1 : 0,
@@ -139,12 +147,20 @@ export function useInboxSocket() {
           is_system: envelope.system ? 1 : 0,
           reply_to_status_id: envelope.replyToStatusId ?? null,
           reply_to_status_owner_id: envelope.replyToStatusOwnerId ?? null,
+          invite_group_id: envelope.inviteGroupId ?? null,
+          invite_group_name: envelope.inviteGroupName ?? null,
+          invite_group_avatar_object_key: envelope.inviteGroupAvatarObjectKey ?? null,
+          invite_invitation_id: envelope.inviteInvitationId ?? null,
+          invite_status: envelope.inviteStatus ?? null,
         });
         // CALL log entries are a backend-generated event summary, not
         // something a person typed or sent — no notification sound, and
         // no delivery ACK either (the backend never expects one for these;
-        // they have no meaningful "status" lifecycle of their own).
-        if (!isCallLog) playNotificationSound();
+        // they have no meaningful "status" lifecycle of their own). An
+        // invite card echoed back to the INVITER themselves (see isInviteCard
+        // above) shouldn't ding either — they already know, they're the one
+        // who just sent the invite.
+        if (!isCallLog && !(isInviteCard && envelope.senderId === userId)) playNotificationSound();
 
         let title = await getConversationTitle(db, envelope.conversationId);
         let avatarObjectKey: string | null | undefined;
@@ -163,17 +179,26 @@ export function useInboxSocket() {
               await upsertGroupMembers(db, envelope.groupId, withNames);
             }
           } else {
-            // Whatever name this device has saved for the sender always
+            // Normally senderId IS "the other party" — this handler is the
+            // RECIPIENT's inbox, and the backend's own convention excludes
+            // the acting sender from their own broadcast. A GROUP_INVITE
+            // card (and a CALL log) are the exception: both the inviter and
+            // invitee get the SAME envelope with fixed sender/recipient ids
+            // (see GroupInvitationMessageService), so the device processing
+            // its OWN side of that envelope must resolve the title from
+            // whichever id ISN'T itself.
+            const otherPartyId = envelope.senderId === userId ? envelope.recipientId : envelope.senderId;
+            // Whatever name this device has saved for the other party always
             // wins over their own registered displayName — same rule every
             // other screen (new.tsx, contact-details.tsx, the thread
             // header) already follows, see data/db.ts's local_contacts
             // table doc comment.
-            const [sender, localName] = await Promise.all([
-              getUser(envelope.senderId).catch(() => null),
-              getLocalContactName(db, envelope.senderId),
+            const [otherUser, localName] = await Promise.all([
+              getUser(otherPartyId).catch(() => null),
+              getLocalContactName(db, otherPartyId),
             ]);
-            title = localName || sender?.displayName || sender?.phoneNumber || UNRESOLVED_TITLE_PLACEHOLDER;
-            avatarObjectKey = sender?.avatarObjectKey;
+            title = localName || otherUser?.displayName || otherUser?.phoneNumber || UNRESOLVED_TITLE_PLACEHOLDER;
+            avatarObjectKey = otherUser?.avatarObjectKey;
           }
         }
         await upsertConversation(db, envelope.conversationId, title, envelope.sentAt, avatarObjectKey, !!envelope.groupId);
@@ -202,6 +227,7 @@ export function useInboxSocket() {
           edited: mutation.edited,
           deleted: mutation.deleted,
           pinned: mutation.pinned,
+          inviteStatus: mutation.inviteStatus,
         });
         DeviceEventEmitter.emit(CONVERSATIONS_CHANGED_EVENT);
       });

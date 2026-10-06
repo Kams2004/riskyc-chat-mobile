@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next';
 import { Avatar } from '../../../components/Avatar';
 import { StatusPreviewThumb } from '../../../components/StatusPreviewThumb';
 import { StatusRing } from '../../../components/StatusRing';
+import { SwipeBetweenTabs } from '../../../components/SwipeTabs';
 import { getAllLocalContacts, useSQLiteContext } from '../../../data/db';
 import { useAuth } from '../../../features/auth/AuthContext';
 import { STATUS_UPDATED_EVENT } from '../../../features/messaging/inboxSocket';
@@ -98,6 +99,7 @@ export default function StatusScreen() {
   const viewed = rows.filter((r) => !r.hasUnviewed);
 
   return (
+    <SwipeBetweenTabs toLeft="/(tabs)/calls" toRight="/(tabs)/chats">
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <Text style={styles.title}>{t('tab.title')}</Text>
@@ -117,7 +119,7 @@ export default function StatusScreen() {
             onPress={() => (myStatuses ? openViewer(userId!) : openComposer())}
           >
             {myStatuses ? (
-              <StatusRing size={58} count={myStatuses.statuses.length} unviewedColor={colors.tint2} viewedColor={colors.tint2}>
+              <StatusRing size={58} count={myStatuses.statuses.length} unviewedColor={colors.brand600} viewedColor={colors.brand600}>
                 <StatusPreviewThumb item={myStatuses.statuses[0]} size={52} />
               </StatusRing>
             ) : (
@@ -127,7 +129,9 @@ export default function StatusScreen() {
             )}
             <View style={{ flex: 1 }}>
               <Text style={styles.name} numberOfLines={1}>{t('feed.myStatus')}</Text>
-              <Text style={styles.sub} numberOfLines={1}>{t('feed.addStatus')}</Text>
+              <Text style={styles.sub} numberOfLines={1}>
+                {myStatuses ? timeAgo(myStatuses.statuses[myStatuses.statuses.length - 1].createdAt) : t('feed.addStatus')}
+              </Text>
             </View>
             <TouchableOpacity style={styles.addButton} onPress={() => openComposer('camera')}>
               <Svg width={17} height={17} viewBox="0 0 24 24" fill="none" stroke={colors.brand600} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -162,6 +166,7 @@ export default function StatusScreen() {
         </ScrollView>
       )}
     </View>
+    </SwipeBetweenTabs>
   );
 }
 

@@ -2,9 +2,18 @@ import { randomUUID } from 'expo-crypto';
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import { upsertConversation, upsertMessage } from '../../data/db';
+import i18n from '../../i18n';
 import { UNRESOLVED_TITLE_PLACEHOLDER } from '../messaging/conversationId';
 import { ChatSocket } from '../messaging/ws';
 import type { StatusItem } from './api';
+
+/** Mirrors [conversationId].tsx's own snippetFor() so a status quote reads the same way a regular message quote does, instead of falling back to just the poster's name. */
+function snippetForStatus(status: StatusItem): string {
+  if (status.mediaType === 'IMAGE') return i18n.t('chats:thread.snippet.photo');
+  if (status.mediaType === 'VIDEO') return i18n.t('chats:thread.snippet.video');
+  const text = status.textContent ?? '';
+  return text.length > 80 ? text.slice(0, 77) + '...' : text;
+}
 
 /**
  * Sends a reply to someone's status as a normal 1:1 chat message tagged
@@ -26,6 +35,7 @@ export async function sendStatusReply(
   const messageId = randomUUID();
   const sentAt = new Date().toISOString();
   const conversationId = [senderId, status.userId].sort().join('_');
+  const statusSnippet = snippetForStatus(status);
 
   const envelope = {
     messageId,
@@ -36,6 +46,11 @@ export async function sendStatusReply(
     sentAt,
     replyToStatusId: status.statusId,
     replyToStatusOwnerId: status.userId,
+    // Reuses the same replyToSnippet column a normal message reply uses
+    // (mutually exclusive with replyToMessageId, which stays null here) so
+    // the quote block can show what the status actually said/was instead of
+    // repeating the poster's name twice.
+    replyToSnippet: statusSnippet,
     senderDisplayName,
   };
 
@@ -53,6 +68,7 @@ export async function sendStatusReply(
     media_duration_ms: null,
     media_waveform: null,
     media_overlay_json: null,
+    media_file_size: null,
     edited: 0,
     deleted: 0,
     forwarded: 0,
@@ -61,11 +77,16 @@ export async function sendStatusReply(
     reply_to_message_id: null,
     reply_to_conversation_id: null,
     reply_to_sender_id: null,
-    reply_to_snippet: null,
+    reply_to_snippet: statusSnippet,
     pinned: 0,
     is_system: 0,
     reply_to_status_id: status.statusId,
     reply_to_status_owner_id: status.userId,
+    invite_group_id: null,
+    invite_group_name: null,
+    invite_group_avatar_object_key: null,
+    invite_invitation_id: null,
+    invite_status: null,
   });
   // A placeholder title, not the raw userId — chats/index.tsx's own resolve
   // pass (see looksLikeUnresolvedName) fixes it up to the real local/
