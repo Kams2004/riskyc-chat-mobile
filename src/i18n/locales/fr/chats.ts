@@ -80,6 +80,11 @@ export default {
       photoLibraryBody: 'Autorisez l’accès à la photothèque pour envoyer une image.',
       cameraBody: 'Autorisez l’accès à l’appareil photo pour prendre une photo.',
     },
+    mediaTooLarge: {
+      title: 'Fichier trop volumineux',
+      body: 'Ce fichier dépasse 200 Mo et ne peut pas être envoyé.',
+      bodySkippedSome: 'Un ou plusieurs fichiers dépassaient 200 Mo et ont été exclus.',
+    },
     sendFailedTitle: 'Envoi impossible',
     systemMessage: {
       joined: '{{name}} a rejoint le groupe',

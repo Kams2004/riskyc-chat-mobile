@@ -11,8 +11,10 @@ export type CallInvite = {
   type: CallType;
   sdpOffer: string;
   callerName?: string | null;
+  /** This device's own ephemeral session id — see CallContext's deviceSessionId. Lets a sibling device of the same account tell its own messages apart from one answered elsewhere. */
+  fromDeviceId?: string | null;
 };
-export type CallAnswer = { callId: string; fromUserId: string; sdpAnswer: string };
+export type CallAnswer = { callId: string; fromUserId: string; sdpAnswer: string; fromDeviceId?: string | null };
 export type CallIceCandidate = {
   callId: string;
   fromUserId: string;
@@ -20,11 +22,14 @@ export type CallIceCandidate = {
   sdpMid: string | null;
   sdpMLineIndex: number | null;
 };
-export type CallEnd = { callId: string; fromUserId: string; reason: string };
+/** reason includes the server-synthesized "answered-elsewhere" (see CallContext's onEnd) alongside the usual client-originated ones. */
+export type CallEnd = { callId: string; fromUserId: string; reason: string; fromDeviceId?: string | null };
 export type CallRenegotiateOffer = { callId: string; fromUserId: string; sdpOffer: string };
 export type CallUsageReport = { callId: string; bytesSent: number; bytesReceived: number };
 /** roomId is always === groupId (see backend/sfu-service's room model) — carried anyway for symmetry with CallInvite's callId. */
 export type GroupCallInviteMessage = { roomId: string; groupId: string; callerId: string; callerName: string; callType: CallType };
+/** Fired once this account's first device actually joins the group call's SFU room — tells sibling devices still showing the incoming-call banner to dismiss it. */
+export type GroupCallMemberJoined = { groupId: string; memberId: string };
 
 type QueuedFrame = { destination: string; body: string };
 
@@ -39,6 +44,8 @@ type Handlers = {
   onRenegotiateAnswer?: (answer: CallAnswer) => void;
   /** Fanned out via messaging-service's GroupCallController — a different call system (sfu-service) entirely, riding this same persistent channel purely for delivery, same as 1:1 invites. */
   onGroupInvite?: (invite: GroupCallInviteMessage) => void;
+  /** This account's own other devices should stop ringing for this group call — see GroupCallMemberJoined's own doc comment. */
+  onGroupMemberJoined?: (data: GroupCallMemberJoined) => void;
 };
 
 /**
@@ -89,6 +96,9 @@ export class CallSignalingSocket {
             break;
           case 'group-invite':
             handlers.onGroupInvite?.(body as GroupCallInviteMessage);
+            break;
+          case 'group-member-joined':
+            handlers.onGroupMemberJoined?.(body as GroupCallMemberJoined);
             break;
         }
       });

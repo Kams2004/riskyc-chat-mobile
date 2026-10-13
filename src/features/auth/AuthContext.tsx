@@ -15,23 +15,10 @@ type AuthState = {
   avatarObjectKey: string | null;
   email: string | null;
   phoneNumber: string | null;
-  /**
-   * Resolves once OTP is verified; the caller decides what to do next (e.g.
-   * only a brand-new account needs profile setup). Can also resolve into a
-   * device-switch confirmation instead of a completed login — see
-   * VerifyOtpResponse.requiresDeviceSwitchConfirmation's own doc comment;
-   * the caller must then show that confirmation and call
-   * confirmDeviceSwitch itself, login is NOT complete yet at that point.
-   */
-  signInWithOtp: (
-    identifier: Identifier,
-    code: string
-  ) => Promise<
-    | { isNewAccount: boolean }
-    | { requiresDeviceSwitchConfirmation: true; confirmationToken: string; conflictingDeviceLabel: string | null }
-  >;
-  /** The other half of the device-switch confirmation above — call once the user agrees to sign the other phone out. */
-  confirmDeviceSwitch: (confirmationToken: string) => Promise<{ isNewAccount: boolean }>;
+  /** Whether THIS device is the account's master — see SessionResult.isMaster's own doc comment. Only meaningful once isLoading is false; defaults to false until the sessions list resolves. */
+  isMaster: boolean;
+  /** Resolves once OTP is verified — the caller decides what to do next (e.g. only a brand-new account needs profile setup). */
+  signInWithOtp: (identifier: Identifier, code: string) => Promise<{ isNewAccount: boolean }>;
   /** Applies a token response obtained without OTP verification — currently only the system-account access identifier's /otp/request short-circuit (see requestOtp's doc comment). */
   completeSystemLogin: (res: VerifyOtpResponse) => Promise<void>;
   updateProfile: (fields: { displayName?: string; avatarObjectKey?: string | null }) => Promise<void>;
@@ -48,6 +35,19 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [avatarObjectKey, setAvatarObjectKey] = useState<string | null>(null);
   const [email, setEmail] = useState<string | null>(null);
   const [phoneNumber, setPhoneNumber] = useState<string | null>(null);
+  const [isMaster, setIsMaster] = useState(false);
+
+  // Best-effort — a failed fetch just leaves isMaster at its previous value
+  // (false by default), which only ever hides a master-only action a real
+  // master could have used; it never grants one to a non-master device.
+  async function refreshIsMaster() {
+    try {
+      const sessions = await listSessions();
+      setIsMaster(sessions.find((s) => s.isCurrent)?.isMaster ?? false);
+    } catch (e) {
+      console.warn('[AuthContext] failed to refresh master-device status', e);
+    }
+  }
 
   useEffect(() => {
     Promise.all([session.load(), profile.load(), identity.load()]).then(([storedSession, storedProfile, storedIdentity]) => {
@@ -58,17 +58,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
       setEmail(storedIdentity.email);
       setPhoneNumber(storedIdentity.phoneNumber);
       setIsLoading(false);
+      if (storedSession?.accessToken) void refreshIsMaster();
     });
   }, []);
 
   async function applySession(res: VerifyOtpResponse) {
-    if (!res.accessToken) {
-      // Callers only ever reach here once requiresDeviceSwitchConfirmation
-      // has already been handled (see signInWithOtp/confirmDeviceSwitch
-      // below) — a null accessToken at this point is a caller bug, not a
-      // real runtime case.
-      throw new Error('applySession called without an access token');
-    }
     await session.save(res.accessToken, res.userId);
     await profile.save(res.displayName, res.avatarObjectKey);
     await identity.save(res.email, res.phoneNumber);
@@ -78,6 +72,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     setAvatarObjectKey(res.avatarObjectKey);
     setEmail(res.email);
     setPhoneNumber(res.phoneNumber);
+    await refreshIsMaster();
   }
 
   const value = useMemo<AuthState>(
@@ -89,20 +84,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
       avatarObjectKey,
       email,
       phoneNumber,
+      isMaster,
       async signInWithOtp(identifier, code) {
         const res = await authApi.verifyOtp(identifier, code, currentDeviceLabel());
-        if (res.requiresDeviceSwitchConfirmation) {
-          return {
-            requiresDeviceSwitchConfirmation: true,
-            confirmationToken: res.confirmationToken!,
-            conflictingDeviceLabel: res.conflictingDeviceLabel,
-          };
-        }
-        await applySession(res);
-        return { isNewAccount: !res.displayName };
-      },
-      async confirmDeviceSwitch(confirmationToken) {
-        const res = await authApi.confirmDeviceSwitch(confirmationToken);
         await applySession(res);
         return { isNewAccount: !res.displayName };
       },
@@ -123,12 +107,13 @@ export function AuthProvider({ children }: PropsWithChildren) {
         await unregisterCurrentDevicePushToken();
         // Revokes this device's own session server-side — without this,
         // signing out only ever cleared local storage, leaving the session
-        // row's revoked flag false forever. AuthController's one-active-
-        // mobile-session-per-account check (see its own doc comment) then
-        // found that still-active row on the very next sign-in attempt —
-        // even back on this exact same device — and wrongly treated it as
-        // a device conflict ("already signed in elsewhere"). Best-effort:
-        // a network hiccup here shouldn't block the user from signing out
+        // row's revoked flag false forever (a stale row an old build used
+        // to misinterpret as a device conflict on next sign-in, before the
+        // device cap replaced that single-mobile-session rule). If this IS
+        // the master device, the server cascades: every other linked device
+        // gets signed out too (see SessionController#revoke) — by design,
+        // not a bug, see Session.isMaster's own doc comment. Best-effort: a
+        // network hiccup here shouldn't block the user from signing out
         // locally, same fail-soft stance as the push-token unregister above.
         try {
           const sessions = await listSessions();
@@ -144,9 +129,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
         setAvatarObjectKey(null);
         setEmail(null);
         setPhoneNumber(null);
+        setIsMaster(false);
       },
     }),
-    [isLoading, userId, accessToken, displayName, avatarObjectKey, email, phoneNumber]
+    [isLoading, userId, accessToken, displayName, avatarObjectKey, email, phoneNumber, isMaster]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

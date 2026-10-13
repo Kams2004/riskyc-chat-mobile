@@ -40,6 +40,8 @@ export function GalleryCaptionComposer({ items, onCancel, onSend }: GalleryCapti
 
   return (
     <Modal visible animationType="slide" onRequestClose={onCancel}>
+      {/* Wraps the WHOLE modal content, not just the composer row — see MediaCaptionComposer's identical comment for why. */}
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
         <TouchableOpacity style={styles.closeTouchable} onPress={onCancel}>
           <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={colors.textPrimary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -74,30 +76,29 @@ export function GalleryCaptionComposer({ items, onCancel, onSend }: GalleryCapti
           ))}
         </ScrollView>
 
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <View style={[styles.composer, { paddingBottom: insets.bottom + 10 }]}>
-            <TextInput
-              style={styles.input}
-              value={caption}
-              onChangeText={setCaption}
-              placeholder={t('captionComposer.placeholderWithCount', { count: items.length })}
-              placeholderTextColor={colors.textMuted}
-              multiline
-            />
-            <LinearGradient colors={gradients.gold} style={styles.sendButton}>
-              <TouchableOpacity onPress={handleSend} style={styles.sendTouchable} disabled={isSending}>
-                {isSending ? (
-                  <ActivityIndicator color="#ffffff" />
-                ) : (
-                  <Svg width={19} height={19} viewBox="0 0 24 24" fill="#ffffff">
-                    <Path d="M2 12l19-9-7 19-3-8-9-2z" />
-                  </Svg>
-                )}
-              </TouchableOpacity>
-            </LinearGradient>
-          </View>
-        </KeyboardAvoidingView>
+        <View style={[styles.composer, { paddingBottom: insets.bottom + 10 }]}>
+          <TextInput
+            style={styles.input}
+            value={caption}
+            onChangeText={setCaption}
+            placeholder={t('captionComposer.placeholderWithCount', { count: items.length })}
+            placeholderTextColor={colors.textMuted}
+            multiline
+          />
+          <LinearGradient colors={gradients.gold} style={styles.sendButton}>
+            <TouchableOpacity onPress={handleSend} style={styles.sendTouchable} disabled={isSending}>
+              {isSending ? (
+                <ActivityIndicator color="#ffffff" />
+              ) : (
+                <Svg width={19} height={19} viewBox="0 0 24 24" fill="#ffffff">
+                  <Path d="M2 12l19-9-7 19-3-8-9-2z" />
+                </Svg>
+              )}
+            </TouchableOpacity>
+          </LinearGradient>
+        </View>
       </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

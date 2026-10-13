@@ -61,6 +61,12 @@ export function MediaCaptionComposer({ media, onCancel, onSend }: MediaCaptionCo
 
   return (
     <Modal visible animationType="slide" onRequestClose={onCancel}>
+      {/* Wraps the WHOLE modal content, not just the composer row — a
+          Modal mounts in its own native window on Android, and scoping the
+          KeyboardAvoidingView to only the bottom bar left the preview area
+          above it fixed-size, so the resized composer row could still end
+          up overlapped by the keyboard instead of both shrinking together. */}
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
         <View style={styles.headerRow}>
           <TouchableOpacity style={styles.closeTouchable} onPress={onCancel}>
@@ -100,30 +106,29 @@ export function MediaCaptionComposer({ media, onCancel, onSend }: MediaCaptionCo
           )}
         </View>
 
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <View style={[styles.composer, { paddingBottom: insets.bottom + 10 }]}>
-            <TextInput
-              style={styles.input}
-              value={caption}
-              onChangeText={setCaption}
-              placeholder={t('captionComposer.placeholder')}
-              placeholderTextColor={colors.textMuted}
-              multiline
-            />
-            <LinearGradient colors={gradients.gold} style={styles.sendButton}>
-              <TouchableOpacity onPress={handleSend} style={styles.sendTouchable} disabled={isSending}>
-                {isSending ? (
-                  <ActivityIndicator color="#ffffff" />
-                ) : (
-                  <Svg width={19} height={19} viewBox="0 0 24 24" fill="#ffffff">
-                    <Path d="M2 12l19-9-7 19-3-8-9-2z" />
-                  </Svg>
-                )}
-              </TouchableOpacity>
-            </LinearGradient>
-          </View>
-        </KeyboardAvoidingView>
+        <View style={[styles.composer, { paddingBottom: insets.bottom + 10 }]}>
+          <TextInput
+            style={styles.input}
+            value={caption}
+            onChangeText={setCaption}
+            placeholder={t('captionComposer.placeholder')}
+            placeholderTextColor={colors.textMuted}
+            multiline
+          />
+          <LinearGradient colors={gradients.gold} style={styles.sendButton}>
+            <TouchableOpacity onPress={handleSend} style={styles.sendTouchable} disabled={isSending}>
+              {isSending ? (
+                <ActivityIndicator color="#ffffff" />
+              ) : (
+                <Svg width={19} height={19} viewBox="0 0 24 24" fill="#ffffff">
+                  <Path d="M2 12l19-9-7 19-3-8-9-2z" />
+                </Svg>
+              )}
+            </TouchableOpacity>
+          </LinearGradient>
+        </View>
       </View>
+      </KeyboardAvoidingView>
 
       {media.kind === 'image' && (
         <ImageEditor

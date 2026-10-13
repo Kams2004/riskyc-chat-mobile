@@ -12,7 +12,10 @@
     },
     "production": {
       "autoIncrement": true,
-      "channel": "production"
+      "channel": "production",
+      "android": {
+        "credentialsSource": "local"
+      }
     }
   },
   "submit": {

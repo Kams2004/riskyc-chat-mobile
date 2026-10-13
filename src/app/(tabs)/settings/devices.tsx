@@ -6,7 +6,7 @@ import Svg, { Path, Rect } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
 
 import { useAuth } from '../../../features/auth/AuthContext';
-import { listSessions, revokeSession, type SessionResult } from '../../../features/sessions/api';
+import { getDeviceLimit, listSessions, revokeSession, type SessionResult } from '../../../features/sessions/api';
 import { useTheme } from '../../../features/theme/ThemeContext';
 import { fonts, type Palette } from '../../../theme';
 
@@ -21,25 +21,36 @@ export default function DevicesScreen() {
   const { signOut } = useAuth();
   const { t } = useTranslation('settings');
   const [sessions, setSessions] = useState<SessionResult[]>([]);
+  const [maxLinkedDevices, setMaxLinkedDevices] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [revokingId, setRevokingId] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setIsLoading(true);
-    listSessions()
-      .then(setSessions)
+    Promise.all([listSessions(), getDeviceLimit()])
+      .then(([sessionsResult, limitResult]) => {
+        setSessions(sessionsResult);
+        setMaxLinkedDevices(limitResult.maxLinkedDevices);
+      })
       .catch(() => {})
       .finally(() => setIsLoading(false));
   }, []);
 
   useFocusEffect(load);
 
+  const myIsMaster = sessions.find((s) => s.isCurrent)?.isMaster ?? false;
+
   function confirmRevoke(item: SessionResult) {
+    const cascadeWarning = item.isCurrent && item.isMaster;
     Alert.alert(
       item.isCurrent
         ? t('devices.signOutThisDeviceTitle')
         : t('devices.signOutNamedDeviceTitle', { device: item.deviceLabel || t('devices.thisDevice') }),
-      item.isCurrent ? t('devices.signOutCurrentMessage') : t('devices.signOutOtherMessage'),
+      item.isCurrent
+        ? cascadeWarning
+          ? t('devices.signOutCurrentMasterMessage')
+          : t('devices.signOutCurrentMessage')
+        : t('devices.signOutOtherMessage'),
       [
         { text: t('common:cancel'), style: 'cancel' },
         {
@@ -87,29 +98,41 @@ export default function DevicesScreen() {
         <Text style={styles.linkDeviceLabel}>{t('devices.linkDevice')}</Text>
       </TouchableOpacity>
 
+      {maxLinkedDevices != null && sessions.length > 0 && (
+        <Text style={styles.deviceCount}>{t('devices.deviceCount', { count: sessions.length, max: maxLinkedDevices })}</Text>
+      )}
+      {!myIsMaster && sessions.length > 1 && <Text style={styles.masterOnlyNotice}>{t('devices.masterOnlyNotice')}</Text>}
+
       {isLoading && sessions.length === 0 && <ActivityIndicator color={colors.brand500} style={{ marginTop: 24 }} />}
 
       <FlatList
         data={sessions}
         keyExtractor={(item) => item.id}
         contentContainerStyle={{ paddingBottom: 20 }}
-        renderItem={({ item }) => (
-          <View style={styles.row}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.rowTitle}>
-                {item.deviceLabel || t('devices.unknownDevice')} {item.isCurrent && <Text style={styles.currentBadge}>{t('devices.currentDeviceBadge')}</Text>}
-              </Text>
-              <Text style={styles.rowSubtitle}>{t('devices.activeAt', { when: formatWhen(item.lastSeenAt) })}</Text>
+        renderItem={({ item }) => {
+          // Any device may always sign ITSELF out. Removing an OTHER device
+          // is master-only — a non-master viewer sees no action on other rows.
+          const canRevoke = item.isCurrent || myIsMaster;
+          return (
+            <View style={styles.row}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.rowTitle}>
+                  {item.deviceLabel || t('devices.unknownDevice')}{' '}
+                  {item.isCurrent && <Text style={styles.currentBadge}>{t('devices.currentDeviceBadge')}</Text>}
+                  {item.isMaster && <Text style={styles.masterBadge}>{t('devices.masterBadge')}</Text>}
+                </Text>
+                <Text style={styles.rowSubtitle}>{t('devices.activeAt', { when: formatWhen(item.lastSeenAt) })}</Text>
+              </View>
+              {revokingId === item.id ? (
+                <ActivityIndicator color={colors.brand500} />
+              ) : canRevoke ? (
+                <TouchableOpacity onPress={() => confirmRevoke(item)}>
+                  <Text style={styles.signOutLabel}>{t('devices.signOut')}</Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
-            {revokingId === item.id ? (
-              <ActivityIndicator color={colors.brand500} />
-            ) : (
-              <TouchableOpacity onPress={() => confirmRevoke(item)}>
-                <Text style={styles.signOutLabel}>{t('devices.signOut')}</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
+          );
+        }}
       />
     </View>
   );
@@ -130,6 +153,8 @@ function makeStyles(colors: Palette) {
       borderBottomColor: colors.hairline,
     },
     linkDeviceLabel: { fontFamily: fonts.sansMedium, fontSize: 15, color: colors.brand600 },
+    deviceCount: { fontFamily: fonts.sans, fontSize: 12.5, color: colors.textMuted, marginTop: 14 },
+    masterOnlyNotice: { fontFamily: fonts.sans, fontSize: 12.5, color: colors.textMuted, marginTop: 4 },
     row: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -140,6 +165,7 @@ function makeStyles(colors: Palette) {
     },
     rowTitle: { fontFamily: fonts.sansMedium, fontSize: 15, color: colors.textPrimary },
     currentBadge: { fontFamily: fonts.sans, fontSize: 12.5, color: colors.brand600 },
+    masterBadge: { fontFamily: fonts.sans, fontSize: 12.5, color: colors.textMuted },
     rowSubtitle: { fontFamily: fonts.sans, fontSize: 12.5, color: colors.textMuted, marginTop: 2 },
     signOutLabel: { fontFamily: fonts.sansSemiBold, fontSize: 13.5, color: colors.brand700 },
   });

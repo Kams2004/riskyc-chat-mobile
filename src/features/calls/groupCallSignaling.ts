@@ -12,6 +12,8 @@ export type GroupCallNotificationHandlers = {
   onPeerLeft?: (data: { peerId: string }) => void;
   onNewProducer?: (data: { peerId: string; displayName: string; producerId: string; kind: 'audio' | 'video' }) => void;
   onProducerClosed?: (data: { producerId: string }) => void;
+  /** This account's own OTHER device just joined this same group call, stealing this connection's slot (see protooServer.ts) — distinct from an ordinary dropped connection, so the UI can say why instead of showing a generic error. */
+  onJoinedElsewhere?: () => void;
 };
 
 /**
@@ -113,6 +115,9 @@ export class GroupCallSignalingSocket {
           break;
         case 'producerClosed':
           this.handlers.onProducerClosed?.(data as { producerId: string });
+          break;
+        case 'joinedElsewhere':
+          this.handlers.onJoinedElsewhere?.();
           break;
       }
     }

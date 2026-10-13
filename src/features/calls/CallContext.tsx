@@ -17,6 +17,13 @@ import { getActiveCallKind, setActiveCallKind } from './activeCallTracker';
 import { getCallSnapshot } from './api';
 import { CallSignalingSocket, type CallIceCandidate, type CallInvite, type CallType, type GroupCallInviteMessage } from './signaling';
 
+// One random id per app process lifetime — not tied to the real auth Session
+// (jti), purely so this device can recognize its own invite/answer/end
+// messages echoed back to it when the same account is signed into multiple
+// devices at once (see onEnd's "answered-elsewhere" branch below). Never
+// used for anything security-relevant.
+const deviceSessionId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
 // STUN first (free, no relay bandwidth) with the self-hosted TURN server as
 // fallback for when caller/callee are on genuinely different networks and a
 // direct P2P path can't be found — see config.ts's turnServerUrl comment.
@@ -388,7 +395,14 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       const offer = await pc.createOffer({});
       await pc.setLocalDescription(offer);
 
-      socketRef.current.sendInvite({ callId, toUserId: recipientId, type, sdpOffer: offer.sdp ?? '', callerName: displayName });
+      socketRef.current.sendInvite({
+        callId,
+        toUserId: recipientId,
+        type,
+        sdpOffer: offer.sdp ?? '',
+        callerName: displayName,
+        fromDeviceId: deviceSessionId,
+      });
     },
     [callState, createPeerConnection, displayName, userId]
   );
@@ -420,7 +434,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
 
-    socketRef.current.sendAnswer({ callId: invite.callId, sdpAnswer: answer.sdp ?? '' });
+    socketRef.current.sendAnswer({ callId: invite.callId, sdpAnswer: answer.sdp ?? '', fromDeviceId: deviceSessionId });
     setIncomingCall(null);
     setCallState('connected');
     setConnectedAt(Date.now());
@@ -588,6 +602,19 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       },
       onEnd: (end) => {
         if (end.callId !== activeCallIdRef.current) return;
+        // Sent to the CALLEE's own user destination the moment one of their
+        // devices answers (see CallController#answer) — reaches every
+        // device of this account, including the one that just answered
+        // itself. That device recognizes its own fromDeviceId here and
+        // ignores it (it's already moving on to 'connected' via its own
+        // onAnswer-equivalent flow); every sibling device silently stops
+        // ringing — no "missed call"/busy-style alert, this isn't a
+        // rejection, another of the user's own devices just picked up.
+        if (end.reason === 'answered-elsewhere') {
+          if (end.fromDeviceId === deviceSessionId) return;
+          resetCallState();
+          return;
+        }
         // The callee's device auto-declined because it's already on
         // another call (see onInvite's busy branch above) — tell the
         // caller why instead of leaving them to assume it just rang out.
@@ -633,6 +660,15 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         // here), and against groupCallState for a second group call.
         if (callStateRef.current !== 'idle') return;
         setPendingGroupInvite(invite);
+      },
+      onGroupMemberJoined: (data) => {
+        // This account's own first device just joined this group call —
+        // dismiss the incoming-call banner here rather than keep ringing
+        // for a call this account is already in on another device. Only
+        // clears a not-yet-shown/still-pending prompt (see GroupCallMemberJoined's
+        // own doc comment for the caveat on an already-presented native
+        // confirm dialog).
+        setPendingGroupInvite((current) => (current?.groupId === data.groupId ? null : current));
       },
     });
 

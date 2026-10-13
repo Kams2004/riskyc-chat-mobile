@@ -23,8 +23,7 @@ export function requestOtp(identifier: Identifier): Promise<VerifyOtpResponse | 
 }
 
 export type VerifyOtpResponse = {
-  // Null exactly when requiresDeviceSwitchConfirmation is true — see below.
-  accessToken: string | null;
+  accessToken: string;
   userId: string;
   // Populated straight from the account row when one already exists — lets
   // the caller skip profile setup for a returning user instead of asking
@@ -33,29 +32,19 @@ export type VerifyOtpResponse = {
   avatarObjectKey: string | null;
   email: string | null;
   phoneNumber: string | null;
-  // This account is already open on another phone — the OTP itself was
-  // correct (that's how the confirmationToken below was earned), but login
-  // hasn't completed yet. Ask the user to confirm signing the other phone
-  // out; on yes, pass confirmationToken to confirmDeviceSwitch. On no,
-  // just discard it — nothing has been persisted server-side, so there's
-  // nothing to undo.
-  requiresDeviceSwitchConfirmation: boolean;
-  confirmationToken: string | null;
-  conflictingDeviceLabel: string | null;
 };
 
-/** platform: 'mobile' is what triggers the one-active-mobile-session-per-account check server-side — see AuthController.OtpVerifyRequest's own doc comment. */
+/**
+ * Thrown as an ApiError with status 403 and this shape in `body` when the
+ * account already has the maximum number of linked devices — see
+ * AuthController.DeviceLimitError. The master device must remove one
+ * (features/sessions/api.ts's revokeSession) before another can sign in.
+ */
+export type DeviceLimitErrorBody = { reason: 'DEVICE_LIMIT_REACHED'; maxLinkedDevices: number };
+
 export function verifyOtp(identifier: Identifier, code: string, deviceLabel?: string | null): Promise<VerifyOtpResponse> {
   return apiFetch(`${config.authServiceUrl}/api/auth/otp/verify`, {
     method: 'POST',
     body: JSON.stringify({ ...identifierBody(identifier), code, deviceLabel, platform: 'mobile' }),
-  });
-}
-
-/** Completes a login that verifyOtp paused on requiresDeviceSwitchConfirmation — see that field's own doc comment. */
-export function confirmDeviceSwitch(confirmationToken: string): Promise<VerifyOtpResponse> {
-  return apiFetch(`${config.authServiceUrl}/api/auth/otp/verify/confirm-device-switch`, {
-    method: 'POST',
-    body: JSON.stringify({ confirmationToken }),
   });
 }

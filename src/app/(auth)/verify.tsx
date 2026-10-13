@@ -1,13 +1,15 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 
 import { useAuth } from '../../features/auth/AuthContext';
 import * as authApi from '../../features/auth/api';
+import type { DeviceLimitErrorBody } from '../../features/auth/api';
 import { ApiError } from '../../lib/httpClient';
 import { KeyboardScreen } from '../../components/KeyboardScreen';
+import { ProgressBar } from '../../components/ProgressBar';
 import { useTheme } from '../../features/theme/ThemeContext';
 import { fonts, type Palette } from '../../theme';
 
@@ -18,7 +20,7 @@ export default function VerifyScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = makeStyles(colors);
-  const { signInWithOtp, confirmDeviceSwitch } = useAuth();
+  const { signInWithOtp } = useAuth();
   const { t } = useTranslation('auth');
 
   const { identifierType, identifierValue } = useLocalSearchParams<{
@@ -51,52 +53,24 @@ export default function VerifyScreen() {
     // them; only a brand-new account gets redirected onward to complete its
     // profile (see app/_layout.tsx's onboarding redirect).
     signInWithOtp({ type: identifierType, value: identifierValue }, code)
-      .then((result) => {
-        if (cancelled || !('requiresDeviceSwitchConfirmation' in result)) return;
-        // The OTP was correct, but this account is already open on another
-        // phone — login isn't complete yet (see signInWithOtp's own doc
-        // comment). Refusing here must leave things exactly as if this
-        // screen had never been submitted, so a decline just goes back to
-        // entering the phone/email again, nothing more.
-        Alert.alert(
-          t('verify.deviceConflictTitle'),
-          t('verify.deviceConflictBody', {
-            device: result.conflictingDeviceLabel ?? t('verify.deviceConflictUnknownDevice'),
-          }),
-          [
-            {
-              text: t('common:cancel'),
-              style: 'cancel',
-              onPress: () => {
-                setCode('');
-                router.replace('/(auth)/login');
-              },
-            },
-            {
-              text: t('verify.deviceConflictConfirm'),
-              style: 'destructive',
-              onPress: async () => {
-                setIsVerifying(true);
-                try {
-                  await confirmDeviceSwitch(result.confirmationToken);
-                  // Stack.Protected guard swaps to (tabs) automatically once userId is set.
-                } catch {
-                  setError(t('login.networkError'));
-                  setCode('');
-                } finally {
-                  setIsVerifying(false);
-                }
-              },
-            },
-          ]
-        );
+      .then(() => {
+        // Stack.Protected guard swaps to (tabs) automatically once userId is set.
       })
       .catch((e) => {
         if (cancelled) return;
         // Never show raw network errors — a 401 really is a wrong/expired
-        // code, but anything else (dropped connection, server hiccup) gets
-        // the same friendly network message login.tsx uses, not a false
-        // claim that the code itself was wrong.
+        // code, and a 403 with this reason means the account is already at
+        // its linked-device cap — anything else (dropped connection, server
+        // hiccup) gets the same friendly network message login.tsx uses,
+        // not a false claim that the code itself was wrong.
+        if (e instanceof ApiError && e.status === 403) {
+          const body = e.body as DeviceLimitErrorBody | undefined;
+          if (body?.reason === 'DEVICE_LIMIT_REACHED') {
+            setError(t('verify.deviceLimitReached', { max: body.maxLinkedDevices }));
+            setCode('');
+            return;
+          }
+        }
         const status = (e as { status?: number })?.status;
         setError(status === 401 ? t('verify.incorrectCode') : t('login.networkError'));
         setCode('');
@@ -107,7 +81,7 @@ export default function VerifyScreen() {
     return () => {
       cancelled = true;
     };
-  }, [code, identifierType, identifierValue, signInWithOtp, confirmDeviceSwitch, t]);
+  }, [code, identifierType, identifierValue, signInWithOtp, t]);
 
   async function handleResend() {
     if (isResending || resendCooldown > 0 || smsTrialLimitReached) return;
@@ -180,7 +154,7 @@ export default function VerifyScreen() {
         maxLength={CODE_LENGTH}
       />
 
-      {isVerifying && <ActivityIndicator color={colors.brand500} style={{ marginTop: 24 }} />}
+      {isVerifying && <View style={{ marginTop: 24 }}><ProgressBar active label={t('verify.verifying')} /></View>}
       {error && <Text style={styles.error}>{error}</Text>}
 
       {smsTrialLimitReached ? (

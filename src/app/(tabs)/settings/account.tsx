@@ -15,7 +15,7 @@ export default function AccountScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = makeStyles(colors);
-  const { userId } = useAuth();
+  const { userId, isMaster } = useAuth();
   const { t } = useTranslation('settings');
   const [user, setUser] = useState<UserResult | null>(null);
   const [isRevealed, setIsRevealed] = useState(false);
@@ -83,9 +83,15 @@ export default function AccountScreen() {
 
       <View style={{ flex: 1 }} />
 
-      <TouchableOpacity style={styles.deleteButton} onPress={() => router.push('/(tabs)/settings/delete-account' as never)}>
-        <Text style={styles.deleteLabel}>{t('account.deleteAccount')}</Text>
-      </TouchableOpacity>
+      {isMaster ? (
+        <TouchableOpacity style={styles.deleteButton} onPress={() => router.push('/(tabs)/settings/delete-account' as never)}>
+          <Text style={styles.deleteLabel}>{t('account.deleteAccount')}</Text>
+        </TouchableOpacity>
+      ) : (
+        <View style={styles.deleteButton}>
+          <Text style={styles.deleteLabelDisabled}>{t('account.deleteAccountMasterOnly')}</Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -104,5 +110,6 @@ function makeStyles(colors: Palette) {
     changeLabel: { fontFamily: fonts.sansSemiBold, fontSize: 14, color: colors.brand600 },
     deleteButton: { paddingVertical: 14, alignItems: 'center' },
     deleteLabel: { fontFamily: fonts.sansSemiBold, fontSize: 15, color: colors.brand700 },
+    deleteLabelDisabled: { fontFamily: fonts.sans, fontSize: 13, color: colors.textMuted, textAlign: 'center' },
   });
 }

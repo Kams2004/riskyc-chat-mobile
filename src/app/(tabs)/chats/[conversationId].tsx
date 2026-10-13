@@ -52,6 +52,7 @@ import { uploadMedia } from '../../../features/media/api';
 import { saveSticker } from '../../../features/stickers/api';
 import { invalidateSavedStickerKeys } from '../../../features/stickers/savedKeysCache';
 import { useMediaUrl, useMediaUrlWithStatus } from '../../../features/media/useMediaUrl';
+import { compressImageForSend, exceedsMediaSizeLimit, statFileSize } from '../../../lib/mediaCompression';
 import {
   conversationIdFor,
   looksLikeUnresolvedName,
@@ -1222,19 +1223,38 @@ export default function ChatThreadScreen() {
     // natively supports both media types.
     if (result.assets.length === 1 && result.assets[0].type !== 'video') {
       const asset = result.assets[0];
+      // Resize+recompress every picked image (not just camera shots) before
+      // it ever reaches the composer/upload — a camera roll is full of
+      // multi-MB, 4000px+ originals the app never needs at full size.
+      const { uri, size } = await compressImageForSend(asset.uri, asset.width, asset.height);
+      if (exceedsMediaSizeLimit(size)) {
+        Alert.alert(t('thread.mediaTooLarge.title'), t('thread.mediaTooLarge.body'));
+        return;
+      }
       setPendingMediaMimeType(asset.mimeType);
-      setPendingMedia({ kind: 'image', uri: asset.uri, size: asset.fileSize });
+      setPendingMedia({ kind: 'image', uri, size });
       return;
     }
 
-    setPendingGallery(
-      result.assets.map((asset) => ({
-        uri: asset.uri,
-        type: asset.type === 'video' ? 'VIDEO' : 'IMAGE',
-        mimeType: asset.mimeType,
-        fileSize: asset.fileSize,
-      }))
+    // Videos aren't compressed on-device (no transcoding library installed
+    // — see mediaCompression.ts) — just enforce the size cap, dropping any
+    // item that's over it rather than failing the whole batch.
+    const prepared = await Promise.all(
+      result.assets.map(async (asset) => {
+        if (asset.type === 'video') {
+          const size = asset.fileSize ?? (await statFileSize(asset.uri));
+          return { uri: asset.uri, type: 'VIDEO' as const, mimeType: asset.mimeType, fileSize: size ?? undefined };
+        }
+        const { uri, size } = await compressImageForSend(asset.uri, asset.width, asset.height);
+        return { uri, type: 'IMAGE' as const, mimeType: asset.mimeType, fileSize: size ?? undefined };
+      })
     );
+    const withinLimit = prepared.filter((item) => !exceedsMediaSizeLimit(item.fileSize));
+    if (withinLimit.length < prepared.length) {
+      Alert.alert(t('thread.mediaTooLarge.title'), t('thread.mediaTooLarge.bodySkippedSome'));
+    }
+    if (withinLimit.length === 0) return;
+    setPendingGallery(withinLimit);
   }
 
   async function pickFromCamera() {
@@ -1244,19 +1264,28 @@ export default function ChatThreadScreen() {
       return;
     }
     const result = await ImagePicker.launchCameraAsync({ quality: 0.8 });
-    if (!result.canceled && result.assets[0]) {
-      setPendingMediaMimeType(result.assets[0].mimeType);
-      setPendingMedia({ kind: 'image', uri: result.assets[0].uri, size: result.assets[0].fileSize });
+    const asset = result.canceled ? null : result.assets[0];
+    if (!asset) return;
+    const { uri, size } = await compressImageForSend(asset.uri, asset.width, asset.height);
+    if (exceedsMediaSizeLimit(size)) {
+      Alert.alert(t('thread.mediaTooLarge.title'), t('thread.mediaTooLarge.body'));
+      return;
     }
+    setPendingMediaMimeType(asset.mimeType);
+    setPendingMedia({ kind: 'image', uri, size });
   }
 
   async function pickDocument() {
     const result = await DocumentPicker.getDocumentAsync();
-    if (!result.canceled && result.assets[0]) {
-      const asset = result.assets[0];
-      setPendingMediaMimeType(asset.mimeType ?? undefined);
-      setPendingMedia({ kind: 'file', uri: asset.uri, name: asset.name, size: asset.size });
+    if (result.canceled || !result.assets[0]) return;
+    const asset = result.assets[0];
+    const size = asset.size ?? (await statFileSize(asset.uri));
+    if (exceedsMediaSizeLimit(size)) {
+      Alert.alert(t('thread.mediaTooLarge.title'), t('thread.mediaTooLarge.body'));
+      return;
     }
+    setPendingMediaMimeType(asset.mimeType ?? undefined);
+    setPendingMedia({ kind: 'file', uri: asset.uri, name: asset.name, size });
   }
 
   async function handleSendMedia(caption: string, uri: string, overlayJson: string | null): Promise<boolean> {

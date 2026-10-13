@@ -1,11 +1,12 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router } from 'expo-router';
 import { useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Button, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Button, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
 
+import { ProgressBar } from '../../../components/ProgressBar';
 import { approvePairing, denyPairing, getPairingInfo } from '../../../features/sessions/api';
 import { useTheme } from '../../../features/theme/ThemeContext';
 import { ApiError } from '../../../lib/httpClient';
@@ -102,7 +103,7 @@ export default function LinkDeviceScreen() {
       <View style={styles.frame} pointerEvents="none" />
       {isResolving && (
         <View style={styles.resolvingOverlay}>
-          <ActivityIndicator color="#ffffff" size="large" />
+          <ProgressBar active label={t('linkDevice.linking')} trackColor="rgba(255,255,255,0.25)" fillColor="#ffffff" textColor="#ffffff" />
         </View>
       )}
     </View>

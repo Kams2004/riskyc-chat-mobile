@@ -9,6 +9,7 @@ import { Button } from '../../../components/Button';
 import { useAuth } from '../../../features/auth/AuthContext';
 import { useTheme } from '../../../features/theme/ThemeContext';
 import { deleteMyAccount } from '../../../features/users/api';
+import { ApiError } from '../../../lib/httpClient';
 import { fonts, type Palette } from '../../../theme';
 
 const REASONS = ['dataLoss', 'messages', 'media', 'groupsContacts', 'status'] as const;
@@ -55,7 +56,15 @@ export default function DeleteAccountScreen() {
       }
     } catch (e) {
       console.warn('[DeleteAccount] failed', e);
-      Alert.alert(t('account.deleteError'), t('common:checkConnectionAndRetry'));
+      // Defense in depth — the entry point on account.tsx already hides
+      // this flow for a non-master device, but the server is the real
+      // enforcement (see UserController#deleteMe), so a 403 here still
+      // needs a clear message rather than the generic connection-error one.
+      if (e instanceof ApiError && e.status === 403) {
+        Alert.alert(t('account.deleteError'), t('account.deleteErrorMasterOnly'));
+      } else {
+        Alert.alert(t('account.deleteError'), t('common:checkConnectionAndRetry'));
+      }
       setIsDeleting(false);
     }
   }

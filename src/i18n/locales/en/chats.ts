@@ -80,6 +80,11 @@ export default {
       photoLibraryBody: 'Allow photo library access to send a picture.',
       cameraBody: 'Allow camera access to take a picture.',
     },
+    mediaTooLarge: {
+      title: 'File too large',
+      body: 'This file is larger than 200 MB and cannot be sent.',
+      bodySkippedSome: 'One or more files were larger than 200 MB and were left out.',
+    },
     sendFailedTitle: 'Could not send',
     systemMessage: {
       joined: '{{name}} joined the group',
