@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import QRCode from 'react-native-qrcode-svg';
 import { useTranslation } from 'react-i18next';
@@ -13,10 +13,14 @@ import * as sessionsApi from '../../features/sessions/api';
 import { fonts, type Palette } from '../../theme';
 
 const POLL_MS = 1500;
-// A little under auth-service's own 3-minute PENDING TTL (PairingService),
-// so a fresh code is always requested before the current one could actually
-// expire server-side.
-const REFRESH_MS = 2 * 60 * 1000 + 30 * 1000;
+// A floor so a pathologically small server-configured TTL can't cause a
+// refresh-thrash loop — the code is still readable/scannable for at least
+// this long even if the admin sets something unreasonably short.
+const MIN_REFRESH_MS = 20 * 1000;
+// Seconds of safety margin subtracted from the server's own expiresInSeconds
+// (riskyc.pairing.pending-ttl-seconds) — refreshes a little early so the
+// displayed code is never seen going dead mid-scan.
+const REFRESH_MARGIN_SECONDS = 10;
 
 /**
  * The "new phone, skip the OTP SMS" side of device pairing — mirrors web's
@@ -50,7 +54,7 @@ export default function LinkViaDeviceScreen() {
     clearTimers();
     setErrored(false);
     try {
-      const { token: newToken, code: newCode } = await sessionsApi.startPairing(currentDeviceLabel(), 'android');
+      const { token: newToken, code: newCode, expiresInSeconds } = await sessionsApi.startPairing(currentDeviceLabel(), 'android');
       setToken(newToken);
       setCode(newCode);
 
@@ -71,7 +75,8 @@ export default function LinkViaDeviceScreen() {
         }
       }, POLL_MS);
 
-      refreshRef.current = setTimeout(startPairing, REFRESH_MS);
+      const refreshMs = Math.max(MIN_REFRESH_MS, (expiresInSeconds - REFRESH_MARGIN_SECONDS) * 1000);
+      refreshRef.current = setTimeout(startPairing, refreshMs);
     } catch {
       setErrored(true);
     }
@@ -109,9 +114,16 @@ export default function LinkViaDeviceScreen() {
         </View>
       )}
 
+      {/*
+        An open-ended wait for a human on another device, not a short
+        request/response — ProgressBar's simulated climb-to-90% would
+        misleadingly look "stuck" here (it did, see the bug this replaced).
+        A plain spinner says "still waiting", not "almost done".
+      */}
       {token && !errored && (
         <View style={styles.waitingRow}>
-          <ProgressBar active label={t('linkViaDevice.waiting')} />
+          <ActivityIndicator color={colors.brand600} />
+          <Text style={[styles.waitingLabel, { color: colors.textMuted }]}>{t('linkViaDevice.waiting')}</Text>
         </View>
       )}
 
@@ -151,7 +163,8 @@ function makeStyles(colors: Palette) {
     },
     codeLabel: { fontFamily: fonts.sans, fontSize: 12.5, color: colors.textMuted, marginBottom: 6, textAlign: 'center' },
     codeValue: { fontFamily: fonts.sansBold, fontSize: 22, color: colors.textPrimary, letterSpacing: 1 },
-    waitingRow: { width: '100%', marginBottom: 12 },
+    waitingRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+    waitingLabel: { fontFamily: fonts.sans, fontSize: 12.5 },
     backLink: { marginTop: 8, paddingVertical: 8 },
     backLinkLabel: { fontFamily: fonts.sansSemiBold, fontSize: 14 },
   });

@@ -50,8 +50,8 @@ export function denyPairing(token: string): Promise<void> {
   return apiFetch(`${config.authServiceUrl}/api/auth/pairing/${encodeURIComponent(token)}/deny`, { method: 'POST' });
 }
 
-/** The "new phone, skip the OTP SMS" side — mirrors web's SignIn.tsx startPairing/pollPairingStatus. platform defaults to the mobile Session rows' own convention; see AuthController#verifyOtp. */
-export function startPairing(deviceLabel: string, platform: string): Promise<{ token: string; code: string }> {
+/** The "new phone, skip the OTP SMS" side — mirrors web's SignIn.tsx startPairing/pollPairingStatus. platform defaults to the mobile Session rows' own convention; see AuthController#verifyOtp. expiresInSeconds is the admin-configurable pairing lifetime (riskyc.pairing.pending-ttl-seconds) — the caller schedules its own refresh timer from this value instead of hardcoding one. */
+export function startPairing(deviceLabel: string, platform: string): Promise<{ token: string; code: string; expiresInSeconds: number }> {
   return apiFetch(`${config.authServiceUrl}/api/auth/pairing/start`, {
     method: 'POST',
     body: JSON.stringify({ deviceLabel, platform }),
