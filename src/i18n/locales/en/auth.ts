@@ -50,6 +50,17 @@ export default {
     networkError: 'Could not connect. Please check your internet connection and try again.',
     tooManyRequests: 'Too many attempts. Please wait a moment before trying again.',
     identifierInUse: 'This number or email is already linked to an account.',
+    linkInstead: 'Link using another device instead',
+  },
+  linkViaDevice: {
+    title: 'Link using another device',
+    subtitle: 'On your other signed-in device, go to Settings → Logged-in devices → Link a device, then scan this code or enter it manually — no verification code needed.',
+    manualCodeLabel: 'Or enter this code manually:',
+    preparing: 'Preparing your code…',
+    waiting: 'Waiting for approval…',
+    expired: 'This code expired — getting a new one…',
+    error: 'Something went wrong. Please try again.',
+    backToLogin: 'Use phone number or email instead',
   },
   verify: {
     titlePhone: 'Verify your number',

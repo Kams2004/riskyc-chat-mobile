@@ -50,6 +50,17 @@ export default {
     networkError: 'Impossible de se connecter. Vérifiez votre connexion internet et réessayez.',
     tooManyRequests: 'Trop de tentatives. Veuillez patienter avant de réessayer.',
     identifierInUse: 'Ce numéro ou cet e-mail est déjà associé à un compte.',
+    linkInstead: 'Lier avec un autre appareil à la place',
+  },
+  linkViaDevice: {
+    title: 'Lier avec un autre appareil',
+    subtitle: 'Sur votre autre appareil déjà connecté, allez dans Réglages → Appareils connectés → Lier un appareil, puis scannez ce code ou saisissez-le manuellement — aucun code de vérification requis.',
+    manualCodeLabel: 'Ou saisissez ce code manuellement :',
+    preparing: 'Préparation de votre code…',
+    waiting: 'En attente de confirmation…',
+    expired: 'Ce code a expiré — nouveau code en cours…',
+    error: "Une erreur s'est produite. Veuillez réessayer.",
+    backToLogin: 'Utiliser un numéro de téléphone ou un e-mail à la place',
   },
   verify: {
     titlePhone: 'Vérifiez votre numéro',

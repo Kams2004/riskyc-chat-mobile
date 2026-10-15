@@ -7,6 +7,7 @@ export default function AuthLayout() {
       <Stack.Screen name="language-select" />
       <Stack.Screen name="permissions" />
       <Stack.Screen name="login" />
+      <Stack.Screen name="link-via-device" />
       <Stack.Screen name="verify" />
       <Stack.Screen name="profile-setup" />
     </Stack>

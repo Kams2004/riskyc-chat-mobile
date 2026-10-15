@@ -1,5 +1,6 @@
 import { config } from '../../lib/config';
 import { apiFetch } from '../../lib/httpClient';
+import type { VerifyOtpResponse } from '../auth/api';
 
 export type SessionResult = {
   id: string;
@@ -30,16 +31,35 @@ export function getDeviceLimit(): Promise<{ maxLinkedDevices: number }> {
   return apiFetch(`${config.authServiceUrl}/api/sessions/limit`);
 }
 
-/** What a "Link a device" QR scan shows before committing — the web-supplied browser label, e.g. "Chrome on Windows". */
+/** What a "Link a device" scan/manual-entry shows before committing — the other device's own supplied label, e.g. "Chrome on Windows" or "Pixel 8". */
 export function getPairingInfo(token: string): Promise<{ deviceLabel: string }> {
   return apiFetch(`${config.authServiceUrl}/api/auth/pairing/${encodeURIComponent(token)}`);
 }
 
-/** Mints the new web session server-side — this device's own valid session is what authenticates the approval, the web browser never handles a token directly. */
+/** The manual-entry fallback for when scanning the QR isn't possible (broken/denied camera) — resolves the short, hand-typed code back to its token, then the caller proceeds through getPairingInfo/approvePairing/denyPairing exactly as if it had scanned a QR. */
+export function resolvePairingCode(code: string): Promise<{ token: string }> {
+  return apiFetch(`${config.authServiceUrl}/api/auth/pairing/by-code/${encodeURIComponent(code)}`);
+}
+
+/** Mints the new session server-side — this device's own valid session is what authenticates the approval, the other device never handles a token directly. */
 export function approvePairing(token: string): Promise<void> {
   return apiFetch(`${config.authServiceUrl}/api/auth/pairing/${encodeURIComponent(token)}/approve`, { method: 'POST' });
 }
 
 export function denyPairing(token: string): Promise<void> {
   return apiFetch(`${config.authServiceUrl}/api/auth/pairing/${encodeURIComponent(token)}/deny`, { method: 'POST' });
+}
+
+/** The "new phone, skip the OTP SMS" side — mirrors web's SignIn.tsx startPairing/pollPairingStatus. platform defaults to the mobile Session rows' own convention; see AuthController#verifyOtp. */
+export function startPairing(deviceLabel: string, platform: string): Promise<{ token: string; code: string }> {
+  return apiFetch(`${config.authServiceUrl}/api/auth/pairing/start`, {
+    method: 'POST',
+    body: JSON.stringify({ deviceLabel, platform }),
+  });
+}
+
+export type PairingStatus = { status: 'PENDING' | 'APPROVED' | 'DENIED' | 'EXPIRED'; session: VerifyOtpResponse | null };
+
+export function pollPairingStatus(token: string): Promise<PairingStatus> {
+  return apiFetch(`${config.authServiceUrl}/api/auth/pairing/${encodeURIComponent(token)}/status`);
 }

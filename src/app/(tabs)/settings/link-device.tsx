@@ -1,13 +1,13 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router } from 'expo-router';
 import { useRef, useState } from 'react';
-import { Alert, Button, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Button, Modal, StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
 
 import { ProgressBar } from '../../../components/ProgressBar';
-import { approvePairing, denyPairing, getPairingInfo } from '../../../features/sessions/api';
+import { approvePairing, denyPairing, getPairingInfo, resolvePairingCode } from '../../../features/sessions/api';
 import { useTheme } from '../../../features/theme/ThemeContext';
 import { ApiError } from '../../../lib/httpClient';
 import { fonts, type Palette } from '../../../theme';
@@ -24,6 +24,9 @@ export default function LinkDeviceScreen() {
   const { t } = useTranslation('settings');
   const [permission, requestPermission] = useCameraPermissions();
   const [isResolving, setIsResolving] = useState(false);
+  const [showManualEntry, setShowManualEntry] = useState(false);
+  const [manualCode, setManualCode] = useState('');
+  const [manualError, setManualError] = useState<string | null>(null);
   const hasHandledScan = useRef(false);
 
   function resetForAnotherScan() {
@@ -31,14 +34,8 @@ export default function LinkDeviceScreen() {
     setIsResolving(false);
   }
 
-  async function handleBarcodeScanned({ data }: { data: string }) {
-    if (hasHandledScan.current || !data.startsWith(QR_PREFIX)) {
-      return;
-    }
-    hasHandledScan.current = true;
-    setIsResolving(true);
-    const token = data.slice(QR_PREFIX.length);
-
+  /** Shared by both the QR-scan path and the manual-code fallback — a token resolved either way goes through the exact same confirm/approve flow. */
+  async function resolveAndConfirm(token: string) {
     try {
       const { deviceLabel } = await getPairingInfo(token);
       setIsResolving(false);
@@ -70,6 +67,70 @@ export default function LinkDeviceScreen() {
     }
   }
 
+  async function handleBarcodeScanned({ data }: { data: string }) {
+    if (hasHandledScan.current || !data.startsWith(QR_PREFIX)) {
+      return;
+    }
+    hasHandledScan.current = true;
+    setIsResolving(true);
+    await resolveAndConfirm(data.slice(QR_PREFIX.length));
+  }
+
+  async function handleManualSubmit() {
+    const normalized = manualCode.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    if (!normalized) return;
+    setManualError(null);
+    setIsResolving(true);
+    try {
+      const { token } = await resolvePairingCode(normalized);
+      setShowManualEntry(false);
+      setManualCode('');
+      hasHandledScan.current = true;
+      await resolveAndConfirm(token);
+    } catch (e) {
+      setIsResolving(false);
+      setManualError(t('linkDevice.manualEntryNotFound'));
+    }
+  }
+
+  function openManualEntry() {
+    setManualError(null);
+    setManualCode('');
+    setShowManualEntry(true);
+  }
+
+  const manualEntryModal = (
+    <Modal visible={showManualEntry} transparent animationType="fade" onRequestClose={() => setShowManualEntry(false)}>
+      <TouchableWithoutFeedback onPress={() => setShowManualEntry(false)}>
+        <View style={styles.manualBackdrop} />
+      </TouchableWithoutFeedback>
+      <View style={styles.manualCenter}>
+        <View style={[styles.manualCard, { backgroundColor: colors.tint1 }]}>
+          <Text style={[styles.manualTitle, { color: colors.textPrimary }]}>{t('linkDevice.manualEntryTitle')}</Text>
+          <Text style={[styles.manualSubtitle, { color: colors.textMuted }]}>{t('linkDevice.manualEntrySubtitle')}</Text>
+          <TextInput
+            style={[styles.manualInput, { borderColor: colors.inputBorder, color: colors.textPrimary }]}
+            placeholder={t('linkDevice.manualEntryPlaceholder')}
+            placeholderTextColor={colors.textMuted}
+            autoCapitalize="characters"
+            autoCorrect={false}
+            value={manualCode}
+            onChangeText={(v) => { setManualError(null); setManualCode(v); }}
+          />
+          {manualError && <Text style={styles.manualError}>{manualError}</Text>}
+          <View style={styles.manualActions}>
+            <TouchableOpacity onPress={() => setShowManualEntry(false)} style={styles.manualBtn}>
+              <Text style={[styles.manualBtnLabel, { color: colors.brand600 }]}>{t('linkDevice.manualEntryCancel')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleManualSubmit} style={styles.manualBtn}>
+              <Text style={[styles.manualBtnLabel, { color: colors.brand600 }]}>{t('linkDevice.manualEntrySubmit')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+
   if (!permission) {
     return <View style={styles.container} />;
   }
@@ -80,6 +141,15 @@ export default function LinkDeviceScreen() {
         <Text style={styles.permissionTitle}>{t('linkDevice.cameraPermissionTitle')}</Text>
         <Text style={styles.permissionBody}>{t('linkDevice.cameraPermissionBody')}</Text>
         <Button title={t('linkDevice.grantAccess')} onPress={requestPermission} color={colors.brand600} />
+        <TouchableOpacity style={styles.manualEntryLinkDark} onPress={openManualEntry}>
+          <Text style={styles.manualEntryLinkDarkLabel}>{t('linkDevice.manualEntryAction')}</Text>
+        </TouchableOpacity>
+        {manualEntryModal}
+        {isResolving && (
+          <View style={styles.resolvingOverlay}>
+            <ProgressBar active label={t('linkDevice.linking')} trackColor="rgba(255,255,255,0.25)" fillColor="#ffffff" textColor="#ffffff" />
+          </View>
+        )}
       </View>
     );
   }
@@ -101,6 +171,10 @@ export default function LinkDeviceScreen() {
         <Text style={styles.overlaySubtitle}>{t('linkDevice.scanInstruction')}</Text>
       </View>
       <View style={styles.frame} pointerEvents="none" />
+      <TouchableOpacity style={styles.manualEntryLink} onPress={openManualEntry}>
+        <Text style={styles.manualEntryLinkLabel}>{t('linkDevice.manualEntryAction')}</Text>
+      </TouchableOpacity>
+      {manualEntryModal}
       {isResolving && (
         <View style={styles.resolvingOverlay}>
           <ProgressBar active label={t('linkDevice.linking')} trackColor="rgba(255,255,255,0.25)" fillColor="#ffffff" textColor="#ffffff" />
@@ -132,5 +206,36 @@ function makeStyles(colors: Palette) {
     permissionContainer: { alignItems: 'center', justifyContent: 'center', gap: 16, paddingHorizontal: 32 },
     permissionTitle: { fontFamily: fonts.display, fontSize: 21, color: '#ffffff' },
     permissionBody: { fontFamily: fonts.sans, fontSize: 13.5, lineHeight: 20, color: '#e6c6cf', textAlign: 'center' },
+    manualEntryLink: {
+      position: 'absolute',
+      bottom: '12%',
+      alignSelf: 'center',
+      paddingVertical: 10,
+      paddingHorizontal: 20,
+      borderRadius: 20,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+    },
+    manualEntryLinkLabel: { fontFamily: fonts.sansSemiBold, fontSize: 13.5, color: '#ffffff' },
+    manualEntryLinkDark: { marginTop: 8, paddingVertical: 8 },
+    manualEntryLinkDarkLabel: { fontFamily: fonts.sansSemiBold, fontSize: 13.5, color: colors.brand400 },
+    manualBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
+    manualCenter: { position: 'absolute', inset: 0, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
+    manualCard: { width: '100%', borderRadius: 18, padding: 24 },
+    manualTitle: { fontFamily: fonts.sansBold, fontSize: 18, marginBottom: 6 },
+    manualSubtitle: { fontFamily: fonts.sans, fontSize: 13, lineHeight: 19, marginBottom: 16 },
+    manualInput: {
+      borderWidth: 1.5,
+      borderRadius: 12,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      fontFamily: fonts.sansSemiBold,
+      fontSize: 17,
+      letterSpacing: 1,
+      textAlign: 'center',
+    },
+    manualError: { fontFamily: fonts.sans, fontSize: 12.5, color: colors.brand800, marginTop: 10 },
+    manualActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 24, marginTop: 18 },
+    manualBtn: { paddingVertical: 4 },
+    manualBtnLabel: { fontFamily: fonts.sansSemiBold, fontSize: 15 },
   });
 }

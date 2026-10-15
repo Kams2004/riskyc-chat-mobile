@@ -130,6 +130,10 @@ export default function LoginScreen() {
       <Button onPress={() => { setError(null); setShowConfirm(true); }} disabled={!canSubmit} loading={isSubmitting} style={styles.sendButton}>
         {t('login.sendCode')}
       </Button>
+
+      <TouchableOpacity style={styles.linkInsteadButton} onPress={() => router.push('/(auth)/link-via-device' as never)}>
+        <Text style={[styles.linkInsteadLabel, { color: colors.brand600 }]}>{t('login.linkInstead')}</Text>
+      </TouchableOpacity>
       </ScrollView>
 
       <CountryPickerModal visible={showPicker} onClose={() => setShowPicker(false)} onSelect={setCountry} />
@@ -166,6 +170,8 @@ function makeStyles(colors: Palette) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.surface, paddingHorizontal: 28 },
     sendButton: { marginTop: 32 },
+    linkInsteadButton: { marginTop: 18, alignItems: 'center', paddingVertical: 8 },
+    linkInsteadLabel: { fontFamily: fonts.sansSemiBold, fontSize: 14 },
     title: { fontFamily: fonts.display, fontSize: 25, color: colors.textPrimary, marginBottom: 10 },
     subtitle: { fontFamily: fonts.sans, fontSize: 13.5, lineHeight: 20, color: colors.textMuted, marginBottom: 28 },
     toggleRow: { flexDirection: 'row', backgroundColor: colors.tint1, borderRadius: 14, padding: 4, marginBottom: 20 },

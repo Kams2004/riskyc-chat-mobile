@@ -136,6 +136,13 @@ export default {
     expiredBody: 'This code is no longer valid — refresh it on the other device and scan again.',
     errorTitle: 'Could not link device',
     errorBody: 'Please try again.',
+    manualEntryAction: 'Enter code manually',
+    manualEntryTitle: 'Enter the code',
+    manualEntrySubtitle: 'Type the code shown on the other device.',
+    manualEntryPlaceholder: 'XXXX-XXXX',
+    manualEntrySubmit: 'Link device',
+    manualEntryCancel: 'Cancel',
+    manualEntryNotFound: "That code doesn't match any pending request — check it and try again.",
   },
   privacy: {
     title: 'Privacy',

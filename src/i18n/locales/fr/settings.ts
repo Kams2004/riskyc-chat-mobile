@@ -136,6 +136,13 @@ export default {
     expiredBody: "Ce code n'est plus valide — actualisez-le sur l'autre appareil et scannez à nouveau.",
     errorTitle: "Impossible de lier l'appareil",
     errorBody: 'Veuillez réessayer.',
+    manualEntryAction: 'Saisir le code manuellement',
+    manualEntryTitle: 'Saisissez le code',
+    manualEntrySubtitle: "Saisissez le code affiché sur l'autre appareil.",
+    manualEntryPlaceholder: 'XXXX-XXXX',
+    manualEntrySubmit: "Lier l'appareil",
+    manualEntryCancel: 'Annuler',
+    manualEntryNotFound: "Ce code ne correspond à aucune demande en attente — vérifiez-le et réessayez.",
   },
   privacy: {
     title: 'Confidentialité',
