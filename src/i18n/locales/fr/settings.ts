@@ -118,7 +118,9 @@ export default {
     revokeError: 'Impossible de déconnecter cet appareil',
     linkDevice: 'Lier un appareil',
     deviceCount: '{{count}} appareil(s) lié(s) sur {{max}}',
-    masterOnlyNotice: "Seul l'appareil principal peut supprimer d'autres appareils.",
+    masterOnlyNotice: "Seul l'appareil principal peut lier ou supprimer d'autres appareils.",
+    recentlySignedOut: 'Déconnexions récentes',
+    signedOutAt: 'Déconnecté {{when}}',
   },
   linkDevice: {
     title: 'Lier un appareil',
@@ -136,6 +138,7 @@ export default {
     expiredBody: "Ce code n'est plus valide — actualisez-le sur l'autre appareil et scannez à nouveau.",
     errorTitle: "Impossible de lier l'appareil",
     errorBody: 'Veuillez réessayer.',
+    deviceLimitReached: "Ce compte a atteint la limite de {{max}} appareils liés. Supprimez-en un de cette liste avant d'en lier un autre.",
     manualEntryAction: 'Saisir le code manuellement',
     manualEntryTitle: 'Saisissez le code',
     manualEntrySubtitle: "Saisissez le code affiché sur l'autre appareil.",

@@ -19,7 +19,12 @@ const ThemeContext = createContext<ThemeState | null>(null);
 
 export function ThemeProvider({ children }: PropsWithChildren) {
   const systemScheme = useColorScheme();
-  const [preference, setPreferenceState] = useState<ThemePreference>('system');
+  // Defaults to light, not the device's own OS setting — a phone with
+  // system dark mode on would otherwise launch this app in dark mode on
+  // first install, before the person ever chose a theme here at all.
+  // "System" is still a selectable preference in Settings for anyone who
+  // wants it; this only changes what a never-set preference resolves to.
+  const [preference, setPreferenceState] = useState<ThemePreference>('light');
 
   useEffect(() => {
     SecureStore.getItemAsync(PREFERENCE_KEY).then((stored) => {

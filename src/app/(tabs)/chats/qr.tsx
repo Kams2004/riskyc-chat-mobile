@@ -29,7 +29,7 @@ export default function QrScreen() {
   const { t } = useTranslation('chats');
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: tab === 'scan' ? '#000000' : colors.background }]}>
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <TouchableOpacity style={styles.backTouchable} onPress={() => router.back()}>
           <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={tab === 'scan' ? '#ffffff' : colors.textPrimary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -130,7 +130,12 @@ function ScanPane() {
 
 function makeStyles(colors: Palette) {
   return StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#000000' },
+    // backgroundColor set inline per-tab at the call site: black for the
+    // camera-scan tab (bezel look around the live feed), themed for the
+    // "mine" QR tab — a hardcoded black here used to bleed through the
+    // header on that tab too, making the back button nearly invisible
+    // against it (colors.textPrimary has no contrast against pure black).
+    container: { flex: 1 },
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 6, paddingBottom: 8 },
     backTouchable: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
     headerTitle: { fontFamily: fonts.sansSemiBold, fontSize: 16.5 },

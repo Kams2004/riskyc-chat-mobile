@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react';
+import { DeviceEventEmitter } from 'react-native';
 
 import { currentDeviceLabel } from '../../lib/deviceLabel';
+import { SESSION_REVOKED_EVENT } from '../../lib/httpClient';
 import { identity, profile, session } from '../../lib/secureStore';
 import { unregisterCurrentDevicePushToken } from '../notifications/api';
 import { listSessions, revokeSession } from '../sessions/api';
@@ -60,6 +62,27 @@ export function AuthProvider({ children }: PropsWithChildren) {
       setIsLoading(false);
       if (storedSession?.accessToken) void refreshIsMaster();
     });
+  }, []);
+
+  // This device's own session was revoked server-side (see
+  // httpClient.ts's SESSION_REVOKED_EVENT doc comment) — clear local state
+  // directly rather than calling the full signOut() below: that one makes
+  // its OWN authenticated requests (unregister push token, list sessions,
+  // revoke), every one of which would also 401 against an already-dead
+  // token and re-emit this same event, looping forever. No server call
+  // here is correct anyway — there's nothing left to revoke.
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener(SESSION_REVOKED_EVENT, () => {
+      session.clear();
+      setUserId(null);
+      setAccessToken(null);
+      setDisplayName(null);
+      setAvatarObjectKey(null);
+      setEmail(null);
+      setPhoneNumber(null);
+      setIsMaster(false);
+    });
+    return () => sub.remove();
   }, []);
 
   async function applySession(res: VerifyOtpResponse) {

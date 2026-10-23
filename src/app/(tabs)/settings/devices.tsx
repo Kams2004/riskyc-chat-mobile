@@ -38,7 +38,9 @@ export default function DevicesScreen() {
 
   useFocusEffect(load);
 
-  const myIsMaster = sessions.find((s) => s.isCurrent)?.isMaster ?? false;
+  const activeSessions = sessions.filter((s) => !s.revoked);
+  const revokedSessions = sessions.filter((s) => s.revoked);
+  const myIsMaster = activeSessions.find((s) => s.isCurrent)?.isMaster ?? false;
 
   function confirmRevoke(item: SessionResult) {
     const cascadeWarning = item.isCurrent && item.isMaster;
@@ -88,25 +90,31 @@ export default function DevicesScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      <TouchableOpacity style={styles.linkDeviceRow} onPress={() => router.push('/(tabs)/settings/link-device' as never)}>
-        <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={colors.brand600} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-          <Rect x={3} y={3} width={7} height={7} rx={1} />
-          <Rect x={14} y={3} width={7} height={7} rx={1} />
-          <Rect x={3} y={14} width={7} height={7} rx={1} />
-          <Path d="M14 14h3v3h-3zM14 21h3M21 14v3M17.5 21H21v-3.5" />
-        </Svg>
-        <Text style={styles.linkDeviceLabel}>{t('devices.linkDevice')}</Text>
-      </TouchableOpacity>
-
-      {maxLinkedDevices != null && sessions.length > 0 && (
-        <Text style={styles.deviceCount}>{t('devices.deviceCount', { count: sessions.length, max: maxLinkedDevices })}</Text>
+      {/* Only the master device may vouch for a new one (backend-enforced too,
+          see PairingController#approve's MasterOnlyError) — a non-master
+          device never even sees the option, rather than tapping through to
+          a camera/manual-entry screen just to be told no at the last step. */}
+      {myIsMaster && (
+        <TouchableOpacity style={styles.linkDeviceRow} onPress={() => router.push('/(tabs)/settings/link-device' as never)}>
+          <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={colors.brand600} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <Rect x={3} y={3} width={7} height={7} rx={1} />
+            <Rect x={14} y={3} width={7} height={7} rx={1} />
+            <Rect x={3} y={14} width={7} height={7} rx={1} />
+            <Path d="M14 14h3v3h-3zM14 21h3M21 14v3M17.5 21H21v-3.5" />
+          </Svg>
+          <Text style={styles.linkDeviceLabel}>{t('devices.linkDevice')}</Text>
+        </TouchableOpacity>
       )}
-      {!myIsMaster && sessions.length > 1 && <Text style={styles.masterOnlyNotice}>{t('devices.masterOnlyNotice')}</Text>}
+
+      {maxLinkedDevices != null && activeSessions.length > 0 && (
+        <Text style={styles.deviceCount}>{t('devices.deviceCount', { count: activeSessions.length, max: maxLinkedDevices })}</Text>
+      )}
+      {!myIsMaster && activeSessions.length > 1 && <Text style={styles.masterOnlyNotice}>{t('devices.masterOnlyNotice')}</Text>}
 
       {isLoading && sessions.length === 0 && <ActivityIndicator color={colors.brand500} style={{ marginTop: 24 }} />}
 
       <FlatList
-        data={sessions}
+        data={activeSessions}
         keyExtractor={(item) => item.id}
         contentContainerStyle={{ paddingBottom: 20 }}
         renderItem={({ item }) => {
@@ -133,6 +141,23 @@ export default function DevicesScreen() {
             </View>
           );
         }}
+        ListFooterComponent={
+          revokedSessions.length > 0 ? (
+            <View style={styles.revokedSection}>
+              <Text style={styles.revokedSectionTitle}>{t('devices.recentlySignedOut')}</Text>
+              {revokedSessions.map((item) => (
+                <View key={item.id} style={styles.row}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.rowTitle, styles.revokedRowTitle]}>{item.deviceLabel || t('devices.unknownDevice')}</Text>
+                    <Text style={styles.rowSubtitle}>
+                      {item.revokedAt ? t('devices.signedOutAt', { when: formatWhen(item.revokedAt) }) : ''}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : null
+        }
       />
     </View>
   );
@@ -168,5 +193,8 @@ function makeStyles(colors: Palette) {
     masterBadge: { fontFamily: fonts.sans, fontSize: 12.5, color: colors.textMuted },
     rowSubtitle: { fontFamily: fonts.sans, fontSize: 12.5, color: colors.textMuted, marginTop: 2 },
     signOutLabel: { fontFamily: fonts.sansSemiBold, fontSize: 13.5, color: colors.brand700 },
+    revokedSection: { marginTop: 24 },
+    revokedSectionTitle: { fontFamily: fonts.sansSemiBold, fontSize: 13, color: colors.textMuted, marginBottom: 4 },
+    revokedRowTitle: { color: colors.textMuted },
   });
 }

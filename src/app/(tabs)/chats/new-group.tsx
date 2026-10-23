@@ -226,7 +226,7 @@ export default function NewGroupScreen() {
                 <Avatar objectKey={item.avatarObjectKey} label={displayName || item.phoneNumber || ''} size={44} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.rowName}>{displayName || t('newGroup.unnamedUser')}</Text>
-                  <Text style={styles.rowSubtitle}>{item.email ?? item.phoneNumber}</Text>
+                  <Text style={styles.rowSubtitle}>{item.phoneNumber ?? item.email}</Text>
                 </View>
                 <View style={[styles.checkbox, isSelected && { backgroundColor: colors.brand500, borderColor: colors.brand500 }]}>
                   {isSelected && (

@@ -10,6 +10,9 @@ export type SessionResult = {
   isCurrent: boolean;
   /** This is the account's master device — the one that originally verified the phone number, or the first to sign back in after a previous master's sign-out cascaded everyone else out. Only a master session may revoke another device or delete the account. */
   isMaster: boolean;
+  /** True for an entry in the "recently signed out" window (30 days) — revokedAt is only populated alongside this. A currently-active session always has revoked=false/revokedAt=null. */
+  revoked: boolean;
+  revokedAt: string | null;
 };
 
 export function listSessions(): Promise<SessionResult[]> {

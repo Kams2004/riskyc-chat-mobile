@@ -51,6 +51,24 @@ export default function LinkDeviceScreen() {
                 { text: 'OK', onPress: () => router.back() },
               ]);
             } catch (e) {
+              if (e instanceof ApiError && e.status === 403) {
+                const body = e.body as { reason?: string; maxLinkedDevices?: number } | undefined;
+                if (body?.reason === 'DEVICE_LIMIT_REACHED') {
+                  Alert.alert(t('linkDevice.errorTitle'), t('linkDevice.deviceLimitReached', { max: body.maxLinkedDevices }));
+                  resetForAnotherScan();
+                  return;
+                }
+                // Defense-in-depth: devices.tsx already hides the entry
+                // point to this screen for a non-master device, but the
+                // backend is the real enforcement (PairingController's
+                // MasterOnlyError) — this covers a stale isMaster value or
+                // a direct deep-link into this screen.
+                if (body?.reason === 'MASTER_ONLY') {
+                  Alert.alert(t('linkDevice.errorTitle'), t('devices.masterOnlyNotice'));
+                  resetForAnotherScan();
+                  return;
+                }
+              }
               Alert.alert(t('linkDevice.errorTitle'), t('linkDevice.errorBody'));
               resetForAnotherScan();
             }

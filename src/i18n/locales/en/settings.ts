@@ -118,7 +118,9 @@ export default {
     revokeError: 'Could not sign out that device',
     linkDevice: 'Link a device',
     deviceCount: '{{count}} of {{max}} devices linked',
-    masterOnlyNotice: 'Only the primary device can remove other devices.',
+    masterOnlyNotice: 'Only the primary device can link or remove other devices.',
+    recentlySignedOut: 'Recently signed out',
+    signedOutAt: 'Signed out {{when}}',
   },
   linkDevice: {
     title: 'Link a device',
@@ -136,6 +138,7 @@ export default {
     expiredBody: 'This code is no longer valid — refresh it on the other device and scan again.',
     errorTitle: 'Could not link device',
     errorBody: 'Please try again.',
+    deviceLimitReached: "This account has reached the maximum of {{max}} linked devices. Remove one from this list before linking another.",
     manualEntryAction: 'Enter code manually',
     manualEntryTitle: 'Enter the code',
     manualEntrySubtitle: 'Type the code shown on the other device.',

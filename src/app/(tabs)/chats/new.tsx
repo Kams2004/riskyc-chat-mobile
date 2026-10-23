@@ -453,7 +453,8 @@ export default function NewConversationScreen() {
                     />
                     <View style={{ flex: 1 }}>
                       <Text style={styles.rowName}>{displayName || t('newChat.unnamedUser')}</Text>
-                      <Text style={styles.rowSubtitle}>{item.email ?? item.phoneNumber}</Text>
+                      {/* Phone number is the primary identifier users expect in a contacts list — shown first even for an account that originally signed up by email and only added a number later. */}
+                      <Text style={styles.rowSubtitle}>{item.phoneNumber ?? item.email}</Text>
                     </View>
                   </TouchableOpacity>
                 );

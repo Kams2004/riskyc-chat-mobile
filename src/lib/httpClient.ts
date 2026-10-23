@@ -1,6 +1,21 @@
+import { DeviceEventEmitter } from 'react-native';
+
 import { session } from './secureStore';
 
 const REQUEST_TIMEOUT_MS = 20000;
+
+/**
+ * Fired when an authenticated request (one that attached a stored access
+ * token) comes back 401 — the ONLY reliable, request-agnostic signal that
+ * this device's own session was revoked server-side (by its own master
+ * signing it out, a master's self-revoke cascade, or an admin suspension),
+ * since any individual screen's own try/catch just swallows the error and
+ * looks broken instead of explaining why. AuthContext listens for this and
+ * signs the device out locally. Deliberately NOT fired for a 401 on a
+ * request that never had a token to begin with (e.g. a wrong OTP code on
+ * verify) — those are expected, unrelated 401s.
+ */
+export const SESSION_REVOKED_EVENT = 'riskyc:sessionRevoked';
 
 /** Carries the status and (if the body was JSON) parsed body of a non-2xx response, so callers can branch on specifics instead of just a message string. */
 export class ApiError extends Error {
@@ -51,6 +66,9 @@ export async function apiFetch<T>(url: string, init: RequestInit = {}): Promise<
       body = text ? JSON.parse(text) : undefined;
     } catch {
       body = undefined;
+    }
+    if (response.status === 401 && stored?.accessToken) {
+      DeviceEventEmitter.emit(SESSION_REVOKED_EVENT);
     }
     throw new ApiError(`Request to ${url} failed: ${response.status} ${text}`, response.status, body);
   }

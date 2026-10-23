@@ -117,7 +117,23 @@ export function useInboxSocket() {
         // of the two queues delivered it — same asymmetric-recipientId
         // carve-out as a CALL log above.
         const isInviteCard = envelope.mediaType === 'GROUP_INVITE';
-        if (cancelled || (!envelope.groupId && !isCallLog && !isInviteCard && envelope.recipientId !== userId)) return;
+        // A message (1:1 or group) this device itself sent, echoed back so
+        // its OWN sibling sessions learn about it too (see
+        // ChatController#send's final convertAndSendToUser(senderId, ...)
+        // call) — the sending device's own queue also receives this
+        // (convertAndSendToUser reaches every active session of a user, not
+        // just the others), but that device already applied it
+        // optimistically; re-processing the upsert below is a harmless
+        // idempotent no-op for it and the meaningful update for any
+        // sibling. Used below to suppress the notification sound and the
+        // DELIVERED ack a sender's own echo should never trigger.
+        const isOwnMessage = !isCallLog && !isInviteCard && envelope.senderId === userId;
+        // A 1:1 self-echo wouldn't otherwise pass the recipientId check
+        // below (recipientId is the OTHER party, not me) — group messages
+        // don't need this carve-out, the groupId check already lets them
+        // through regardless of sender/recipient.
+        const isOwnOneToOneEcho = isOwnMessage && !envelope.groupId;
+        if (cancelled || (!envelope.groupId && !isCallLog && !isInviteCard && !isOwnOneToOneEcho && envelope.recipientId !== userId)) return;
 
         await upsertMessage(db, {
           message_id: envelope.messageId,
@@ -156,11 +172,12 @@ export function useInboxSocket() {
         // CALL log entries are a backend-generated event summary, not
         // something a person typed or sent — no notification sound, and
         // no delivery ACK either (the backend never expects one for these;
-        // they have no meaningful "status" lifecycle of their own). An
-        // invite card echoed back to the INVITER themselves (see isInviteCard
-        // above) shouldn't ding either — they already know, they're the one
-        // who just sent the invite.
-        if (!isCallLog && !(isInviteCard && envelope.senderId === userId)) playNotificationSound();
+        // they have no meaningful "status" lifecycle of their own). Nothing
+        // this device (or one of its own sibling sessions) sent itself
+        // should ding either — isOwnMessage covers both the invite-card
+        // case (inviter echoed their own card) and the new sibling-device
+        // echo of a plain message/group message this account just sent.
+        if (!isCallLog && !isOwnMessage) playNotificationSound();
 
         let title = await getConversationTitle(db, envelope.conversationId);
         let avatarObjectKey: string | null | undefined;
@@ -204,7 +221,10 @@ export function useInboxSocket() {
         await upsertConversation(db, envelope.conversationId, title, envelope.sentAt, avatarObjectKey, !!envelope.groupId);
 
         // CALL log messages don't have a status lifecycle — skip the ACK.
-        if (!isCallLog) {
+        // A sender's own sibling device also must not ACK its own outgoing
+        // message as DELIVERED — that's the real recipient's job; the
+        // sender already knows what it sent.
+        if (!isCallLog && !isOwnMessage) {
           if (envelope.groupId) {
             socket.sendGroupAck({ conversationId: envelope.conversationId, messageIds: [envelope.messageId], status: 'DELIVERED' });
           } else {
