@@ -228,7 +228,13 @@ export function useConversation({
       // Settings → Privacy "Send read receipts" off: still fine to receive
       // and display the message, just never reveal that I've read it —
       // it'll sit at delivered from the sender's side, same as WhatsApp.
-      if (!preferences.isSendReadReceipts()) return;
+      // This account's OWN other linked devices still need to agree on
+      // what's been read though, so send the private sync-only mirror
+      // instead of the visible ack.
+      if (!preferences.isSendReadReceipts()) {
+        socketRef.current?.sendSyncRead({ conversationId, messageIds: [messageId], status: 'READ' });
+        return;
+      }
       if (isGroup) {
         socketRef.current?.sendGroupAck({ conversationId, messageIds: [messageId], status: 'READ' });
       } else if (recipient === userId) {

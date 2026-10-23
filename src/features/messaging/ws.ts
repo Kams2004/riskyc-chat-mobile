@@ -181,6 +181,11 @@ export class ChatSocket {
     this.enqueue({ destination: '/app/chat.ack', body: JSON.stringify(update) });
   }
 
+  /** Private own-devices-only read mirror — see ChatController#syncRead. Used instead of sendAck/sendGroupAck when "Send read receipts" is off. */
+  sendSyncRead(update: MessageStatusUpdate) {
+    this.enqueue({ destination: '/app/chat.sync-read', body: JSON.stringify(update) });
+  }
+
   sendEdit(request: MessageEditRequest) {
     this.enqueue({ destination: '/app/chat.edit', body: JSON.stringify(request) });
   }
