@@ -1389,30 +1389,37 @@ export default function ChatThreadScreen() {
             )}
           </View>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.headerActionTouchable}
-          onPress={() => {
-            if (isGroup) {
-              if (groupId) startGroupCall(groupId, displayName, groupMembers.map((m) => m.user_id), 'AUDIO');
-              return;
-            }
-            if (recipientId && resolvedName) startCall(recipientId, resolvedName, 'AUDIO');
-          }}
-        >
-          <PhoneIcon size={20} color={colors.textPrimary} strokeWidth={1.8} />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.headerActionTouchable}
-          onPress={() => {
-            if (isGroup) {
-              if (groupId) startGroupCall(groupId, displayName, groupMembers.map((m) => m.user_id), 'VIDEO');
-              return;
-            }
-            if (recipientId && resolvedName) startCall(recipientId, resolvedName, 'VIDEO');
-          }}
-        >
-          <VideoIcon size={21} color={colors.textPrimary} strokeWidth={1.8} />
-        </TouchableOpacity>
+        {/* The official account is read-only/broadcast-only — see the
+            composer's own isSystemAccountThread gate below; calling it
+            makes no sense either, so these just don't render for it. */}
+        {!isSystemAccountThread && (
+          <>
+            <TouchableOpacity
+              style={styles.headerActionTouchable}
+              onPress={() => {
+                if (isGroup) {
+                  if (groupId) startGroupCall(groupId, displayName, groupMembers.map((m) => m.user_id), 'AUDIO');
+                  return;
+                }
+                if (recipientId && resolvedName) startCall(recipientId, resolvedName, 'AUDIO');
+              }}
+            >
+              <PhoneIcon size={20} color={colors.textPrimary} strokeWidth={1.8} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.headerActionTouchable}
+              onPress={() => {
+                if (isGroup) {
+                  if (groupId) startGroupCall(groupId, displayName, groupMembers.map((m) => m.user_id), 'VIDEO');
+                  return;
+                }
+                if (recipientId && resolvedName) startCall(recipientId, resolvedName, 'VIDEO');
+              }}
+            >
+              <VideoIcon size={21} color={colors.textPrimary} strokeWidth={1.8} />
+            </TouchableOpacity>
+          </>
+        )}
         <TouchableOpacity style={styles.headerActionTouchable} onPress={() => setOverflowMenuVisible(true)}>
           <Svg width={20} height={20} viewBox="0 0 24 24" fill={colors.textPrimary}>
             <Path d="M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM12 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4z" />

@@ -212,18 +212,25 @@ export default function ContactDetailsScreen() {
       )}
 
       <View style={styles.actionsRow}>
-        <TouchableOpacity style={styles.circleAction} onPress={() => startCall(userId, name, 'AUDIO')}>
-          <CircleIconBadge size={48} backgroundColor={colors.tint1}>
-            <PhoneIcon size={20} color={colors.brand600} />
-          </CircleIconBadge>
-          <Text style={styles.circleActionLabel}>{t('contactDetails.voice')}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.circleAction} onPress={() => startCall(userId, name, 'VIDEO')}>
-          <CircleIconBadge size={48} backgroundColor={colors.tint1}>
-            <VideoIcon size={20} color={colors.brand600} />
-          </CircleIconBadge>
-          <Text style={styles.circleActionLabel}>{t('contactDetails.video')}</Text>
-        </TouchableOpacity>
+        {/* The official account is read-only/broadcast-only — nobody can
+            ring it, same spirit as the composer already being disabled for
+            it elsewhere. Search stays available either way. */}
+        {!systemInfo && (
+          <>
+            <TouchableOpacity style={styles.circleAction} onPress={() => startCall(userId, name, 'AUDIO')}>
+              <CircleIconBadge size={48} backgroundColor={colors.tint1}>
+                <PhoneIcon size={20} color={colors.brand600} />
+              </CircleIconBadge>
+              <Text style={styles.circleActionLabel}>{t('contactDetails.voice')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.circleAction} onPress={() => startCall(userId, name, 'VIDEO')}>
+              <CircleIconBadge size={48} backgroundColor={colors.tint1}>
+                <VideoIcon size={20} color={colors.brand600} />
+              </CircleIconBadge>
+              <Text style={styles.circleActionLabel}>{t('contactDetails.video')}</Text>
+            </TouchableOpacity>
+          </>
+        )}
         <TouchableOpacity
           style={styles.circleAction}
           onPress={() => router.push({ pathname: '/(tabs)/chats/search', params: { conversationId } })}

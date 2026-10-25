@@ -45,10 +45,32 @@ export type BroadcastRequest = {
   senderAvatarObjectKey?: string | null;
 };
 
+export type BroadcastResult = { broadcastId: string; recipientCount: number };
+
 /** Only succeeds when the caller IS the official account — see SystemAccountController#broadcast's own server-side check. */
-export function broadcastFromSystemAccount(request: BroadcastRequest): Promise<void> {
+export function broadcastFromSystemAccount(request: BroadcastRequest): Promise<BroadcastResult> {
   return apiFetch(`${config.messagingServiceUrl}/api/system-account/broadcast`, {
     method: 'POST',
     body: JSON.stringify(request),
+  });
+}
+
+export type BroadcastSummary = {
+  broadcastId: string;
+  preview: string | null;
+  mediaType: string | null;
+  sentAt: string;
+  recipientCount: number;
+};
+
+/** Newest first — see SystemAccountController#recentBroadcasts. */
+export function listRecentBroadcasts(): Promise<BroadcastSummary[]> {
+  return apiFetch(`${config.messagingServiceUrl}/api/system-account/broadcasts`);
+}
+
+/** "Delete for everyone" for every copy of one broadcast at once — see SystemAccountController#cancelBroadcast. */
+export function cancelBroadcast(broadcastId: string): Promise<BroadcastResult> {
+  return apiFetch(`${config.messagingServiceUrl}/api/system-account/broadcast/${broadcastId}`, {
+    method: 'DELETE',
   });
 }

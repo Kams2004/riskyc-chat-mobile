@@ -86,7 +86,13 @@ export default function BroadcastScreen() {
           </Svg>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t('broadcast.title')}</Text>
-        <View style={{ width: 40 }} />
+        <TouchableOpacity style={styles.iconTouchable} onPress={() => router.push('/(tabs)/chats/broadcast-history' as never)}>
+          <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={colors.textPrimary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <Path d="M12 8v4l3 3" />
+            <Path d="M3.05 11a9 9 0 1 1 .5 4" />
+            <Path d="M3 5v6h6" />
+          </Svg>
+        </TouchableOpacity>
       </View>
 
       <Text style={styles.hint}>{t('broadcast.hint')}</Text>
