@@ -9,11 +9,6 @@ export type UserResult = {
   avatarObjectKey: string | null;
 };
 
-export function searchUsers(query: string): Promise<UserResult[]> {
-  const params = query ? `?q=${encodeURIComponent(query)}` : '';
-  return apiFetch(`${config.authServiceUrl}/api/users${params}`);
-}
-
 export function getUser(userId: string): Promise<UserResult> {
   return apiFetch(`${config.authServiceUrl}/api/users/${userId}`);
 }
