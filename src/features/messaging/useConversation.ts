@@ -10,6 +10,7 @@ import {
   applyReceipt,
   getLatestMessageSentAt,
   getReactionsForConversation,
+  getUnreadMessageIds,
   markDeletedForMe,
   recomputeGroupMessageStatus,
   replaceReactionsForConversation,
@@ -244,6 +245,30 @@ export function useConversation({
     [conversationId, isGroup, userId, db]
   );
 
+  // Opening a thread marks EVERYTHING already sitting unread in it as read,
+  // not just what this open's fetchHistory returns. fetchHistory is
+  // since-bounded (>= the newest local message), so messages the InboxSocket
+  // had already stored as 'delivered' while I was elsewhere were never
+  // returned again — and if I'd replied since (making MY message the newest
+  // local one), none of them ever got acked, leaving the chat list's badge
+  // stuck forever (e.g. "You: Kk" with a permanent 5).
+  const markAllLocalUnreadRead = useCallback(async () => {
+    if (!userId) return;
+    const messageIds = await getUnreadMessageIds(db, conversationId, userId);
+    if (messageIds.length === 0) return;
+    await advanceMessagesStatus(db, messageIds, 'read');
+    DeviceEventEmitter.emit(CONVERSATIONS_CHANGED_EVENT);
+    const update = { conversationId, messageIds, status: 'READ' as const };
+    // Same privacy split as ackIfNotMine.
+    if (!preferences.isSendReadReceipts()) {
+      socketRef.current?.sendSyncRead(update);
+    } else if (isGroup) {
+      socketRef.current?.sendGroupAck(update);
+    } else {
+      socketRef.current?.sendAck(update);
+    }
+  }, [conversationId, isGroup, userId, db]);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -310,6 +335,9 @@ export function useConversation({
 
     const socket = new ChatSocket(accessToken);
     socketRef.current = socket;
+    // After socketRef is set so the acks have a socket to queue on (ChatSocket
+    // buffers sends until connected).
+    markAllLocalUnreadRead().catch((e) => console.warn('[useConversation] markAllLocalUnreadRead failed', e));
     socket.connect(() => {
       socket.subscribeToConversation(conversationId, async (envelope) => {
         await upsertMessage(db, envelopeToLocalMessage(envelope));
@@ -389,7 +417,7 @@ export function useConversation({
       setTypingUserIds([]);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accessToken, ackIfNotMine, conversationId, db, groupId, isGroup, reload, userId]);
+  }, [accessToken, ackIfNotMine, conversationId, db, groupId, isGroup, markAllLocalUnreadRead, reload, userId]);
 
   /** Call on every draft keystroke — internally debounced, safe to call as often as you like. */
   const notifyTyping = useCallback(() => {

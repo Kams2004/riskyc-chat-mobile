@@ -416,11 +416,20 @@ export default function NewStatusScreen() {
           )}
 
           {/* Bottom: pending-item thumbnails + caption/swatches + send */}
+          {/* The KeyboardAvoidingView must be full-screen, not the bottom bar
+              itself: on Android 'height' behavior sets height = initialHeight
+              − keyboardHeight, which on a short bottom-anchored bar collapses
+              it to ~0 behind the keyboard (the caption became invisible while
+              typing). Full-screen, it shrinks to the space above the keyboard
+              and the bar stays pinned to that bottom edge. box-none keeps the
+              media swipe/drawing gestures underneath working. */}
           {activeTool === 'none' && (
             <KeyboardAvoidingView
               behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-              style={[styles.bottomArea, { paddingBottom: insets.bottom + 16 }]}
+              style={styles.bottomAvoider}
+              pointerEvents="box-none"
             >
+            <View style={[styles.bottomArea, { paddingBottom: insets.bottom + 16 }]}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.thumbRow}>
                 {items.map((item, index) => (
                   <TouchableOpacity key={item.id} onPress={() => setActiveIndex(index)} style={[styles.thumbWrap, index === activeIndex && styles.thumbWrapActive]}>
@@ -474,6 +483,7 @@ export default function NewStatusScreen() {
                   )}
                 </TouchableOpacity>
               </View>
+            </View>
             </KeyboardAvoidingView>
           )}
         </View>
@@ -534,7 +544,8 @@ const styles = StyleSheet.create({
   colorSwatchSelected: { borderColor: '#ffffff', transform: [{ scale: 1.2 }] },
   textOverlayEditorWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
   textOverlayInput: { fontFamily: fonts.sansBold, fontSize: 24, color: '#ffffff', textAlign: 'center' },
-  bottomArea: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 16, gap: 10 },
+  bottomAvoider: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'flex-end' },
+  bottomArea: { paddingHorizontal: 16, gap: 10 },
   thumbRow: { gap: 8, paddingVertical: 4 },
   thumbWrap: { width: 44, height: 44, borderRadius: 8, overflow: 'hidden', borderWidth: 2, borderColor: 'transparent' },
   thumbWrapActive: { borderColor: '#25d366' },
