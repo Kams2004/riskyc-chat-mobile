@@ -15,6 +15,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 
 import { DATABASE_NAME } from '../data/db';
+import { takePendingContactLink } from '../features/contactLink/pendingContactLink';
 import { migrateDbIfNeeded } from '../data/schema';
 import { AuthProvider, useAuth } from '../features/auth/AuthContext';
 import { initI18n } from '../i18n';
@@ -184,6 +185,23 @@ function RootNavigator() {
     }
   }, [userId, displayName]);
 
+  // A contact link opened while signed out (see contact.tsx / u/[userId].tsx) reopens once the account is ready —
+  // after sign-in, and after profile setup for a brand-new account.
+  useEffect(() => {
+    if (!userId || !displayName) return;
+    const link = takePendingContactLink();
+    if (!link) return;
+    // Let the guard switch from (auth) to (tabs) land first, then open the link on top of it.
+    const timer = setTimeout(() => {
+      if (link.kind === 'phone') {
+        router.push({ pathname: '/contact', params: { phone: link.phone, ...(link.name ? { name: link.name } : {}) } } as never);
+      } else {
+        router.push({ pathname: '/u/[userId]', params: { userId: link.userId } } as never);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [userId, displayName]);
+
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Protected guard={(!userId && !isLoading) || needsOnboarding}>
@@ -193,6 +211,11 @@ function RootNavigator() {
       <Stack.Protected guard={!!userId && !needsOnboarding}>
         <Stack.Screen name="(tabs)" />
       </Stack.Protected>
+
+      {/* Links opened from outside the app (riskycchat://contact?phone=…, riskycchat://u/<id>) — reachable signed
+          in or out; signed out they remember themselves and send the user to sign in first. */}
+      <Stack.Screen name="contact" />
+      <Stack.Screen name="u/[userId]" />
     </Stack>
   );
 }

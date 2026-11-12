@@ -1,4 +1,17 @@
 export default {
+  contactLink: {
+    opening: 'Ouverture de la discussion…',
+    notOnRiskyc: '{{name}} n\'est pas encore sur RiskyC Chat',
+    notOnRiskycBody: 'Ce numéro n\'a pas de compte RiskyC Chat, vous ne pouvez donc pas encore lui écrire ici. Vous pouvez l\'inviter à nous rejoindre.',
+    invite: 'Inviter sur RiskyC Chat',
+    invalidTitle: 'Ce lien de contact est incomplet',
+    invalidBody: 'Le lien ne contient pas de numéro de téléphone avec qui discuter.',
+    errorTitle: 'Impossible d\'ouvrir la discussion',
+    errorBody: 'Vérifiez votre connexion et réessayez.',
+    retry: 'Réessayer',
+    yourself: 'Ce lien pointe vers votre propre numéro.',
+    close: 'Fermer',
+  },
   list: {
     title: 'Discussions',
     searchPlaceholder: 'Rechercher des discussions',

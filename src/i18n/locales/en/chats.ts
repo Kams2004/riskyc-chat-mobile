@@ -1,4 +1,17 @@
 export default {
+  contactLink: {
+    opening: 'Opening the chat…',
+    notOnRiskyc: '{{name}} isn\'t on RiskyC Chat yet',
+    notOnRiskycBody: 'This number doesn\'t have a RiskyC Chat account, so you can\'t message it here yet. You can invite them to join.',
+    invite: 'Invite to RiskyC Chat',
+    invalidTitle: 'This contact link is incomplete',
+    invalidBody: 'The link didn\'t include a phone number to open a chat with.',
+    errorTitle: 'Couldn\'t open the chat',
+    errorBody: 'Check your connection and try again.',
+    retry: 'Try again',
+    yourself: 'This link points to your own number.',
+    close: 'Close',
+  },
   list: {
     title: 'Chats',
     searchPlaceholder: 'Search chats',
